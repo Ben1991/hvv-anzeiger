@@ -3,4 +3,4 @@
 luma.lcd==2.13.0
 Pillow==11.3.0
 RPi.GPIO==0.7.1
-spidev==3.6
+spidev==3.8
