@@ -4,7 +4,12 @@ import urllib.error
 from datetime import datetime
 from unittest.mock import patch
 
-from hvv_display.geofox import HAMBURG_TZ, GeofoxClient, GeofoxError
+from hvv_display.geofox import (
+    HAMBURG_TZ,
+    MAX_RESPONSE_BYTES,
+    GeofoxClient,
+    GeofoxError,
+)
 from hvv_display.models import Route, Station
 
 
@@ -18,8 +23,8 @@ class FakeResponse:
     def __exit__(self, *_args):
         return False
 
-    def read(self) -> bytes:
-        return self.body
+    def read(self, size: int = -1) -> bytes:
+        return self.body if size < 0 else self.body[:size]
 
 
 class GeofoxErrorTest(unittest.TestCase):
@@ -117,6 +122,11 @@ class GeofoxErrorTest(unittest.TestCase):
     def test_non_object_json_is_rejected(self) -> None:
         client = self.client_for(b"[]")
         with self.assertRaisesRegex(GeofoxError, "kein Antwortobjekt"):
+            client._post("departureList", {})
+
+    def test_oversized_response_is_rejected_before_json_parsing(self) -> None:
+        client = self.client_for(b"x" * (MAX_RESPONSE_BYTES + 1))
+        with self.assertRaisesRegex(GeofoxError, "zu große Antwort"):
             client._post("departureList", {})
 
     def test_invalid_departure_collection_is_rejected(self) -> None:

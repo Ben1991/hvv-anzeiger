@@ -20,6 +20,7 @@ class ApiConfig:
     request_timeout_seconds: float
     max_departures: int
     max_time_offset_minutes: int
+    max_stale_age_minutes: int
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ def load_config(path: str | Path) -> AppConfig:
         request_timeout_seconds=float(api_raw.get("request_timeout_seconds", 8)),
         max_departures=int(api_raw.get("max_departures", 5)),
         max_time_offset_minutes=int(api_raw.get("max_time_offset_minutes", 90)),
+        max_stale_age_minutes=int(api_raw.get("max_stale_age_minutes", 5)),
     )
     if api.refresh_seconds < 15:
         raise ConfigError("api.refresh_seconds muss mindestens 15 sein")
@@ -84,6 +86,8 @@ def load_config(path: str | Path) -> AppConfig:
         raise ConfigError("api.request_timeout_seconds muss größer als 0 sein")
     if api.max_time_offset_minutes <= 0:
         raise ConfigError("api.max_time_offset_minutes muss größer als 0 sein")
+    if api.max_stale_age_minutes <= 0:
+        raise ConfigError("api.max_stale_age_minutes muss größer als 0 sein")
 
     display = DisplayConfig(
         spi_port=int(display_raw.get("spi_port", 0)),

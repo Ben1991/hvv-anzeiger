@@ -15,6 +15,21 @@ Environment=HVV_WIFI_INTERFACE=wlan0
 ExecStart=/opt/hvv-anzeiger/.venv/bin/hvv-anzeiger --config /opt/hvv-anzeiger/config.json
 Restart=on-failure
 RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+ReadWritePaths=/opt/hvv-anzeiger/var
 
 [Install]
 WantedBy=multi-user.target

@@ -12,6 +12,8 @@ from hvv_display.geofox import HAMBURG_TZ, GeofoxError
 from hvv_display.main import (
     MAX_REFRESH_BACKOFF_SECONDS,
     _arguments,
+    departures_for_display,
+    log_success,
     main,
     refresh_delay,
     run,
@@ -53,6 +55,75 @@ class MainTest(unittest.TestCase):
         self.assertEqual(refresh_delay(15, 2), 60)
         self.assertEqual(refresh_delay(15, 3), 120)
         self.assertEqual(refresh_delay(15, 20), MAX_REFRESH_BACKOFF_SECONDS)
+
+    def test_success_is_logged_as_info_at_most_hourly(self) -> None:
+        with self.assertLogs("hvv_display.main", level="DEBUG") as logs:
+            heartbeat = log_success(
+                3,
+                now_monotonic=10,
+                previous_heartbeat_at=None,
+            )
+            unchanged = log_success(
+                4,
+                now_monotonic=20,
+                previous_heartbeat_at=heartbeat,
+            )
+            refreshed = log_success(
+                5,
+                now_monotonic=3610,
+                previous_heartbeat_at=unchanged,
+            )
+        self.assertEqual(heartbeat, 10)
+        self.assertEqual(unchanged, 10)
+        self.assertEqual(refreshed, 3610)
+        self.assertEqual(
+            [entry.split(":")[0] for entry in logs.output],
+            ["INFO", "DEBUG", "INFO"],
+        )
+
+    def test_stale_departures_expire_after_configured_age(self) -> None:
+        now = datetime(2026, 7, 27, 12, 10, tzinfo=HAMBURG_TZ)
+        departure = Departure("21", "Ziel", now + timedelta(minutes=2))
+        self.assertEqual(
+            departures_for_display(
+                [departure],
+                now=now,
+                last_updated=now - timedelta(minutes=4, seconds=59),
+                stale=True,
+                max_stale_age_minutes=5,
+            ),
+            [departure],
+        )
+        self.assertEqual(
+            departures_for_display(
+                [departure],
+                now=now,
+                last_updated=now - timedelta(minutes=5),
+                stale=True,
+                max_stale_age_minutes=5,
+            ),
+            [],
+        )
+        self.assertEqual(
+            departures_for_display(
+                [departure],
+                now=now,
+                last_updated=None,
+                stale=True,
+                max_stale_age_minutes=5,
+            ),
+            [],
+        )
+        self.assertEqual(
+            departures_for_display(
+                [departure],
+                now=now,
+                last_updated=now - timedelta(hours=1),
+                stale=False,
+                max_stale_age_minutes=5,
+            ),
+            [departure],
+        )
 
     def test_once_mode_renders_a_complete_successful_cycle(self) -> None:
         config = load_config("config.example.json")

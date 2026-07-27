@@ -5,7 +5,8 @@
     "refresh_seconds": 15,
     "request_timeout_seconds": 8,
     "max_departures": 5,
-    "max_time_offset_minutes": 90
+    "max_time_offset_minutes": 90,
+    "max_stale_age_minutes": 5
   },
   "display": {
     "spi_port": 0,

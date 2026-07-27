@@ -6,7 +6,7 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .config import ConfigError, load_config
@@ -19,6 +19,7 @@ from .stations import resolve_stations
 
 LOG = logging.getLogger(__name__)
 MAX_REFRESH_BACKOFF_SECONDS = 300
+SUCCESS_HEARTBEAT_SECONDS = 3600
 
 
 def refresh_delay(refresh_seconds: int, consecutive_failures: int) -> int:
@@ -29,6 +30,42 @@ def refresh_delay(refresh_seconds: int, consecutive_failures: int) -> int:
         MAX_REFRESH_BACKOFF_SECONDS,
         refresh_seconds * (2 ** min(consecutive_failures, 5)),
     )
+
+
+def log_success(
+    departure_count: int,
+    *,
+    now_monotonic: float,
+    previous_heartbeat_at: float | None,
+) -> float:
+    """Log routine success at most hourly while retaining details at debug level."""
+    if (
+        previous_heartbeat_at is None
+        or now_monotonic - previous_heartbeat_at >= SUCCESS_HEARTBEAT_SECONDS
+    ):
+        LOG.info("%d passende Abfahrten geladen", departure_count)
+        return now_monotonic
+    LOG.debug("%d passende Abfahrten geladen", departure_count)
+    return previous_heartbeat_at
+
+
+def departures_for_display(
+    departures: list[Departure],
+    *,
+    now: datetime,
+    last_updated: datetime | None,
+    stale: bool,
+    max_stale_age_minutes: int,
+) -> list[Departure]:
+    """Hide departures once their last successful data snapshot is too old."""
+    if not stale:
+        return departures
+    if last_updated is None:
+        return []
+    age = now.astimezone(timezone.utc) - last_updated.astimezone(timezone.utc)
+    if age >= timedelta(minutes=max_stale_age_minutes):
+        return []
+    return departures
 
 
 def _arguments() -> argparse.Namespace:
@@ -131,9 +168,11 @@ def run() -> int:
     next_api_attempt_at = 0.0
     wifi_interface = os.environ.get("HVV_WIFI_INTERFACE", "wlan0")
     last_board_state: tuple[object, ...] | None = None
+    last_success_heartbeat_at: float | None = None
     while not stopped:
         now = datetime.now(HAMBURG_TZ)
-        if time.monotonic() >= next_api_attempt_at:
+        current_monotonic = time.monotonic()
+        if current_monotonic >= next_api_attempt_at:
             try:
                 latest = client.departure_list(
                     stations,
@@ -144,7 +183,11 @@ def run() -> int:
                 last_updated = now
                 last_error = None
                 consecutive_failures = 0
-                LOG.info("%d passende Abfahrten geladen", len(latest))
+                last_success_heartbeat_at = log_success(
+                    len(latest),
+                    now_monotonic=current_monotonic,
+                    previous_heartbeat_at=last_success_heartbeat_at,
+                )
             except GeofoxError as exc:
                 last_error = str(exc)
                 consecutive_failures += 1
@@ -159,8 +202,15 @@ def run() -> int:
                 LOG.info("Nächster Geofox-Versuch in %d Sekunden", api_delay)
 
         wifi_state = wifi_connected(wifi_interface)
-        last_board_state = update_board(
+        visible_departures = departures_for_display(
             latest,
+            now=now,
+            last_updated=last_updated,
+            stale=last_error is not None,
+            max_stale_age_minutes=config.api.max_stale_age_minutes,
+        )
+        last_board_state = update_board(
+            visible_departures,
             now=now,
             last_updated=last_updated,
             stale=last_error is not None,

@@ -109,6 +109,7 @@ class ConfigTest(unittest.TestCase):
         cases = (
             ("api", "request_timeout_seconds"),
             ("api", "max_time_offset_minutes"),
+            ("api", "max_stale_age_minutes"),
             ("display", "bus_speed_hz"),
         )
         for section, field in cases:
@@ -143,6 +144,7 @@ class ConfigTest(unittest.TestCase):
             "request_timeout_seconds",
             "max_departures",
             "max_time_offset_minutes",
+            "max_stale_age_minutes",
         ):
             raw["api"].pop(field, None)
         for field in (
@@ -160,6 +162,7 @@ class ConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config = load_config(self.write_config(raw, directory))
         self.assertEqual(config.api.version, 63)
+        self.assertEqual(config.api.max_stale_age_minutes, 5)
         self.assertEqual(config.display.bus_speed_hz, 16_000_000)
         self.assertEqual(config.stations[0].label, "W")
         self.assertEqual(config.stations[0].city, "Hamburg")

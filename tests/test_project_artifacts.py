@@ -1,3 +1,4 @@
+import json
 import os
 import stat
 import unittest
@@ -24,6 +25,10 @@ class ProjectArtifactTest(unittest.TestCase):
         diagnostic = ROOT / "diagnose.sh"
         self.assertTrue(diagnostic.stat().st_mode & stat.S_IXUSR)
         self.assertTrue(os.access(diagnostic, os.X_OK))
+        installer_text = installer.read_text(encoding="utf-8")
+        self.assertIn('systemctl stop "$SERVICE_NAME"', installer_text)
+        self.assertIn("VENV_BACKED_UP", installer_text)
+        self.assertIn("INSTALL_SUCCEEDED", installer_text)
 
     def test_systemd_service_uses_protected_environment_file(self) -> None:
         service = (ROOT / "systemd" / "hvv-anzeiger.service").read_text(
@@ -33,7 +38,29 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("Environment=HVV_WIFI_INTERFACE=wlan0", service)
         self.assertIn("Restart=on-failure", service)
         self.assertIn("After=network-online.target time-sync.target", service)
+        self.assertIn("NoNewPrivileges=true", service)
+        self.assertIn("ProtectSystem=strict", service)
+        self.assertIn("ProtectHome=true", service)
+        self.assertIn("ReadWritePaths=/opt/hvv-anzeiger/var", service)
         self.assertNotIn("GEOFOX_PASSWORD=", service)
+
+    def test_readme_documents_every_example_configuration_field(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        config = json.loads(
+            (ROOT / "config.example.json").read_text(encoding="utf-8")
+        )
+        fields = [
+            *(f"api.{field}" for field in config["api"]),
+            *(f"display.{field}" for field in config["display"]),
+            *(f"stations[].{field}" for field in config["stations"][0]),
+            *(
+                f"stations[].routes[].{field}"
+                for field in config["stations"][0]["routes"][0]
+            ),
+        ]
+        for field in fields:
+            with self.subTest(field=field):
+                self.assertIn(f"`{field}`", readme)
 
 
 if __name__ == "__main__":

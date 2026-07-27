@@ -19,6 +19,7 @@ from .models import Departure, Route, Station
 
 LOG = logging.getLogger(__name__)
 HAMBURG_TZ = ZoneInfo("Europe/Berlin")
+MAX_RESPONSE_BYTES = 1024 * 1024
 
 
 class GeofoxError(RuntimeError):
@@ -111,9 +112,9 @@ class GeofoxClient:
         self._wait_for_rate_limit()
         try:
             with self._urlopen(request, timeout=self.timeout) as response:
-                raw = response.read()
+                raw = response.read(MAX_RESPONSE_BYTES + 1)
         except urllib.error.HTTPError as exc:
-            details = exc.read().decode("utf-8", errors="replace")[:300]
+            details = exc.read(301).decode("utf-8", errors="replace")[:300]
             LOG.error(
                 "Geofox HTTP %s, Trace-ID %s: %s", exc.code, trace_id, details
             )
@@ -125,6 +126,10 @@ class GeofoxClient:
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             LOG.error("Geofox nicht erreichbar, Trace-ID %s: %s", trace_id, exc)
             raise GeofoxError("Geofox ist nicht erreichbar") from exc
+
+        if len(raw) > MAX_RESPONSE_BYTES:
+            LOG.error("Geofox-Antwort zu groß, Trace-ID %s", trace_id)
+            raise GeofoxError("Geofox liefert eine zu große Antwort")
 
         try:
             result = json.loads(raw.decode("utf-8"))

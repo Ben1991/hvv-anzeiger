@@ -9,10 +9,22 @@ SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_USER="$(id -un)"
 INSTALL_GROUP="$(id -gn)"
 TEMP_SERVICE=""
+SERVICE_WAS_ACTIVE=0
+INSTALL_SUCCEEDED=0
+VENV_BACKED_UP=0
+VENV_BACKUP="${APP_DIR}/.venv.previous"
 
 cleanup() {
   if [[ -n "$TEMP_SERVICE" && -f "$TEMP_SERVICE" ]]; then
     rm -f "$TEMP_SERVICE"
+  fi
+  if ((INSTALL_SUCCEEDED == 0 && VENV_BACKED_UP == 1)); then
+    rm -rf "${APP_DIR}/.venv"
+    mv "$VENV_BACKUP" "${APP_DIR}/.venv"
+  fi
+  if ((INSTALL_SUCCEEDED == 0 && SERVICE_WAS_ACTIVE == 1)); then
+    echo "Installation fehlgeschlagen; vorherigen Dienst wieder starten." >&2
+    sudo systemctl start "$SERVICE_NAME" || true
   fi
 }
 trap cleanup EXIT
@@ -52,7 +64,12 @@ else
 fi
 
 echo "[4/7] Anwendung nach ${APP_DIR} kopieren"
+if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+  SERVICE_WAS_ACTIVE=1
+  sudo systemctl stop "$SERVICE_NAME"
+fi
 sudo install -d -o "$INSTALL_USER" -g "$INSTALL_GROUP" "$APP_DIR"
+sudo install -d -o "$INSTALL_USER" -g "$INSTALL_GROUP" "$APP_DIR/var"
 if [[ "$(realpath "$SOURCE_DIR")" != "$(realpath "$APP_DIR")" ]]; then
   sudo cp -R \
     "$SOURCE_DIR/hvv_display" \
@@ -72,6 +89,13 @@ fi
 sudo chown -R "$INSTALL_USER:$INSTALL_GROUP" "$APP_DIR"
 
 echo "[5/7] Python-Umgebung installieren"
+if [[ -e "$VENV_BACKUP" ]]; then
+  fail "Temporäres Backup ${VENV_BACKUP} existiert bereits; bitte zuerst prüfen."
+fi
+if [[ -d "$APP_DIR/.venv" ]]; then
+  mv "$APP_DIR/.venv" "$VENV_BACKUP"
+  VENV_BACKED_UP=1
+fi
 python3 -m venv "$APP_DIR/.venv"
 "$APP_DIR/.venv/bin/pip" install --upgrade pip
 "$APP_DIR/.venv/bin/pip" install \
@@ -113,6 +137,12 @@ else
   echo "Danach starten:"
   echo "  sudo systemctl start ${SERVICE_NAME}"
 fi
+
+if ((VENV_BACKED_UP == 1)); then
+  rm -rf "$VENV_BACKUP"
+  VENV_BACKED_UP=0
+fi
+INSTALL_SUCCEEDED=1
 
 echo
 echo "Ein Neustart des Raspberry Pi wird empfohlen: sudo reboot"

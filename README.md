@@ -29,7 +29,9 @@ welcher Haltestelle der Bus abfährt.
   Geofox-Dokumentation genannte Limit von durchschnittlich höchstens einer Anfrage
   pro Sekunde.
 - Bei einem Netzwerk- oder API-Fehler bleibt der letzte erfolgreiche Stand sichtbar
-  und erhält einen roten Hinweis „DATEN VERALTET“.
+  und erhält einen roten Hinweis „DATEN VERALTET“. Nach standardmäßig fünf Minuten
+  werden alte Buszeilen ausgeblendet, damit abgelaufene Prognosen nicht dauerhaft
+  als „sofort“ erscheinen. Die Uhrzeit des letzten Datenstands bleibt sichtbar.
 - Bei getrennter WLAN-Verbindung zeigt die Statusleiste ausdrücklich „KEIN WLAN“
   und, falls vorhanden, die Uhrzeit des letzten erfolgreichen Datenstands.
 - Bei wiederholten Fehlern verdoppelt sich der Abstand zwischen den Versuchen bis
@@ -39,8 +41,16 @@ welcher Haltestelle der Bus abfährt.
   gerendert und über SPI übertragen, wenn sich der sichtbare Inhalt geändert hat.
   Das spart CPU-Zeit und SPI-Übertragungen, ohne die Geofox-Abrufe zu reduzieren.
 - Sowohl HTTP-Fehler als auch Geofox-Fehler im JSON-Feld `returnCode` werden geprüft.
+- Geofox-Antworten sind auf 1 MiB begrenzt, damit eine fehlerhafte Server- oder
+  Proxy-Antwort nicht unkontrolliert Arbeitsspeicher belegt.
+- Erfolgreiche Routineabrufe stehen im Debug-Log. Auf Info-Ebene erscheint höchstens
+  einmal pro Stunde ein Lebenszeichen; Fehler bleiben sofort sichtbar. Das reduziert
+  unnötige Schreibzugriffe auf die SD-Karte.
 - Der systemd-Dienst startet erst nach Netzwerk- und Zeitsynchronisierungs-Targets.
   Das ist wichtig, weil ein Raspberry Pi üblicherweise keine Echtzeituhr besitzt.
+- Der systemd-Dienst darf das Betriebssystem, Benutzerverzeichnisse und den
+  Anwendungscode nicht verändern. Schreibzugriff besteht nur auf den lokalen
+  Haltestellen-Cache unter `/opt/hvv-anzeiger/var`.
 
 ## Welche Abfahrtszeit wird angezeigt?
 
@@ -161,6 +171,9 @@ Das Skript:
 - aktiviert SPI,
 - installiert die Anwendung unter `/opt/hvv-anzeiger`,
 - übernimmt eine vorhandene `config.json` und Zugangsdaten unverändert,
+- stoppt bei einer Wiederholungsinstallation zuerst den laufenden Dienst,
+- sichert die bisherige Python-Umgebung und stellt sie bei einem Installationsfehler
+  automatisch wieder her,
 - aktiviert die Netzwerk-Zeitsynchronisierung,
 - passt den systemd-Dienst an den aktuellen Linux-Benutzer an,
 - aktiviert den Autostart.
@@ -207,6 +220,7 @@ Sobald das GitHub-Repository verfügbar ist:
 sudo git clone https://github.com/Ben1991/hvv-anzeiger.git /opt/hvv-anzeiger
 sudo chown -R "$USER":"$USER" /opt/hvv-anzeiger
 cd /opt/hvv-anzeiger
+mkdir -p var
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install --constraint constraints.txt .
@@ -302,18 +316,45 @@ sudo systemctl restart hvv-anzeiger
 
 ## Konfiguration
 
-Die wichtigsten Werte in `config.json`:
+`config.example.json` enthält alle empfohlenen Werte. Optionale Felder dürfen
+weggelassen werden; dann gelten die folgenden Defaults aus dem Programmcode.
 
-| Feld | Bedeutung |
-|---|---|
-| `api.refresh_seconds` | Aktualisierung; mindestens 15 Sekunden |
-| `api.max_departures` | Sichtbare Zeilen; 1 bis 5 |
-| `api.max_time_offset_minutes` | Suchzeitraum ab jetzt |
-| `display.gpio_dc` / `gpio_reset` | verwendete GPIO-Nummern |
-| `display.rotate` | Drehung: 0, 1, 2 oder 3 |
-| `display.bgr` | auf `true`, falls Rot und Blau vertauscht sind |
-| `stations[].label` | eindeutiges Kürzel mit 1 bis 3 Zeichen für die Anzeige |
-| `stations[].routes` | erlaubte Kombinationen aus Linie und Ziel |
+### API-Defaults
+
+| Feld | Default | Bedeutung und Grenze |
+|---|---:|---|
+| `api.base_url` | kein Default, Pflichtfeld | Geofox-Basis-URL; im Beispiel `https://gti.geofox.de/gti/public` |
+| `api.version` | `63` | verwendete Geofox-GTI-Version |
+| `api.refresh_seconds` | `15` | regulärer Abstand der Echtzeitabrufe; mindestens 15 Sekunden |
+| `api.request_timeout_seconds` | `8` | Zeitlimit pro HTTP-Anfrage; muss größer als 0 sein |
+| `api.max_departures` | `5` | maximal sichtbare Zeilen; erlaubt sind 1 bis 5 |
+| `api.max_time_offset_minutes` | `90` | Geofox-Suchzeitraum ab der aktuellen Uhrzeit; muss größer als 0 sein |
+| `api.max_stale_age_minutes` | `5` | so lange dürfen alte Buszeilen bei einem Abruffehler sichtbar bleiben; danach bleibt nur der Fehlerstatus mit letztem Datenstand |
+
+### Display-Defaults
+
+| Feld | Default | Bedeutung und Grenze |
+|---|---:|---|
+| `display.spi_port` | `0` | SPI-Port |
+| `display.spi_device` | `0` | SPI-Gerät beziehungsweise Chip-Select; entspricht üblicherweise `/dev/spidev0.0` |
+| `display.gpio_dc` | `24` | GPIO-Nummer für Data/Command |
+| `display.gpio_reset` | `25` | GPIO-Nummer für Reset |
+| `display.rotate` | `0` | Drehung; erlaubt sind 0, 1, 2 oder 3 |
+| `display.bus_speed_hz` | `16000000` | SPI-Takt in Hertz; muss größer als 0 sein |
+| `display.bgr` | `false` | auf `true` setzen, falls Rot und Blau vertauscht sind |
+
+### Haltestellen-Defaults
+
+| Feld | Default | Bedeutung und Grenze |
+|---|---|---|
+| `stations` | kein Default, Pflichtfeld | mindestens eine Haltestelle |
+| `stations[].name` | kein Default, Pflichtfeld | Haltestellenname |
+| `stations[].city` | `"Hamburg"` | Stadt für die Haltestellensuche |
+| `stations[].id` | keine | optionale Geofox-ID; ohne ID wird sie gesucht und unter `var/stations.json` gespeichert |
+| `stations[].label` | erster Buchstabe des Namens | eindeutiges Kürzel mit 1 bis 3 Zeichen; wird in Großbuchstaben angezeigt |
+| `stations[].routes` | kein Default, Pflichtfeld | mindestens eine erlaubte Kombination aus Linie und Ziel |
+| `stations[].routes[].line` | kein Default, Pflichtfeld | Linienbezeichnung, beispielsweise `"21"` |
+| `stations[].routes[].destination` | kein Default, Pflichtfeld | erwartetes Fahrtziel |
 
 Die WLAN-Schnittstelle ist standardmäßig `wlan0`. Falls das Betriebssystem einen
 anderen Namen verwendet, den systemd-Dienst überschreiben:
@@ -359,11 +400,14 @@ Die automatisierten Tests prüfen unter anderem:
 
 - Konfigurationsgrenzen und die vorkonfigurierten Haltestellen,
 - HMAC-Signatur, HTTP-/Geofox-Fehler und mehrdeutige Haltestellensuchen,
+- Größenbegrenzung von Geofox-Antworten und Ablauf veralteter Abfahrten,
 - Linienfilter, Echtzeitverspätungen, Sortierung und Zeitumstellungen,
 - Haltestellen-Cache und atomisches Speichern gefundener IDs,
 - eine dokumentationsnahe, anonymisierte Geofox-Beispielantwort vom API-Eingang
   bis zum gerenderten Displaybild,
 - Herkunftskennzeichnung pro Haltestelle und begrenztes Fehler-Backoff,
+- stündlich begrenztes Erfolgs-Logging, gehärteten systemd-Dienst und
+  wiederherstellbare Python-Installation,
 - verbundene, getrennte, unbekannte und alternativ benannte WLAN-Schnittstellen,
 - normale, leere und veraltete Anzeigezustände,
 - Screenshot, Installationsskript, Pi-Diagnose und systemd-Konfiguration.
@@ -406,3 +450,10 @@ als 320 × 240 Pixel großes RGB-Bild erzeugt und anschließend vollständig auf
 ILI9341 übertragen. Bereits geladene Schriftarten werden zwischengespeichert.
 Ein Bild wird nur neu erzeugt und übertragen, wenn sich sein sichtbarer Inhalt
 gegenüber dem vorherigen Bild geändert hat.
+
+Der Dienst läuft mit systemd-Schutzmechanismen wie `NoNewPrivileges` und einem
+schreibgeschützten Betriebssystem- und Anwendungsbereich. Das Verzeichnis
+`/opt/hvv-anzeiger/var` ist die einzige explizite Schreibausnahme für den
+Haltestellen-Cache. Ein bewusstes RAM-Limit ist nicht gesetzt: Die dokumentierten
+Messbefehle sollten zuerst auf dem konkreten Pi ausgeführt werden, damit ein zu
+knapp angesetztes Limit nicht unnötig zu Neustarts führt.
