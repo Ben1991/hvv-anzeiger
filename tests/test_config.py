@@ -32,6 +32,25 @@ class ConfigTest(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 load_config(self.write_config(raw, directory))
 
+    def test_geofox_url_must_use_official_https_endpoint(self) -> None:
+        original = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
+        invalid_urls = (
+            "http://gti.geofox.de/gti/public",
+            "https://example.test/gti/public",
+            "https://user:secret@gti.geofox.de/gti/public",
+            "https://gti.geofox.de:444/gti/public",
+            "https://gti.geofox.de/gti/public?debug=true",
+            "https://gti.geofox.de/gti/public#fragment",
+            "https://gti.geofox.de:invalid/gti/public",
+        )
+        for invalid_url in invalid_urls:
+            with self.subTest(base_url=invalid_url):
+                raw = json.loads(json.dumps(original))
+                raw["api"]["base_url"] = invalid_url
+                with tempfile.TemporaryDirectory() as directory:
+                    with self.assertRaisesRegex(ConfigError, "api.base_url"):
+                        load_config(self.write_config(raw, directory))
+
     def test_visible_departure_limit_is_rejected_outside_display_capacity(self) -> None:
         original = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
         for invalid_value in (0, 6):

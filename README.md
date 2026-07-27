@@ -54,6 +54,48 @@ welcher Haltestelle der Bus abfährt.
 - Der systemd-Dienst darf das Betriebssystem, Benutzerverzeichnisse und den
   Anwendungscode nicht verändern. Schreibzugriff besteht nur auf den lokalen
   Haltestellen-Cache unter `/opt/hvv-anzeiger/var`.
+- Der Dienst läuft unter dem nicht interaktiven Systembenutzer `hvv-anzeiger`.
+  Programmcode und Konfiguration gehören `root`; nur das Cache-Verzeichnis gehört
+  dem Dienstbenutzer.
+- Geofox-Anfragen sind ausschließlich über HTTPS an `gti.geofox.de` erlaubt.
+  Externe Fehlermeldungen werden vor der Ausgabe auf eine einzelne sichere
+  Protokollzeile begrenzt.
+- Laufzeit- und Testabhängigkeiten sind vollständig mit Versionen und
+  SHA-256-Prüfsummen gesperrt. Der Dependency Audit in CI prüft jede Änderung
+  zusätzlich gegen bekannte Sicherheitsmeldungen.
+
+## Sicherheitsmodell
+
+Der Raspberry Pi stellt durch diese Anwendung keinen eingehenden Netzwerkdienst
+bereit. Die einzige Netzwerkkommunikation sind ausgehende HTTPS-Anfragen an
+Geofox. Die Zugangsdaten liegen als `root:root` mit Dateirechten `0600` unter
+`/etc/hvv-anzeiger.env` und werden weder in Git noch als Kommandozeilenparameter
+gespeichert.
+
+Die Installation trennt drei Bereiche:
+
+| Bereich | Eigentümer | Rechte des Dienstes |
+|---|---|---|
+| Programm und virtuelle Umgebung unter `/opt/hvv-anzeiger` | `root:root` | lesen und ausführen |
+| Konfiguration `/opt/hvv-anzeiger/config.json` | `root:root` | nur lesen |
+| Laufzeitdaten `/opt/hvv-anzeiger/var` | `hvv-anzeiger:hvv-anzeiger` | lesen und schreiben |
+
+Der Benutzer `hvv-anzeiger` besitzt keine Login-Shell und erhält nur über die
+Gruppen `spi` und `gpio` Zugriff auf die Display-Hardware. Die systemd-Sandbox
+verhindert zusätzlich Änderungen an Betriebssystem, Kernel-Einstellungen,
+Benutzerverzeichnissen und Anwendungscode.
+
+Sicherheitsupdates werden in zwei Stufen geprüft:
+
+- `requirements.txt` und `requirements-dev.txt` enthalten festgelegte
+  Versionen und die erlaubten Paketprüfsummen. Eine manipulierte Paketdatei wird
+  bei der Installation abgelehnt.
+- GitHub Actions führt `pip-audit` gegen die Laufzeit-Lockdatei aus. Bekannte
+  Abhängigkeitsschwachstellen lassen den Workflow fehlschlagen.
+
+Voraussetzung ist **Python 3.10 oder neuer**. Empfohlen wird Raspberry Pi OS
+Bookworm 64 Bit mit Python 3.11. Python 3.9 wird nicht mehr unterstützt, weil die
+bereinigte Pillow-Version 12.3.0 mindestens Python 3.10 benötigt.
 
 ## Welche Abfahrtszeit wird angezeigt?
 
@@ -204,7 +246,11 @@ Das Skript:
 - sichert die bisherige Python-Umgebung und stellt sie bei einem Installationsfehler
   automatisch wieder her,
 - aktiviert die Netzwerk-Zeitsynchronisierung,
-- passt den systemd-Dienst an den aktuellen Linux-Benutzer an,
+- legt den nicht interaktiven Systembenutzer `hvv-anzeiger` an,
+- schützt Programmcode und Konfiguration als `root:root` und gibt dem Dienst nur
+  Schreibrecht auf `var`,
+- installiert ausschließlich die in `requirements.txt` festgelegten Pakete mit
+  geprüften SHA-256-Hashes,
 - aktiviert die wöchentliche Journal-Bereinigung,
 - aktiviert den Autostart.
 
@@ -244,17 +290,36 @@ geprüft werden.
 
 ### 2. Anwendung installieren
 
-Sobald das GitHub-Repository verfügbar ist:
+Die manuelle Installation verwendet denselben eingeschränkten Dienstbenutzer und
+dieselbe geprüfte Lockdatei wie `install.sh`:
 
 ```bash
-sudo git clone https://github.com/Ben1991/hvv-anzeiger.git /opt/hvv-anzeiger
-sudo chown -R "$USER":"$USER" /opt/hvv-anzeiger
-cd /opt/hvv-anzeiger
-mkdir -p var
-python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install --constraint constraints.txt .
-cp config.example.json config.json
+git clone https://github.com/Ben1991/hvv-anzeiger.git
+cd hvv-anzeiger
+
+getent group hvv-anzeiger >/dev/null ||
+  sudo groupadd --system hvv-anzeiger
+id -u hvv-anzeiger >/dev/null 2>&1 ||
+  sudo useradd --system --gid hvv-anzeiger \
+    --home-dir /opt/hvv-anzeiger --no-create-home \
+    --shell /usr/sbin/nologin hvv-anzeiger
+sudo usermod --append --groups spi,gpio hvv-anzeiger
+
+sudo install -d -m 0755 -o root -g root /opt/hvv-anzeiger
+sudo cp -R hvv_display systemd /opt/hvv-anzeiger/
+sudo install -m 0644 README.md config.example.json pyproject.toml \
+  requirements.txt /opt/hvv-anzeiger/
+sudo install -m 0755 diagnose.sh /opt/hvv-anzeiger/diagnose.sh
+sudo install -d -m 0750 -o hvv-anzeiger -g hvv-anzeiger \
+  /opt/hvv-anzeiger/var
+
+sudo python3 -m venv /opt/hvv-anzeiger/.venv
+sudo -H /opt/hvv-anzeiger/.venv/bin/pip install \
+  --require-hashes --requirement /opt/hvv-anzeiger/requirements.txt
+sudo -H /opt/hvv-anzeiger/.venv/bin/pip install \
+  --no-build-isolation --no-deps /opt/hvv-anzeiger
+sudo install -m 0644 -o root -g root config.example.json \
+  /opt/hvv-anzeiger/config.json
 ```
 
 `config.json` kann unverändert als Startpunkt dienen. Falls das Bild auf dem Kopf
@@ -311,8 +376,8 @@ Oder mit echten API-Daten:
 
 ### 5. Automatischen Start einrichten
 
-Der Dienst verwendet im Beispiel den Benutzer `pi`. Falls dein Benutzer anders
-heißt, `User=` und `Group=` in `systemd/hvv-anzeiger.service` anpassen.
+Der Dienst verwendet immer den eigens angelegten Benutzer `hvv-anzeiger`. `User=`
+und `Group=` sollten nicht auf den normalen Login-Benutzer geändert werden.
 
 ```bash
 sudo cp systemd/hvv-anzeiger.service \
@@ -358,7 +423,7 @@ weggelassen werden; dann gelten die folgenden Defaults aus dem Programmcode.
 
 | Feld | Default | Bedeutung und Grenze |
 |---|---:|---|
-| `api.base_url` | kein Default, Pflichtfeld | Geofox-Basis-URL; im Beispiel `https://gti.geofox.de/gti/public` |
+| `api.base_url` | kein Default, Pflichtfeld | ausschließlich HTTPS auf `gti.geofox.de`; im Beispiel `https://gti.geofox.de/gti/public` |
 | `api.version` | `63` | verwendete Geofox-GTI-Version |
 | `api.refresh_seconds` | `15` | regulärer Abstand der Echtzeitabrufe; mindestens 15 Sekunden |
 | `api.request_timeout_seconds` | `8` | Zeitlimit pro HTTP-Anfrage; muss größer als 0 sein |
@@ -421,11 +486,13 @@ konfigurierte Ziel „Elbgaustraße“ auch auf „S Elbgaustraße“ aus der AP
 Auf einem Entwicklungsrechner:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install --constraint constraints.txt --editable ".[test]"
+python3.11 -m venv .venv
+.venv/bin/pip install --require-hashes --requirement requirements-dev.txt
+.venv/bin/pip install --no-build-isolation --no-deps --editable .
 .venv/bin/ruff check .
 .venv/bin/coverage run -m unittest discover -s tests -v
 .venv/bin/coverage report
+.venv/bin/pip-audit --requirement requirements.txt --disable-pip
 .venv/bin/hvv-preview preview.png
 bash -n install.sh diagnose.sh
 shellcheck install.sh diagnose.sh
@@ -443,19 +510,25 @@ Die automatisierten Tests prüfen unter anderem:
 - Herkunftskennzeichnung pro Haltestelle und begrenztes Fehler-Backoff,
 - stündlich begrenztes Erfolgs-Logging, gehärteten systemd-Dienst und
   wiederherstellbare Python-Installation,
+- HTTPS-/Host-Prüfung, einzeilige externe Fehlertexte, den dedizierten
+  Dienstbenutzer und root-eigenen Anwendungscode,
+- Prüfsummen der installierten Pakete und bekannte
+  Abhängigkeitsschwachstellen,
 - wöchentliche Journal-Bereinigung mit Alters- und Größenlimit,
 - verbundene, getrennte, unbekannte und alternativ benannte WLAN-Schnittstellen,
 - normale, leere und veraltete Anzeigezustände,
 - Screenshot, Installationsskript, Pi-Diagnose und systemd-Konfiguration.
 
 GitHub Actions führt diese Prüfungen nach jedem Push und für jeden Pull Request mit
-Python 3.9, 3.11 und 3.13 aus. Zusätzlich werden Ruff, eine Mindest-Testabdeckung
-von 100 Prozent, beide Shell-Skripte mit Bash und ShellCheck, ein Vorschaubild und
-das installierbare Python-Paket geprüft.
+Python 3.10, 3.11 und 3.13 aus. Zusätzlich werden Ruff einschließlich seiner
+Security-Regeln, eine Mindest-Testabdeckung von 100 Prozent, `pip-audit`, beide
+Shell-Skripte mit Bash und ShellCheck, ein Vorschaubild und das installierbare
+Python-Paket geprüft.
 
-Die direkten Laufzeitabhängigkeiten sind in `constraints.txt` festgeschrieben.
-Dependabot sucht wöchentlich nach kontrollierten Aktualisierungen für Python-Pakete
-und GitHub Actions.
+Alle direkten und transitiven Laufzeitabhängigkeiten sind mit Prüfsummen in
+`requirements.txt` festgeschrieben. `requirements-dev.txt` ergänzt die ebenfalls
+gesperrten Test- und Build-Werkzeuge. Dependabot sucht wöchentlich nach
+kontrollierten Aktualisierungen für Python-Pakete und GitHub Actions.
 
 Der echte Displayzugriff und der authentifizierte Geofox-Produktivzugang können
 weiterhin erst mit Hardware beziehungsweise gültigen Zugangsdaten geprüft werden.
@@ -487,9 +560,11 @@ ILI9341 übertragen. Bereits geladene Schriftarten werden zwischengespeichert.
 Ein Bild wird nur neu erzeugt und übertragen, wenn sich sein sichtbarer Inhalt
 gegenüber dem vorherigen Bild geändert hat.
 
-Der Dienst läuft mit systemd-Schutzmechanismen wie `NoNewPrivileges` und einem
-schreibgeschützten Betriebssystem- und Anwendungsbereich. Das Verzeichnis
-`/opt/hvv-anzeiger/var` ist die einzige explizite Schreibausnahme für den
-Haltestellen-Cache. Ein bewusstes RAM-Limit ist nicht gesetzt: Die dokumentierten
-Messbefehle sollten zuerst auf dem konkreten Pi ausgeführt werden, damit ein zu
-knapp angesetztes Limit nicht unnötig zu Neustarts führt.
+Der Dienst läuft als nicht interaktiver Benutzer `hvv-anzeiger` mit
+systemd-Schutzmechanismen wie `NoNewPrivileges` und einem schreibgeschützten
+Betriebssystem- und Anwendungsbereich. Programm, virtuelle Umgebung und
+Konfiguration gehören `root`; `/opt/hvv-anzeiger/var` ist die einzige explizite
+Schreibausnahme für den Haltestellen-Cache. Ein bewusstes RAM-Limit ist nicht
+gesetzt: Die dokumentierten Messbefehle sollten zuerst auf dem konkreten Pi
+ausgeführt werden, damit ein zu knapp angesetztes Limit nicht unnötig zu
+Neustarts führt.

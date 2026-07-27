@@ -11,8 +11,10 @@ import unicodedata
 import urllib.error
 import urllib.request
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from .models import Departure, Route, Station
@@ -48,6 +50,33 @@ def route_matches(line_name: str, direction: str, routes: tuple[Route, ...]) -> 
     return False
 
 
+def _https_base_url(value: str) -> str:
+    base_url = value.rstrip("/")
+    try:
+        parsed = urlsplit(base_url)
+        port = parsed.port
+    except ValueError as exc:
+        raise GeofoxError("Geofox-Basis-URL ist ungültig") from exc
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise GeofoxError("Geofox-Basis-URL muss eine sichere HTTPS-URL sein")
+    return base_url
+
+
+def _safe_external_text(value: Any, limit: int = 160) -> str:
+    """Make API-controlled text safe for one-line logs and user messages."""
+    return "".join(
+        character if character.isprintable() else " " for character in str(value)
+    ).strip()[:limit]
+
+
 class GeofoxClient:
     def __init__(
         self,
@@ -62,7 +91,7 @@ class GeofoxClient:
     ) -> None:
         if not user or not password:
             raise GeofoxError("GEOFOX_USER und GEOFOX_PASSWORD müssen gesetzt sein")
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _https_base_url(base_url)
         self.user = user
         self._password = password.encode("utf-8")
         self.version = version
@@ -94,7 +123,8 @@ class GeofoxClient:
     def _post(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
         body = self.encode_body(payload)
         trace_id = str(uuid.uuid4())
-        request = urllib.request.Request(
+        # The base URL is validated as HTTPS before urllib receives it.
+        request = urllib.request.Request(  # noqa: S310
             f"{self.base_url}/{method}",
             data=body,
             method="POST",
@@ -114,17 +144,14 @@ class GeofoxClient:
             with self._urlopen(request, timeout=self.timeout) as response:
                 raw = response.read(MAX_RESPONSE_BYTES + 1)
         except urllib.error.HTTPError as exc:
-            details = exc.read(301).decode("utf-8", errors="replace")[:300]
-            LOG.error(
-                "Geofox HTTP %s, Trace-ID %s: %s", exc.code, trace_id, details
-            )
+            LOG.error("Geofox HTTP %s, Trace-ID %s", exc.code, trace_id)
             if exc.code == 401:
                 raise GeofoxError("Geofox-Zugangsdaten wurden abgelehnt") from exc
             if exc.code == 429:
                 raise GeofoxError("Geofox-Anfragelimit erreicht") from exc
             raise GeofoxError(f"Geofox antwortet mit HTTP {exc.code}") from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            LOG.error("Geofox nicht erreichbar, Trace-ID %s: %s", trace_id, exc)
+            LOG.error("Geofox nicht erreichbar, Trace-ID %s", trace_id)
             raise GeofoxError("Geofox ist nicht erreichbar") from exc
 
         if len(raw) > MAX_RESPONSE_BYTES:
@@ -139,14 +166,14 @@ class GeofoxClient:
         if not isinstance(result, dict):
             raise GeofoxError("Geofox liefert kein Antwortobjekt")
         if result.get("returnCode") != "OK":
-            developer_info = str(result.get("errorDevInfo", ""))[:300]
             LOG.error(
-                "Geofox returnCode=%s, Trace-ID %s: %s",
-                result.get("returnCode"),
+                "Geofox returnCode=%s, Trace-ID %s",
+                _safe_external_text(result.get("returnCode"), 80),
                 trace_id,
-                developer_info,
             )
-            message = result.get("errorText") or result.get("returnCode") or "Unbekannt"
+            message = _safe_external_text(
+                result.get("errorText") or result.get("returnCode") or "Unbekannt"
+            )
             raise GeofoxError(f"Geofox-Fehler: {message}")
         return result
 

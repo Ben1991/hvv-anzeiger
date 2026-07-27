@@ -28,6 +28,13 @@ class ProjectArtifactTest(unittest.TestCase):
         installer_text = installer.read_text(encoding="utf-8")
         self.assertIn('systemctl stop "$SERVICE_NAME"', installer_text)
         self.assertIn('enable --now "$LOG_CLEANUP_TIMER"', installer_text)
+        self.assertIn('APP_USER="hvv-anzeiger"', installer_text)
+        self.assertIn("--require-hashes", installer_text)
+        self.assertNotIn("pip\" install --upgrade pip", installer_text)
+        self.assertIn('chown -R root:root "$APP_DIR"', installer_text)
+        self.assertIn(
+            'chown -R "$APP_USER:$APP_GROUP" "$APP_DIR/var"', installer_text
+        )
         self.assertIn("VENV_BACKED_UP", installer_text)
         self.assertIn("INSTALL_SUCCEEDED", installer_text)
 
@@ -43,7 +50,34 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("ProtectSystem=strict", service)
         self.assertIn("ProtectHome=true", service)
         self.assertIn("ReadWritePaths=/opt/hvv-anzeiger/var", service)
+        self.assertIn("User=hvv-anzeiger", service)
+        self.assertIn("Group=hvv-anzeiger", service)
         self.assertNotIn("GEOFOX_PASSWORD=", service)
+
+    def test_dependencies_are_locked_with_hashes_and_audited_in_ci(self) -> None:
+        for filename in ("requirements.txt", "requirements-dev.txt"):
+            with self.subTest(filename=filename):
+                lines = (ROOT / filename).read_text(encoding="utf-8").splitlines()
+                requirements = [
+                    (index, line)
+                    for index, line in enumerate(lines)
+                    if line and not line.startswith((" ", "#"))
+                ]
+                self.assertTrue(requirements)
+                for index, requirement in requirements:
+                    self.assertIn("==", requirement)
+                    self.assertTrue(requirement.endswith("\\"))
+                    self.assertTrue(
+                        lines[index + 1].lstrip().startswith("--hash=sha256:")
+                    )
+
+        runtime_lock = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+        self.assertIn("pillow==12.3.0", runtime_lock)
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("pip-audit --requirement requirements.txt", workflow)
+        self.assertIn("--require-hashes --requirement requirements-dev.txt", workflow)
 
     def test_weekly_log_cleanup_has_retention_and_size_limits(self) -> None:
         cleanup = (

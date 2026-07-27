@@ -41,6 +41,20 @@ class GeofoxErrorTest(unittest.TestCase):
         with self.assertRaisesRegex(GeofoxError, "GEOFOX_USER"):
             GeofoxClient("https://example.test", "", "")
 
+    def test_base_url_requires_safe_https_url(self) -> None:
+        for base_url in (
+            "http://example.test",
+            "file:///etc/passwd",
+            "https://user:secret@example.test",
+            "https://example.test:444",
+            "https://example.test/path?query=true",
+            "https://example.test/path#fragment",
+            "https://example.test:invalid",
+        ):
+            with self.subTest(base_url=base_url):
+                with self.assertRaisesRegex(GeofoxError, "HTTPS|ungültig"):
+                    GeofoxClient(base_url, "user", "secret")
+
     def test_http_401_has_safe_message(self) -> None:
         error = urllib.error.HTTPError(
             "https://example.test/departureList",
@@ -113,6 +127,18 @@ class GeofoxErrorTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(GeofoxError, "Haltestelle ungültig"):
             client._post("departureList", {})
+
+    def test_api_error_sanitizes_external_text(self) -> None:
+        client = self.client_for(
+            b'{"returnCode":"ERROR\\nFORGED","errorText":"Fehler\\nFORGED\\u0000"}'
+        )
+        with (
+            self.assertLogs("hvv_display.geofox", level="ERROR") as logs,
+            self.assertRaises(GeofoxError) as raised,
+        ):
+            client._post("departureList", {})
+        self.assertNotIn("\nFORGED", str(raised.exception))
+        self.assertNotIn("\nFORGED", "\n".join(logs.output))
 
     def test_invalid_json_is_rejected(self) -> None:
         client = self.client_for(b"<html>not json</html>")

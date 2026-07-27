@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .models import Route, Station
 
@@ -53,6 +54,29 @@ def _boolean(value: Any, field: str) -> bool:
     return value
 
 
+def _geofox_base_url(value: Any) -> str:
+    base_url = str(value).rstrip("/")
+    try:
+        parsed = urlsplit(base_url)
+        port = parsed.port
+    except ValueError as exc:
+        raise ConfigError("api.base_url ist keine gültige URL") from exc
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "gti.geofox.de"
+        or port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ConfigError(
+            "api.base_url muss eine HTTPS-URL auf gti.geofox.de ohne "
+            "Zugangsdaten, Query oder Fragment sein"
+        )
+    return base_url
+
+
 def load_config(path: str | Path) -> AppConfig:
     config_path = Path(path)
     try:
@@ -70,7 +94,7 @@ def load_config(path: str | Path) -> AppConfig:
         raise ConfigError("Konfiguration benötigt api, display und stations") from exc
 
     api = ApiConfig(
-        base_url=str(_required(api_raw, "base_url", "api")).rstrip("/"),
+        base_url=_geofox_base_url(_required(api_raw, "base_url", "api")),
         version=int(api_raw.get("version", 63)),
         refresh_seconds=int(api_raw.get("refresh_seconds", 15)),
         request_timeout_seconds=float(api_raw.get("request_timeout_seconds", 8)),
