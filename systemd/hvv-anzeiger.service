@@ -1,0 +1,19 @@
+[Unit]
+Description=HVV Abfahrtsanzeige
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+SupplementaryGroups=spi gpio
+WorkingDirectory=/opt/hvv-anzeiger
+EnvironmentFile=/etc/hvv-anzeiger.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/hvv-anzeiger/.venv/bin/hvv-anzeiger --config /opt/hvv-anzeiger/config.json
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

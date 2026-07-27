@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hvv-anzeiger"
+version = "0.1.0"
+description = "HVV departure display for a Raspberry Pi and ILI9341 TFT"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "luma.lcd>=2.11,<3",
+  "Pillow>=10,<12",
+  "RPi.GPIO>=0.7.1; sys_platform == 'linux'",
+  "spidev>=3.6; sys_platform == 'linux'",
+]
+
+[project.scripts]
+hvv-anzeiger = "hvv_display.main:main"
+hvv-preview = "hvv_display.preview:main"
+
+[tool.setuptools.packages.find]
+include = ["hvv_display*"]
