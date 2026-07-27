@@ -1,31 +1,74 @@
 # HVV-Anzeiger für Raspberry Pi
 
 [![CI](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml)
+[![Lizenz: GPL-3.0-only](https://img.shields.io/badge/Lizenz-GPL--3.0--only-blue.svg)](LICENSE)
 
-Der HVV-Anzeiger zeigt die nächsten passenden Busabfahrten auf einem
-2,2-Zoll-ILI9341-SPI-Display. Die Abfahrten mehrerer Haltestellen werden gemeinsam
-nach der erwarteten Abfahrtszeit sortiert und alle 15 Sekunden über die
-Geofox-GTI-API aktualisiert.
+Eine kompakte Abfahrtsanzeige für einen Raspberry Pi Zero 2 W und ein
+2,2-Zoll-ILI9341-SPI-Display. Sie lädt alle 15 Sekunden aktuelle
+Geofox-Prognosen, filtert die gewünschten Busverbindungen und sortiert sie
+haltestellenübergreifend nach der erwarteten Abfahrtszeit.
 
 ![Beispielansicht der HVV-Abfahrtsanzeige](docs/hvv-anzeiger-preview.png)
 
-## Funktionsumfang
+> Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
+> offizielles Produkt von hvv, HOCHBAHN oder Geofox.
 
-- Anzeige von bis zu fünf Abfahrten auf 320 × 240 Pixeln im Querformat
+## Inhalt
+
+- [Funktionen](#funktionen)
+- [Vorkonfigurierte Anzeige](#vorkonfigurierte-anzeige)
+- [Voraussetzungen](#voraussetzungen)
+- [Geofox-Zugang beantragen](#geofox-zugang-beantragen)
+- [Display anschließen](#display-anschließen)
+- [Installieren](#installieren)
+- [Konfigurieren](#konfigurieren)
+- [Betrieb und Updates](#betrieb-und-updates)
+- [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose)
+- [Ressourcen- und Stromverbrauch](#ressourcen--und-stromverbrauch)
+- [Sicherheit und Datenschutz](#sicherheit-und-datenschutz)
+- [Projektentwicklung](#projektentwicklung)
+- [Grenzen](#grenzen)
+- [Haftungsausschluss](#haftungsausschluss)
+- [Lizenz und Unterstützung](#lizenz-und-unterstützung)
+
+## Funktionen
+
+- bis zu fünf Abfahrten auf 320 × 240 Pixeln im Querformat
 - Linie, Fahrtziel, absolute Uhrzeit und verbleibende Minuten
 - gemeinsame chronologische Sortierung über mehrere Haltestellen
-- frei konfigurierbare Linien, Ziele und Haltestellen
+- frei konfigurierbare Haltestellen, Linien, Ziele und sichtbare Kürzel
 - Geofox-Echtzeitprognosen einschließlich Verspätungen und Ausfällen
 - Aktualisierung im Normalbetrieb alle 15 Sekunden
 - sichtbare Hinweise bei fehlendem WLAN, veralteten Daten oder noch nicht
   synchronisierter Systemzeit
-- Weiteranzeige des letzten erfolgreichen Datenstands bei vorübergehenden Fehlern
+- letzter erfolgreicher Datenstand bleibt bei vorübergehenden Fehlern sichtbar
+- begrenzte Wiederholungsversuche mit wachsendem Abstand bei API-Fehlern
 - optionaler Nachtmodus mit schwarzem Bild und pausierten Geofox-Abfragen
-- automatischer Start, Neustart bei Fehlern und Überwachung durch systemd
+- automatischer Start nach Neustart oder Stromausfall
+- Prozessüberwachung und automatischer Neustart durch systemd
 - wöchentliche Begrenzung der Systemprotokolle
-- Diagnosewerkzeug für die installierte Umgebung
+- Diagnosewerkzeug und PNG-Vorschau für Betrieb ohne angeschlossenes Display
 
-### Vorkonfigurierte Verbindungen
+### Welche Abfahrtszeit wird angezeigt?
+
+Die Anzeige verwendet nicht einfach die geplante Abfahrtszeit, sondern die
+aktuelle Geofox-Prognose:
+
+```text
+erwartete Abfahrtszeit = Planabfahrt + gemeldete Verspätung
+```
+
+Die große Restzeit und die kleine absolute Uhrzeit basieren auf derselben
+erwarteten Abfahrtszeit. Liefert Geofox keine Verspätung, wird die Planzeit
+verwendet. Gemeldete Ausfälle erscheinen als `AUS`.
+
+Eine noch bevorstehende Abfahrt bleibt eine Prognose und kann sich bis zur
+Abfahrt ändern. Sie ist nicht mit einer nachträglich gemessenen tatsächlichen
+Abfahrt gleichzusetzen.
+
+## Vorkonfigurierte Anzeige
+
+Die Beispielkonfiguration enthält:
 
 | Kürzel | Haltestelle | Linie | Ziel |
 |---|---|---:|---|
@@ -34,44 +77,45 @@ Geofox-GTI-API aktualisiert.
 | W | Weistritzstraße | 384 | Elbgaustraße |
 | R | Recknitzstraße | 21 | U Niendorf Nord |
 
-Das Kürzel zeigt bei einer gemeinsam sortierten Liste, von welcher Haltestelle
-die jeweilige Abfahrt stammt.
+Das Kürzel macht in der gemeinsam sortierten Liste sichtbar, von welcher
+Haltestelle eine Abfahrt stammt. Alle Verbindungen lassen sich in
+`config.json` ersetzen.
 
-## Welche Abfahrtszeit wird angezeigt?
+## Voraussetzungen
 
-Die Anzeige verwendet die aktuelle Geofox-Prognose:
+### Unterstütztes Zielsystem
 
-```text
-erwartete Abfahrtszeit = Planabfahrt + gemeldete Verspätung
-```
+- Raspberry Pi Zero 2 W
+- Raspberry Pi OS Lite Bookworm, 64 Bit empfohlen
+- Python 3.10 oder neuer
+- microSD-Karte
+- zuverlässiges 5-V-Netzteil mit mindestens 2 A
+- WLAN mit Internetzugang
+- 2,2-Zoll-TFT mit ILI9341-Controller und 240 × 320 Pixeln
+- passende Jumper-Kabel
+- gültige Geofox-GTI-Zugangsdaten
+- Terminal- oder SSH-Zugang zum Raspberry Pi
 
-Die große Restzeit und die kleine absolute Uhrzeit basieren beide auf dieser
-erwarteten Abfahrtszeit. Liefert Geofox keine Verspätung, wird die Planzeit
-verwendet. Gemeldete Ausfälle erscheinen als `AUS`.
+Andere Raspberry-Pi-Modelle oder ILI9341-Module können funktionieren, gehören
+aber nicht zum dokumentierten und getesteten Zielsetup. Pinbelegung,
+Spannungsversorgung, Hintergrundbeleuchtung und Farbreihenfolge müssen zum
+konkreten Display-Modul passen.
 
-Eine zukünftige Abfahrt ist immer eine Prognose. Sie ist nicht mit einer bereits
-gemessenen tatsächlichen Abfahrt gleichzusetzen.
+## Geofox-Zugang beantragen
 
-## Datenquelle und Geofox-Zugang
+### Datenquelle
 
-### Was ist Geofox GTI?
+Das [Geofox Thin Interface (GTI)](https://gti.geofox.de/) stellt unter anderem
+Haltestellen, Linien, Abfahrten, Fahrtverläufe sowie Plan- und
+Echtzeitinformationen bereit. Dieses Projekt ruft die Abfahrtsliste mit
+aktivierten Echtzeitdaten ab.
 
-Das
-[Geofox Thin Interface (GTI)](https://gti.geofox.de/)
-ist die REST-ähnliche Web-Service-Schnittstelle der Geofox-Fahrplanauskunft. Sie
-stellt unter anderem Haltestellen, Linien, Abfahrten, Fahrtverläufe sowie Plan- und
-Echtzeitinformationen bereit. Dieses Projekt verwendet die Abfahrtsliste mit
-aktivierten Echtzeitdaten, um Verspätungen und gemeldete Ausfälle zu
-berücksichtigen.
+Die HOCHBAHN stellt die GTI-Schnittstelle für hvv-Fahrplandaten bereit.
+Verbindliche Informationen, aktuelle Nutzungsbedingungen und den Antragsweg
+veröffentlicht der hvv auf der
+[offiziellen Seite „Fahrplandaten für Entwickler mit individuellen Projekten“](https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf).
 
-Die HOCHBAHN stellt die GTI-Schnittstelle für hvv-Fahrplandaten bereit. Die
-verbindlichen Informationen zum Zugang, die aktuellen Nutzungsbedingungen und
-der Antragsweg stehen auf der
-[offiziellen hvv-Seite „Fahrplandaten für Entwickler mit individuellen Projekten“](https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf).
-Dieses Repository ist ein unabhängiges Projekt und kein offizielles Produkt von
-hvv oder HOCHBAHN.
-
-### Zugang beantragen
+### Antrag
 
 Der Zugriff ist beschränkt und wird individuell geprüft. Laut hvv besteht kein
 grundsätzlicher Anspruch auf einen Zugang. Der Antrag erfolgt so:
@@ -80,17 +124,15 @@ grundsätzlicher Anspruch auf einen Zugang. Der Antrag erfolgt so:
    [offizielle hvv-Seite zum Datenabruf](https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf)
    öffnen und die dort eingeblendeten Nutzungsbedingungen vollständig lesen.
 2. Prüfen, ob das Vorhaben die aktuellen Bedingungen erfüllt. Die
-   Fahrplanauskunft muss insbesondere für Fahrgäste kostenfrei bereitgestellt
-   werden; auch eine mittelbare oder verdeckte Kostenpflichtigkeit ist nicht
-   zulässig.
-3. Den Zugang über den E-Mail-Kontakt auf dieser hvv-Seite beantragen. Im Antrag
-   einen Ansprechpartner und das Vorhaben kurz beschreiben.
-4. Die individuelle Rückmeldung abwarten. Eine Freigabe ist nicht garantiert und
-   kann mit projektspezifischen Bedingungen oder Abrufgrenzen verbunden sein.
-5. Nach einer Freigabe werden eine Geofox Application-ID und ein Passwort
-   benötigt.
-6. Repository installieren und beide Werte bei der interaktiven Abfrage von
-   `./install.sh` eingeben.
+   Fahrplanauskunft muss insbesondere für Fahrgäste kostenfrei bleiben; auch
+   eine mittelbare oder verdeckte Kostenpflichtigkeit ist nicht zulässig.
+3. Den Zugang über den E-Mail-Kontakt auf der hvv-Seite beantragen und einen
+   Ansprechpartner sowie eine kurze Beschreibung des Vorhabens nennen.
+4. Die individuelle Rückmeldung abwarten. Eine Freigabe ist nicht garantiert
+   und kann mit projektspezifischen Bedingungen oder Abrufgrenzen verbunden
+   sein.
+5. Nach einer Freigabe die erhaltene Geofox Application-ID und das Passwort für
+   die Installation bereithalten.
 
 Eine mögliche Beschreibung für den Antrag:
 
@@ -109,57 +151,31 @@ Ansprechpartner: <Name und erreichbare Kontaktdaten>
 Die Beschreibung ist nur eine Vorlage. Maßgeblich bleiben die aktuellen Angaben
 und Nutzungsbedingungen auf der verlinkten hvv-Seite.
 
-Die Zugangsdaten niemals in `config.json`, im Repository, in einem GitHub-Issue
-oder in einem Screenshot speichern. Der Installer legt sie geschützt unter
-`/etc/hvv-anzeiger.env` ab.
+### Wichtige Nutzungsgrenzen
 
-### Nutzungs- und Betriebsgrenzen
-
-- Maßgeblich sind immer die aktuellen Bedingungen von hvv und HOCHBAHN.
-- Die Fahrplanauskunft muss für Endnutzer kostenfrei bleiben. Eine freiwillige
-  Unterstützung dieses Open-Source-Projekts schaltet keine Funktionen oder
-  Fahrplandaten frei.
-- Herkunft und Anbieter der Fahrplandaten müssen erkennbar sein. Datenquelle für
-  dieses Projekt ist Geofox/HVV.
-- Bei einer öffentlichen Bereitstellung die aktuellen Darstellungs- und
-  Hinweispflichten vollständig prüfen. Die HVV-Bedingungen nennen unter anderem
-  einen sichtbaren Link zu `www.hvv.de` und einen Hinweis `ohne Gewähr`. Das
-  kleine Display dieses privaten Zielsetups stellt diese Hinweise nicht
-  automatisch dar.
-- Für Vollständigkeit, Richtigkeit, Aktualität oder Verfügbarkeit der Daten gibt
-  es keine Garantie.
-- Geofox kann Zugriffe begrenzen. Laut
+- Die aktuellen Bedingungen von hvv und HOCHBAHN haben immer Vorrang.
+- Die Fahrplanauskunft muss für Endnutzer kostenfrei bleiben.
+- Herkunft und Anbieter der Fahrplandaten müssen erkennbar sein.
+- Bei einer öffentlichen Bereitstellung müssen die jeweils aktuellen
+  Darstellungs- und Hinweispflichten geprüft werden. Die hvv-Bedingungen nennen
+  unter anderem einen sichtbaren Link zu `www.hvv.de` und den Hinweis
+  `ohne Gewähr`. Das kleine Display dieses privaten Zielsetups zeigt diese
+  Hinweise nicht automatisch an.
+- Für Vollständigkeit, Richtigkeit, Aktualität und Verfügbarkeit der externen
+  Daten gibt es keine Garantie.
+- Laut
   [GTI-Anwenderhandbuch](https://gti.geofox.de/html/GTIHandbuch_p.html)
-  kann ein Durchschnitt von mehr als einem API-Aufruf pro Sekunde zu einer
-  temporären Sperre führen. Der Standard dieses Projekts liegt mit einem
-  gemeinsamen Abruf alle 15 Sekunden deutlich darunter.
+  kann ein Durchschnitt von mehr als einem API-Aufruf pro Sekunde eine
+  temporäre Sperre auslösen. Der Projektdefault liegt mit einem gemeinsamen
+  Abruf alle 15 Sekunden deutlich darunter.
 - Das Anwenderhandbuch weist darauf hin, dass inaktive Konten nach einem Jahr
   gelöscht werden können.
 
-## Unterstütztes Setup
+Geofox-Zugangsdaten gehören niemals in `config.json`, einen Commit, ein
+GitHub-Issue oder einen Screenshot. Der Installer speichert sie mit restriktiven
+Dateirechten unter `/etc/hvv-anzeiger.env`.
 
-### Hardware
-
-- Raspberry Pi Zero 2 W
-- microSD-Karte
-- zuverlässiges 5-V-Netzteil mit mindestens 2 A
-- 2,2-Zoll-TFT mit ILI9341-Controller und 240 × 320 Pixeln
-- passende Jumper-Kabel
-
-### Software
-
-- Raspberry Pi OS Lite Bookworm
-- 64-Bit-Ausgabe empfohlen
-- Python 3.10 oder neuer
-- WLAN mit Internetzugang
-- gültige Geofox-GTI-Zugangsdaten
-
-Andere Raspberry-Pi-Modelle oder ILI9341-Module können funktionieren, sind aber
-nicht das dokumentierte Zielsetup. Pinbelegung, Spannungsversorgung,
-Hintergrundbeleuchtung und Farbreihenfolge müssen zum konkreten Display-Modul
-passen.
-
-## Verdrahtung
+## Display anschließen
 
 Die Bezeichnungen unterscheiden sich je nach Modul. `SCK` kann auch `CLK`,
 `MOSI` auch `SDI` oder `DIN` und `CS` auch `CE` heißen.
@@ -175,82 +191,18 @@ Die Bezeichnungen unterscheiden sich je nach Modul. `SCK` kann auch `CLK`,
 | RST / RESET | GPIO 25 | 22 |
 | LED | 3,3 V | 17 |
 
-Vor dem Verdrahten das Datenblatt des konkreten Moduls prüfen. Das Display mit
-3,3-V-Logik betreiben. Die Hintergrundbeleuchtung darf nur dann direkt an 3,3 V
-angeschlossen werden, wenn das Modul den benötigten Vorwiderstand oder Treiber
-enthält. Sie nicht ungeprüft direkt aus einem GPIO-Pin versorgen.
+Vor dem Verdrahten:
 
-## Strom- und Ressourcenverbrauch
+1. Raspberry Pi vollständig ausschalten und vom Netzteil trennen.
+2. Datenblatt und Beschriftung des konkreten Display-Moduls prüfen.
+3. Display mit 3,3-V-Logik betreiben.
+4. Hintergrundbeleuchtung nur direkt mit 3,3 V verbinden, wenn das Modul den
+   erforderlichen Vorwiderstand oder Treiber enthält.
+5. Hintergrundbeleuchtung nicht ungeprüft direkt aus einem GPIO-Pin versorgen.
 
-### Durchschnittlicher Stromverbrauch
+## Installieren
 
-Für das dokumentierte Setup ist im Dauerbetrieb folgender Planungswert realistisch:
-
-| Messpunkt | Erwarteter Verbrauch |
-|---|---:|
-| Raspberry Pi Zero 2 W, aktiv | ungefähr 1,8 W |
-| vergleichbares 2,2-Zoll-ILI9341-Modul | ungefähr 0,4 W |
-| komplettes Setup am USB-Eingang | ungefähr 2,2–2,6 W |
-| komplettes Setup an der Steckdose einschließlich Netzteilverlusten | ungefähr 2,5–3,0 W |
-| sinnvoller Planungswert | **ungefähr 2,7 W im Durchschnitt** |
-
-Bei 2,7 W und durchgehendem Betrieb entspricht das ungefähr:
-
-- 0,065 kWh pro Tag
-- 2,0 kWh pro Monat
-- 24 kWh pro Jahr
-
-Die Schätzung basiert auf dem von Raspberry Pi dokumentierten typischen aktiven
-Strom von 350 mA für den Zero 2 W und 0,42 W für ein vergleichbares
-2,2-Zoll-ILI9341-Modul. Das konkrete Display-Board, WLAN-Empfang, Netzteil und
-CPU-Auslastung verändern den tatsächlichen Wert. Quellen:
-[Raspberry Pi power supply documentation](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#power-supply)
-und
-[LCDWiki MSP2202 manual](https://www.lcdwiki.com/res/MSP2202/2.2inch_SPI_Module_MSP2202_User_Manual_EN.pdf).
-
-Ein USB-Leistungsmessgerät zwischen Netzteil und Raspberry Pi liefert den
-verlässlichen Wert für das eigene Gerät. Ein Steckdosenmessgerät erfasst
-zusätzlich die Verluste des Netzteils.
-
-### Wirkung des Nachtmodus
-
-Der Nachtmodus zeigt ein schwarzes Bild und pausiert die Geofox-Abfragen. Bei der
-oben dokumentierten Verdrahtung bleibt `LED` jedoch dauerhaft an 3,3 V. Ein
-schwarzes TFT-Bild spart deshalb praktisch keinen Displaystrom. Die geringere
-CPU-, SPI- und WLAN-Aktivität reduziert den Gesamtverbrauch nur wenig.
-
-Für eine relevante Einsparung muss die Hintergrundbeleuchtung elektrisch
-abgeschaltet werden. Dafür ist ein zum Modul passender Transistor oder
-Treiberbaustein erforderlich. Diese Hardwaresteuerung ist nicht Bestandteil des
-Projekts.
-
-### Weitere Ressourcen
-
-| Ressource | Erwartungswert |
-|---|---:|
-| Arbeitsspeicher | ungefähr 40–70 MiB |
-| CPU | im Mittel meist niedriger einstelliger Prozentbereich |
-| Netzwerk | maximal 240 Geofox-Abfragen pro aktiver Stunde |
-| Anwendungsinstallation | ungefähr 50–120 MiB |
-| Displaybild | 230.400 Byte pro RGB-Bild |
-
-Die Werte sind Richtwerte und keine Messung des konkreten Geräts. Für dieses
-Setup ist normalerweise keine aktive Kühlung erforderlich. In einem engen,
-schlecht belüfteten Gehäuse sollte die Temperatur nach einigen Stunden geprüft
-werden.
-
-## Installation
-
-### Voraussetzungen
-
-Vor der Installation werden benötigt:
-
-1. Raspberry Pi OS Lite mit funktionierendem WLAN
-2. Zugang per Terminal oder SSH
-3. Geofox Application-ID und Geofox-Passwort
-4. korrekt angeschlossenes Display
-
-### Automatische Installation
+### Schnellinstallation
 
 ```bash
 git clone https://github.com/Ben1991/hvv-anzeiger.git
@@ -259,90 +211,59 @@ chmod +x install.sh
 ./install.sh
 ```
 
-`install.sh` richtet das vollständige System ein:
+Der Installer fragt bei der ersten Installation die Geofox Application-ID und
+das Passwort ab. Das Passwort bleibt während der Eingabe unsichtbar.
 
-- benötigte Betriebssystem- und Python-Pakete
+`install.sh` richtet ein:
+
+- erforderliche Betriebssystem- und Python-Pakete
 - SPI und Netzwerk-Zeitsynchronisierung
 - Anwendung unter `/opt/hvv-anzeiger`
-- geschützter Dienstbenutzer `hvv-anzeiger`
-- Geofox-Zugangsdaten unter `/etc/hvv-anzeiger.env`
-- Autostart, Prozessüberwachung und Log-Bereinigung
+- nicht interaktiven Dienstbenutzer `hvv-anzeiger`
+- Zugangsdaten unter `/etc/hvv-anzeiger.env`
+- Autostart, Watchdog, automatischen Neustart und Log-Bereinigung
 
-Bei der ersten Installation fragt das Skript die Geofox Application-ID und das
-Passwort ab. Das Passwort bleibt bei der Eingabe unsichtbar. Eine vollständige
-vorhandene Zugangsdaten-Datei und eine vorhandene `config.json` werden bei
-späteren Installationen beibehalten.
+Die neue Installation wird in einem separaten Verzeichnis vorbereitet und
+geprüft, bevor sie die laufende Version ersetzt. Startet der neue Dienst nicht,
+stellt der Installer Anwendung, Zugangsdaten und systemd-Konfiguration auf den
+vorherigen Stand zurück.
 
-Die neue Version wird vor der Umschaltung vollständig vorbereitet und geprüft.
-Falls ihr Dienst anschließend nicht startet, werden Anwendung, Zugangsdaten und
-systemd-Konfiguration auf den vorherigen Stand zurückgesetzt.
+Vorhandene vollständige Zugangsdaten und eine vorhandene `config.json` bleiben
+bei erneuter Installation erhalten.
 
-Nach der ersten Installation den Raspberry Pi neu starten:
+### Erster Neustart und Prüfung
+
+Nach der ersten Installation:
 
 ```bash
 sudo reboot
 ```
 
-### Installation prüfen
-
-Nach dem Neustart:
+Danach anmelden und die Diagnose ausführen:
 
 ```bash
 cd /opt/hvv-anzeiger
 ./diagnose.sh
 ```
 
-Die Diagnose prüft:
+Die Diagnose prüft Linux, SPI, WLAN, Systemzeit, Anwendung, Konfiguration,
+Zugangsdaten, systemd-Dienst, Watchdog, Dateirechte, Log-Bereinigung und das
+lokale Rendern eines Displaybilds. Zugangsdaten werden nicht ausgegeben.
 
-- Linux und SPI-Gerät
-- WLAN und Systemzeit
-- Anwendung und Konfiguration
-- Geofox-Zugangsdaten
-- Dienst, Autostart und Watchdog
-- Dienstbenutzer und Dateirechte
-- Log-Bereinigung
-- lokales Rendern eines Displaybilds
-
-Zugangsdaten werden dabei nicht ausgegeben.
-
-### Automatischer Start nach Reboot oder Stromausfall
-
-Der Installer aktiviert `hvv-anzeiger` dauerhaft als systemd-Dienst. Nach einem
-normalen Neustart oder nachdem die Stromversorgung wiederhergestellt wurde,
-startet die Anzeige ohne Anmeldung und ohne manuellen Befehl.
-
-Beim Hochfahren gilt:
-
-1. systemd startet den Anzeigedienst automatisch.
-2. Solange die Systemzeit noch nicht synchronisiert ist, zeigt das Display
-   `ZEIT NICHT SYNCHRON` und es werden keine Geofox-Daten abgefragt.
-3. Fehlt WLAN, zeigt das Display `KEIN WLAN`.
-4. Sobald Systemzeit und Netzwerk verfügbar sind, lädt die Anwendung selbstständig
-   aktuelle Geofox-Daten und setzt den normalen 15-Sekunden-Zyklus fort.
-5. Endet oder blockiert der Prozess später unerwartet, startet systemd ihn erneut.
-
-Autostart und aktuellen Zustand prüfen:
+Zusätzlich kann der Autostart geprüft werden:
 
 ```bash
 systemctl is-enabled hvv-anzeiger
 systemctl status hvv-anzeiger --no-pager
 ```
 
-Der erste Befehl muss `enabled` ausgeben. Falls nicht:
+`systemctl is-enabled` muss `enabled` ausgeben. Falls nicht:
 
 ```bash
 sudo systemctl enable --now hvv-anzeiger
 ```
 
-`install.sh` wird bewusst nicht bei jedem Boot ausgeführt. Es dient nur zur
-Installation und für Updates; automatisch gestartet wird die bereits installierte
-Anzeige.
-
-Ein harter Stromausfall kann unabhängig von dieser Anwendung eine beschriebene
-microSD-Karte beschädigen. Für häufige oder kritische Stromunterbrechungen sind
-ein zuverlässiges Netzteil und gegebenenfalls eine kleine USV sinnvoll.
-
-## Konfiguration
+## Konfigurieren
 
 Die aktive Konfiguration liegt unter:
 
@@ -350,17 +271,18 @@ Die aktive Konfiguration liegt unter:
 /opt/hvv-anzeiger/config.json
 ```
 
-Bearbeiten und anschließend den Dienst neu starten:
+Nach einer Änderung muss der Dienst neu gestartet werden:
 
 ```bash
 sudo nano /opt/hvv-anzeiger/config.json
 sudo systemctl restart hvv-anzeiger
 ```
 
-`config.example.json` enthält eine vollständige Beispielkonfiguration. Wird ein
-optionales Feld weggelassen, gilt der nachfolgend dokumentierte Code-Default.
+[`config.example.json`](config.example.json) enthält eine vollständige
+Beispielkonfiguration. Pflichtfelder müssen gesetzt sein. Wird ein optionales
+Feld weggelassen, gilt der hier dokumentierte Code-Default.
 
-### API
+### API-Defaults
 
 | Feld | Default | Bedeutung und Grenze |
 |---|---:|---|
@@ -372,10 +294,10 @@ optionales Feld weggelassen, gilt der nachfolgend dokumentierte Code-Default.
 | `api.max_time_offset_minutes` | `90` | betrachteter Zeitraum ab jetzt; größer als 0 |
 | `api.max_stale_age_minutes` | `5` | maximale Anzeigezeit alter Abfahrtszeilen bei einem Fehler |
 
-Die Anwendung akzeptiert für `api.base_url` ausschließlich HTTPS und den
-offiziellen Host `gti.geofox.de`.
+`api.base_url` muss eine HTTPS-URL auf dem offiziellen Host `gti.geofox.de`
+ohne eingebettete Zugangsdaten, Query-Parameter oder Fragment sein.
 
-### Display
+### Display-Defaults
 
 | Feld | Default | Bedeutung und Grenze |
 |---|---:|---|
@@ -385,23 +307,22 @@ offiziellen Host `gti.geofox.de`.
 | `display.gpio_reset` | `25` | GPIO-Nummer für Reset |
 | `display.rotate` | `0` | Drehung; erlaubt sind 0, 1, 2 oder 3 |
 | `display.bus_speed_hz` | `16000000` | SPI-Takt; größer als 0 |
-| `display.bgr` | `false` | auf `true` setzen, wenn Rot und Blau vertauscht sind |
+| `display.bgr` | `false` | bei vertauschtem Rot und Blau auf `true` setzen |
 
 Für ein um 180 Grad gedrehtes Display üblicherweise `display.rotate` auf `2`
 setzen.
 
-### Nachtmodus
+### Nachtmodus-Defaults
 
 | Feld | Default | Bedeutung und Grenze |
 |---|---:|---|
 | `night_shutdown.enabled` | `false` | aktiviert den Nachtmodus |
-| `night_shutdown.start` | `"21:00"` | Beginn als lokale Hamburger Zeit im Format `HH:MM` |
-| `night_shutdown.end` | `"06:30"` | Ende im Format `HH:MM`; muss vom Beginn abweichen |
+| `night_shutdown.start` | `"21:00"` | Beginn in lokaler Hamburger Zeit als `HH:MM` |
+| `night_shutdown.end` | `"06:30"` | Ende als `HH:MM`; muss vom Beginn abweichen |
 
-Der Beginn ist eingeschlossen, das Ende ausgeschlossen. Zeiträume über
-Mitternacht und Zeiträume innerhalb desselben Tages werden unterstützt.
-
-Beispiel für die Aktivierung von 21:00 bis 06:30 Uhr:
+Der Nachtmodus ist standardmäßig ausgeschaltet. Bei Aktivierung ist der Beginn
+eingeschlossen und das Ende ausgeschlossen. Zeiträume über Mitternacht und
+innerhalb desselben Tages werden unterstützt.
 
 ```json
 "night_shutdown": {
@@ -411,8 +332,9 @@ Beispiel für die Aktivierung von 21:00 bis 06:30 Uhr:
 }
 ```
 
-Im Nachtfenster wird einmal ein schwarzes Bild geschrieben. Geofox-Abfragen
-pausieren bis zum Ende des Fensters.
+Im Nachtfenster schreibt die Anwendung einmal ein schwarzes Bild und pausiert
+Geofox-Abfragen. Die Hintergrundbeleuchtung wird dabei nicht elektrisch
+abgeschaltet.
 
 ### Haltestellen und Verbindungen
 
@@ -422,7 +344,7 @@ pausieren bis zum Ende des Fensters.
 | `stations[].name` | Pflichtfeld | Geofox-Haltestellenname |
 | `stations[].city` | `"Hamburg"` | Stadt für die Haltestellensuche |
 | `stations[].id` | kein Default | optionale eindeutige Geofox-ID |
-| `stations[].label` | erster Buchstabe des Namens | eindeutiges sichtbares Kürzel mit 1 bis 3 Zeichen |
+| `stations[].label` | erster Buchstabe des Namens | eindeutiges Kürzel mit 1 bis 3 Zeichen |
 | `stations[].routes` | Pflichtfeld | mindestens eine erlaubte Linie-Ziel-Kombination |
 | `stations[].routes[].line` | Pflichtfeld | Linienbezeichnung, zum Beispiel `"21"` |
 | `stations[].routes[].destination` | Pflichtfeld | erwartetes Fahrtziel |
@@ -444,69 +366,76 @@ Beispiel:
 }
 ```
 
-Fehlt `stations[].id`, sucht die Anwendung die Haltestelle bei Geofox und speichert
-die gefundene ID unter `/opt/hvv-anzeiger/var/stations.json`. Bei mehreren
-gleichnamigen Treffern muss die gewünschte ID ausdrücklich in `config.json`
-eingetragen werden.
+Fehlt `stations[].id`, sucht die Anwendung die Haltestelle bei Geofox und
+speichert die gefundene ID unter
+`/opt/hvv-anzeiger/var/stations.json`. Bei mehreren gleichnamigen Treffern muss
+die gewünschte ID ausdrücklich in `config.json` eingetragen werden.
 
-Linien und Ziele werden tolerant gegenüber Groß-/Kleinschreibung, Umlauten und
-Schreibweisen wie `Straße` und `Strasse` verglichen. Ein zusätzliches
+Linien und Ziele werden tolerant gegenüber Groß- und Kleinschreibung, Umlauten
+und Schreibweisen wie `Straße` und `Strasse` verglichen. Ein zusätzliches
 Verkehrsmittel-Präfix im Geofox-Ziel, beispielsweise `S Elbgaustraße`, wird
 ebenfalls berücksichtigt.
 
 ### Haltestellen mit Codex anpassen
 
-Das Repository enthält den Skill `$adjust-hvv-stations`. Er kann verwendet
-werden, wenn Codex Haltestellen, Linien, Ziele oder Kürzel ändern soll, zum
-Beispiel:
+Das Repository enthält den Skill `$adjust-hvv-stations`. Beispiel:
 
 ```text
 Nutze $adjust-hvv-stations und ersetze die vorkonfigurierten Verbindungen durch
 Linie 5 Richtung Hauptbahnhof ab Rathausmarkt.
 ```
 
-Der Skill ändert nur den Haltestellenbereich, prüft die vollständige
-Konfiguration vor dem Schreiben und legt bei Änderungen an einer Installation
-eine Sicherung an. Eine unbekannte Geofox-ID wird nicht geraten, sondern beim
-nächsten Programmstart über Geofox aufgelöst. Zugangsdaten werden dabei weder
-gelesen noch in die Konfiguration übernommen.
+Der Skill ändert ausschließlich den Haltestellenbereich, validiert anschließend
+die vollständige Konfiguration und legt bei Änderungen an einer Installation
+eine Sicherung an. Unbekannte Geofox-IDs werden nicht geraten, sondern beim
+nächsten Programmstart aufgelöst. Zugangsdaten werden weder gelesen noch in die
+Konfiguration übernommen.
 
-### WLAN-Schnittstelle
+### Andere WLAN-Schnittstelle
 
-Der Dienst überwacht standardmäßig `wlan0`. Falls die WLAN-Schnittstelle anders
+Der Dienst überwacht standardmäßig `wlan0`. Falls die Schnittstelle anders
 heißt:
 
 ```bash
 sudo systemctl edit hvv-anzeiger
 ```
 
-Folgenden Inhalt eintragen:
+Eintragen:
 
 ```ini
 [Service]
 Environment=HVV_WIFI_INTERFACE=DEINE_WLAN_SCHNITTSTELLE
 ```
 
-Danach:
+Übernehmen:
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl restart hvv-anzeiger
 ```
 
-## Verhalten bei Störungen
+## Betrieb und Updates
 
-| Situation | Verhalten auf dem Display | Automatische Reaktion |
-|---|---|---|
-| WLAN getrennt | `KEIN WLAN`; letzter Datenstand bleibt sichtbar | neue Abfrage nach Wiederverbindung |
-| Geofox vorübergehend nicht erreichbar | `DATEN VERALTET`; letzter Datenstand bleibt sichtbar | wachsender Abstand bis maximal fünf Minuten |
-| alte Daten älter als `api.max_stale_age_minutes` | alte Buszeilen verschwinden; Fehlerstatus bleibt | weitere Abrufversuche |
-| Geofox-Anfragelimit erreicht | Fehlerstatus | `Retry-After` wird bis maximal eine Stunde respektiert |
-| Systemzeit noch nicht synchron | `ZEIT NICHT SYNCHRON` | keine Geofox-Abfrage bis zur Synchronisierung |
-| Prozess abgestürzt oder länger als 90 Sekunden blockiert | Anzeige bleibt kurz auf letztem Bild | systemd startet den Dienst neu |
-| Nachtmodus aktiv | schwarzes Bild | keine Geofox-Abfrage bis zum Ende des Nachtfensters |
+### Verhalten beim Systemstart
 
-## Betrieb und Wartung
+`install.sh` aktiviert die Anwendung dauerhaft als systemd-Dienst. Nach einem
+Neustart oder einer wiederhergestellten Stromversorgung:
+
+1. systemd startet den Anzeigedienst ohne Benutzeranmeldung.
+2. Bis zur Synchronisierung der Systemzeit erscheint
+   `ZEIT NICHT SYNCHRON`; Geofox wird noch nicht abgefragt.
+3. Bei fehlendem WLAN erscheint `KEIN WLAN`.
+4. Sobald Zeit und Netzwerk verfügbar sind, lädt die Anwendung aktuelle Daten
+   und startet den normalen 15-Sekunden-Zyklus.
+5. Bei einem Absturz oder blockierten Prozess startet systemd die Anwendung
+   erneut.
+
+Der Installer selbst wird nicht bei jedem Boot ausgeführt. Er dient nur der
+Installation und Aktualisierung.
+
+Ein harter Stromausfall kann unabhängig von dieser Anwendung eine beschriebene
+microSD-Karte beschädigen. Für häufige Unterbrechungen sind ein zuverlässiges
+Netzteil und gegebenenfalls eine kleine USV sinnvoll.
 
 ### Dienst steuern
 
@@ -517,19 +446,16 @@ sudo systemctl stop hvv-anzeiger
 sudo systemctl start hvv-anzeiger
 ```
 
-### Protokoll ansehen
+### Protokolle
 
 ```bash
 journalctl -u hvv-anzeiger -n 100 --no-pager
 journalctl -u hvv-anzeiger -f
 ```
 
-Das Systemjournal wird wöchentlich rotiert. Archivierte Einträge über sieben Tage
-werden entfernt und archivierte Journale auf insgesamt 100 MiB begrenzt. Diese
-Bereinigung betrifft das gesamte systemd-Journal des Raspberry Pi, nicht nur den
-HVV-Anzeiger.
-
-Status der Bereinigung:
+Das Systemjournal wird wöchentlich rotiert. Archivierte Einträge über sieben
+Tage werden entfernt und archivierte Journale auf insgesamt 100 MiB begrenzt.
+Die Bereinigung betrifft das gesamte systemd-Journal des Raspberry Pi.
 
 ```bash
 systemctl status hvv-anzeiger-log-cleanup.timer
@@ -549,9 +475,7 @@ haben die Dateirechte `0600`.
 
 ### Anwendung aktualisieren
 
-Wenn auf GitHub eine neue Version verfügbar ist, per SSH am Raspberry Pi
-anmelden und in das ursprünglich geklonte Repository wechseln. Der Ordner heißt
-normalerweise `hvv-anzeiger`:
+Im ursprünglich geklonten Repository:
 
 ```bash
 cd ~/hvv-anzeiger
@@ -559,8 +483,7 @@ git pull --ff-only origin main
 ./install.sh
 ```
 
-Der Installer aktualisiert die Anwendung unter `/opt/hvv-anzeiger` und startet
-den Dienst neu. Danach den Status und die Installation prüfen:
+Anschließend:
 
 ```bash
 systemctl status hvv-anzeiger --no-pager
@@ -568,19 +491,14 @@ cd /opt/hvv-anzeiger
 ./diagnose.sh
 ```
 
-Ein Neustart des Raspberry Pi ist bei einem normalen Anwendungsupdate nicht
-erforderlich. Er ist nur nötig, wenn der Installer darauf hinweist oder zugleich
-Betriebssystem-, Kernel- oder SPI-Einstellungen geändert wurden.
+Ein normaler Anwendungsupdate benötigt keinen Neustart des Raspberry Pi.
+Vorhandene `config.json` und vollständige Geofox-Zugangsdaten bleiben erhalten;
+neue Defaults überschreiben eine bestehende Konfiguration nicht.
 
-Vorhandene `config.json` und vollständige Geofox-Zugangsdaten bleiben erhalten.
-Neue Defaults aus dem Repository verändern deshalb keine vorhandene
-Konfiguration. Kann `git pull` wegen eigener lokaler Änderungen nicht ausgeführt
-werden, diese Änderungen nicht ungeprüft überschreiben, sondern zuerst sichern
-oder in Git committen.
+Schlägt `git pull` wegen eigener lokaler Änderungen fehl, diese Änderungen nicht
+ungeprüft überschreiben. Zuerst sichern oder in Git committen.
 
-Falls das ursprünglich geklonte Repository nicht mehr existiert, kann es erneut
-heruntergeladen werden. Die bestehende Installation und Konfiguration werden
-trotzdem übernommen:
+Falls das ursprüngliche Repository nicht mehr existiert:
 
 ```bash
 cd ~
@@ -589,17 +507,20 @@ cd hvv-anzeiger
 ./install.sh
 ```
 
-Schlägt die Prüfung oder der Start der neuen Version fehl, stellt der Installer
-automatisch die vorherige funktionsfähige Installation wieder her.
+Die bestehende Installation und Konfiguration werden übernommen. Schlägt die
+Prüfung oder der Start fehl, stellt der Installer automatisch die vorherige
+funktionsfähige Installation wieder her.
 
-### Vorschau ohne Display erzeugen
+### Vorschau ohne Display
+
+Nur das Layout als PNG:
 
 ```bash
 cd /opt/hvv-anzeiger
 .venv/bin/python -m hvv_display.preview preview.png
 ```
 
-Mit Geofox-Daten, aber weiterhin als PNG:
+Mit aktuellen Geofox-Daten als PNG:
 
 ```bash
 cd /opt/hvv-anzeiger
@@ -609,6 +530,79 @@ set +a
 .venv/bin/python -m hvv_display \
   --config config.json --once --output preview.png
 ```
+
+## Fehlerverhalten und Diagnose
+
+| Situation | Anzeige | Automatische Reaktion |
+|---|---|---|
+| WLAN getrennt | `KEIN WLAN`; letzter Datenstand bleibt sichtbar | neue Abfrage nach Wiederverbindung |
+| Geofox vorübergehend nicht erreichbar | `DATEN VERALTET`; letzter Datenstand bleibt sichtbar | wachsender Abstand bis maximal fünf Minuten |
+| Daten älter als `api.max_stale_age_minutes` | alte Buszeilen verschwinden; Fehlerstatus bleibt | weitere Abrufversuche |
+| Geofox-Anfragelimit erreicht | Fehlerstatus | `Retry-After` wird bis maximal eine Stunde berücksichtigt |
+| Systemzeit nicht synchron | `ZEIT NICHT SYNCHRON` | keine Geofox-Abfrage bis zur Synchronisierung |
+| Prozess abgestürzt oder länger als 90 Sekunden blockiert | letztes Bild bleibt kurz stehen | systemd startet den Dienst neu |
+| Nachtmodus aktiv | schwarzes Bild | keine Geofox-Abfrage bis zum Ende des Nachtfensters |
+
+Erster Diagnoseweg:
+
+```bash
+cd /opt/hvv-anzeiger
+./diagnose.sh
+journalctl -u hvv-anzeiger -n 100 --no-pager
+```
+
+## Ressourcen- und Stromverbrauch
+
+### Erwarteter Ressourcenbedarf
+
+| Ressource | Erwartungswert |
+|---|---:|
+| Arbeitsspeicher | ungefähr 40–70 MiB |
+| CPU | im Mittel meist niedriger einstelliger Prozentbereich |
+| Netzwerk | maximal 240 Geofox-Abfragen pro aktiver Stunde |
+| Anwendungsinstallation | ungefähr 50–120 MiB |
+| Displaybild | 230.400 Byte pro RGB-Bild |
+
+Die Werte sind Richtwerte, keine Messung des konkreten Geräts. Für das Zielsetup
+ist normalerweise keine aktive Kühlung erforderlich. In einem engen Gehäuse
+sollte die Temperatur nach einigen Stunden geprüft werden.
+
+### Erwarteter Stromverbrauch
+
+| Messpunkt | Erwarteter Verbrauch |
+|---|---:|
+| Raspberry Pi Zero 2 W, aktiv | ungefähr 1,8 W |
+| vergleichbares 2,2-Zoll-ILI9341-Modul | ungefähr 0,4 W |
+| komplettes Setup am USB-Eingang | ungefähr 2,2–2,6 W |
+| komplettes Setup an der Steckdose einschließlich Netzteilverlusten | ungefähr 2,5–3,0 W |
+| sinnvoller Planungswert | **ungefähr 2,7 W im Durchschnitt** |
+
+Bei 2,7 W im Dauerbetrieb sind das ungefähr:
+
+- 0,065 kWh pro Tag
+- 2,0 kWh pro Monat
+- 24 kWh pro Jahr
+
+Die Schätzung basiert auf dem dokumentierten typischen aktiven Strom des Zero 2 W
+und einem vergleichbaren 2,2-Zoll-Modul. Display-Board, WLAN-Empfang, Netzteil
+und CPU-Auslastung verändern den tatsächlichen Wert. Quellen:
+[Raspberry Pi power supply documentation](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#power-supply)
+und
+[LCDWiki MSP2202 manual](https://www.lcdwiki.com/res/MSP2202/2.2inch_SPI_Module_MSP2202_User_Manual_EN.pdf).
+
+Ein USB-Leistungsmessgerät zwischen Netzteil und Raspberry Pi liefert den
+verlässlichen Wert für das eigene Gerät. Ein Steckdosenmessgerät erfasst
+zusätzlich die Verluste des Netzteils.
+
+### Spart der Nachtmodus Strom?
+
+Nur wenig. Ein schwarzes TFT-Bild senkt den Displaystrom praktisch nicht, solange
+`LED` wie in der dokumentierten Verdrahtung dauerhaft an 3,3 V liegt. Pausierte
+API-Abfragen reduzieren lediglich CPU-, SPI- und WLAN-Aktivität.
+
+Für eine relevante Einsparung muss die Hintergrundbeleuchtung elektrisch über
+einen zum Modul passenden Transistor oder Treiber abgeschaltet werden. Diese
+Hardwaresteuerung ist nicht Bestandteil des Projekts.
 
 ## Sicherheit und Datenschutz
 
@@ -621,7 +615,78 @@ set +a
 - Nur `/opt/hvv-anzeiger/var` ist für Laufzeitdaten beschreibbar.
 - Geofox-Antworten sind auf 1 MiB begrenzt.
 - Python-Abhängigkeiten sind mit Versionen und SHA-256-Prüfsummen festgelegt.
-- GitHub Actions prüft Abhängigkeiten auf bekannte Schwachstellen.
+- GitHub Actions prüft Laufzeitabhängigkeiten auf bekannte Schwachstellen.
+- GitHub Secret Scanning, Push Protection, Dependabot und CodeQL sind für das
+  öffentliche Repository aktiviert.
+
+Vermutete Sicherheitslücken nicht als öffentliches Issue melden. Der vertrauliche
+Meldeweg und die unterstützten Versionen stehen in [SECURITY.md](SECURITY.md).
+
+## Projektentwicklung
+
+### Lokal prüfen
+
+Entwicklungsabhängigkeiten installieren:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --require-hashes --requirement requirements-dev.txt
+python -m pip install --no-build-isolation --no-deps --editable .
+```
+
+Prüfungen ausführen:
+
+```bash
+ruff check .
+coverage run -m unittest discover -s tests -v
+coverage report
+bash -n install.sh configure-credentials.sh diagnose.sh
+```
+
+### Automatische Qualitätsprüfung
+
+Bei jedem Push und Pull Request prüft GitHub Actions:
+
+- Python 3.10, 3.11 und 3.13
+- Unit- und Integrationstests mit 100 Prozent Coverage
+- Ruff sowie Abhängigkeitsprüfung auf bekannte Schwachstellen
+- Shell-Skripte und systemd-Units
+- vollständige Installation und Rollback in einer isolierten Ubuntu-Umgebung
+- Paket-Build und Display-Vorschau
+- CodeQL für Python und GitHub Actions
+
+Hardwarezugriff und ein authentifizierter Geofox-Vertragstest sind in GitHub
+Actions nicht möglich.
+
+### Beitragen
+
+Beiträge sind willkommen und werden ausschließlich über einen neuen Branch und
+einen Pull Request eingereicht. Einrichtung, Prüfungen, Review-Anforderungen und
+Lizenzhinweise stehen in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+`main` ist geschützt: erforderliche Reviews, Code-Owner-Freigabe, erfolgreiche
+CI-Prüfungen und CodeQL müssen vor dem Merge erfüllt sein.
+
+Fehler und Funktionswünsche können als
+[GitHub-Issue](https://github.com/Ben1991/hvv-anzeiger/issues) gemeldet werden.
+Dabei keine Geofox-Zugangsdaten, vollständigen Umgebungsdateien oder andere
+Geheimnisse veröffentlichen.
+
+## Grenzen
+
+- Ein Geofox-Zugang ist erforderlich; es gibt keinen öffentlichen
+  zugangsdatenfreien Fallback.
+- Ohne synchronisierte Systemzeit werden keine Abfahrten abgerufen.
+- Wegen der Displaygröße sind maximal fünf Abfahrten sichtbar.
+- Das dokumentierte Zielsetup ist ein ILI9341 mit 320 × 240 Pixeln im
+  Querformat.
+- Der Nachtmodus schaltet die Hintergrundbeleuchtung nicht elektrisch aus.
+- Die erwartete Abfahrtszeit bleibt eine Prognose.
+- Verbindliche Strom-, RAM- und CPU-Werte erfordern eine Messung am konkreten
+  Gerät.
+- Display-Hardware und authentifizierte Geofox-Produktivantworten können in
+  GitHub Actions nicht geprüft werden.
 
 ## Haftungsausschluss
 
@@ -630,14 +695,13 @@ Eigenschaft oder dauerhaften Verfügbarkeit bereitgestellt. Fahrplandaten,
 Echtzeitprognosen und Störungshinweise stammen von externen Anbietern und können
 unvollständig, verspätet oder fehlerhaft sein. Die Anzeige ist deshalb nicht als
 alleinige Grundlage für zeitkritische Reiseentscheidungen gedacht; im Zweifel
-die offiziellen HVV-Auskünfte prüfen.
+die offiziellen hvv-Auskünfte prüfen.
 
 Installation, elektrische Verdrahtung und Betrieb erfolgen in eigener
 Verantwortung. Vor Arbeiten an Raspberry Pi und Display die Stromversorgung
-trennen und die Vorgaben der jeweiligen Hardwarehersteller beachten. Der
-Betreiber ist außerdem selbst dafür verantwortlich, die für seinen
-Geofox-Zugang geltenden Nutzungs-, Kennzeichnungs- und Datenschutzbedingungen
-einzuhalten.
+trennen und die Vorgaben der jeweiligen Hardwarehersteller beachten. Betreiber
+sind selbst dafür verantwortlich, die für ihren Geofox-Zugang geltenden
+Nutzungs-, Kennzeichnungs- und Datenschutzbedingungen einzuhalten.
 
 Soweit gesetzlich zulässig, haften die Projektverantwortlichen nicht für Schäden
 oder Folgeschäden aus Nutzung, Nichtverfügbarkeit oder Fehlfunktion der Software
@@ -645,44 +709,9 @@ und der angezeigten Daten. Zwingende gesetzliche Haftung, insbesondere für
 Vorsatz, grobe Fahrlässigkeit sowie Schäden an Leben, Körper oder Gesundheit,
 bleibt unberührt. Dieser Hinweis ist keine Rechtsberatung.
 
-## Grenzen
+## Lizenz und Unterstützung
 
-- Ein Geofox-Zugang ist erforderlich; es gibt keinen öffentlichen
-  Zugangsdaten-freien Fallback.
-- Ohne synchronisierte Systemzeit werden keine Abfahrten abgerufen.
-- Die maximale Zahl sichtbarer Abfahrten ist wegen der Displaygröße auf fünf
-  begrenzt.
-- Das Zielsetup ist ein ILI9341 mit 320 × 240 Pixeln im Querformat.
-- Der Nachtmodus schaltet die Hintergrundbeleuchtung nicht elektrisch aus.
-- Die erwartete Abfahrtszeit bleibt eine Prognose und kann sich bis zur Abfahrt
-  ändern.
-- Verbindliche Strom-, RAM- und CPU-Werte erfordern eine Messung am konkreten
-  Raspberry Pi, Display und Netzteil.
-- Display-Hardware und authentifizierte Geofox-Produktivantworten können in
-  GitHub Actions nicht geprüft werden.
-
-## Qualitätsprüfung
-
-Bei jedem Push und Pull Request prüft GitHub Actions:
-
-- Python 3.10, 3.11 und 3.13
-- Unit- und Integrationstests mit 100 Prozent Coverage
-- Code- und Security-Linting
-- bekannte Schwachstellen in Laufzeitabhängigkeiten
-- Shell-Skripte und systemd-Units
-- vollständige Installation und Rollback in einer isolierten Ubuntu-Umgebung
-- Paket-Build und Display-Vorschau
-
-## Mitwirken und Sicherheit
-
-Änderungen werden ausschließlich über einen neuen Branch und einen Pull Request
-eingereicht. Ablauf, lokale Prüfungen und Review-Anforderungen stehen in
-[CONTRIBUTING.md](CONTRIBUTING.md).
-
-Vermutete Sicherheitslücken nicht öffentlich melden. Dafür die vertrauliche
-Meldung nach [SECURITY.md](SECURITY.md) verwenden.
-
-## Lizenz
+### Lizenz
 
 Copyright © 2026 Benjamin Maier.
 
@@ -690,27 +719,26 @@ Dieses Projekt ist freie Open-Source-Software unter der
 [GNU General Public License Version 3](LICENSE), ausschließlich Version 3
 (`GPL-3.0-only`).
 
-Die GPL erlaubt Nutzung, Kopieren, Veränderung, Weitergabe und auch kommerzielle
-Nutzung. Wer das Programm oder abgeleitete Versionen weitergibt, muss dabei
-insbesondere den korrespondierenden Quellcode bereitstellen, Änderungen
-kennzeichnen sowie Copyright- und Lizenzhinweise erhalten. Weitergegebene
-abgeleitete Werke müssen ebenfalls unter GPL-3.0 lizenziert werden.
+Die GPL erlaubt Nutzung, Kopieren, Veränderung, Weitergabe und kommerzielle
+Nutzung. Bei einer Weitergabe müssen insbesondere korrespondierender Quellcode,
+Änderungs-, Copyright- und Lizenzhinweise bereitgestellt beziehungsweise
+erhalten werden. Weitergegebene abgeleitete Werke müssen ebenfalls unter
+GPL-3.0 lizenziert werden.
 
 Eine zusätzliche Zustimmung ist für Nutzungen innerhalb der GPL nicht
-erforderlich. Abweichende Lizenzbedingungen bedürfen einer separaten
-schriftlichen Vereinbarung mit den jeweiligen Rechteinhabern. Die GPL enthält
-einen Gewährleistungs- und Haftungsausschluss; ergänzend gilt der oben
-dokumentierte Haftungsausschluss dieses Projekts.
+erforderlich. Abweichende Lizenzbedingungen benötigen eine separate schriftliche
+Vereinbarung mit den jeweiligen Rechteinhabern. Die GPL enthält einen
+Gewährleistungs- und Haftungsausschluss; ergänzend gilt der oben dokumentierte
+Haftungsausschluss.
 
-## Projekt unterstützen
+### Projekt unterstützen
 
-Der HVV-Anzeiger bleibt frei verfügbar. Wer Entwicklung, Tests und Dokumentation
-freiwillig unterstützen möchte, kann das hier tun:
+Der HVV-Anzeiger bleibt frei verfügbar. Freiwillige Unterstützung für
+Entwicklung, Tests und Dokumentation ist möglich über:
 
 [HVV-Anzeiger auf Ko-fi unterstützen](https://ko-fi.com/bema1991)
 
-Eine Unterstützung ist vollständig freiwillig und hat keinen Einfluss auf
-Geofox-Zugang, Funktionen oder Updates. Für jede Nutzung der Geofox-Daten haben
-die erteilten Zugangs- und Nutzungsbedingungen Vorrang; ob eine öffentliche
-Finanzierung oder Spendeneinbindung damit vereinbar ist, muss der Betreiber im
-Zweifel vorab mit dem Schnittstellenanbieter klären.
+Eine Unterstützung hat keinen Einfluss auf Geofox-Zugang, Funktionen oder
+Updates. Die erteilten Geofox-Zugangs- und Nutzungsbedingungen haben Vorrang.
+Ob eine öffentliche Finanzierung oder Spendeneinbindung damit vereinbar ist,
+muss der Betreiber im Zweifel vorab mit dem Schnittstellenanbieter klären.
