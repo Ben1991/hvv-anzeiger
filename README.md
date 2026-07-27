@@ -1,5 +1,7 @@
 # HVV-Anzeiger für Raspberry Pi
 
+<sub>☕ Projekt unterstützen: <a href="https://ko-fi.com/bema1991">Ko-fi</a></sub>
+
 [![CI](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml)
 [![Lizenz: GPL-3.0-only](https://img.shields.io/badge/Lizenz-GPL--3.0--only-blue.svg)](LICENSE)
 
@@ -81,7 +83,35 @@ Das Kürzel macht in der gemeinsam sortierten Liste sichtbar, von welcher
 Haltestelle eine Abfahrt stammt. Alle Verbindungen lassen sich in
 `config.json` ersetzen.
 
+> **Andere Haltestellen gewünscht?** Öffne das Repository in Codex und nutze
+> den mitgelieferten Skill `$adjust-hvv-stations`. Ein möglicher Auftrag lautet:
+> `Nutze $adjust-hvv-stations und zeige Linie 5 Richtung Hauptbahnhof ab
+> Rathausmarkt an.` Der Skill passt die Konfiguration an und prüft sie
+> anschließend automatisch. Weitere Hinweise und Beispiele stehen unter
+> [Haltestellen mit Codex anpassen](#haltestellen-mit-codex-anpassen).
+
 ## Voraussetzungen
+
+### Hardware-Einkauf
+
+Die folgenden Amazon.de-Suchlinks führen zu passenden Produktkategorien. Vor
+dem Kauf die technischen Angaben des konkreten Angebots prüfen; insbesondere
+Controller, Auflösung, SPI-Anschluss, 3,3-V-Logik und Netzteilleistung müssen
+zum unten dokumentierten Aufbau passen.
+
+| Komponente | Amazon.de-Suche | Worauf achten? |
+|---|---|---|
+| Raspberry Pi Zero 2 W | [Raspberry Pi Zero 2 W suchen (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W&tag=bema19910e-21) | Modell `Zero 2 W`; eine bereits montierte GPIO-Stiftleiste erleichtert den Aufbau |
+| 2,2-Zoll-TFT | [ILI9341-SPI-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=2%2C2+Zoll+ILI9341+SPI+Display+240x320&tag=bema19910e-21) | ILI9341, SPI, 240 × 320 Pixel und 3,3-V-kompatible Logik |
+| microSD-Karte | [32-GB-High-Endurance-microSD suchen (Affiliate-Link)](https://www.amazon.de/s?k=microSD+32GB+High+Endurance&tag=bema19910e-21) | mindestens 16 GB; High-Endurance-Modelle sind für dauerhaften Betrieb sinnvoll |
+| Netzteil | [5-V-/2-A-Micro-USB-Netzteil suchen (Affiliate-Link)](https://www.amazon.de/s?k=5V+2A+Micro+USB+Netzteil+Raspberry+Pi+Zero+2+W&tag=bema19910e-21) | stabilisierte 5 V, mindestens 2 A und Micro-USB-Stecker |
+| Jumper-Kabel | [Buchse-Buchse-Jumper-Kabel suchen (Affiliate-Link)](https://www.amazon.de/s?k=Jumper+Kabel+Buchse+Buchse+2%2C54mm&tag=bema19910e-21) | 2,54-mm-Raster; Steckertyp passend zu den montierten Stiftleisten wählen |
+| GPIO-Stiftleiste, falls nötig | [2×20-GPIO-Stiftleiste suchen (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W+GPIO+Stiftleiste+2x20&tag=bema19910e-21) | nur erforderlich, wenn der Raspberry Pi ohne montierte Stiftleiste geliefert wird |
+
+> **Hinweis zu Affiliate-Links:** Als Amazon-Partner verdiene ich an
+> qualifizierten Verkäufen. Wenn du über einen entsprechend gekennzeichneten
+> Link einkaufst, kann ich eine Provision erhalten. Für dich entstehen dadurch
+> keine zusätzlichen Kosten.
 
 ### Unterstütztes Zielsystem
 
