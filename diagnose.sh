@@ -26,6 +26,20 @@ fail() {
   FAILURES=$((FAILURES + 1))
 }
 
+credential_present() {
+  local key="$1"
+  [[ -e "$ENV_FILE" ]] || return 1
+  sudo awk -v key="$key" '
+    index($0, key "=") == 1 {
+      value = substr($0, length(key) + 2)
+      if (value != "" && value != "\"\"" && value != "\047\047") {
+        found = 1
+      }
+    }
+    END { exit found ? 0 : 1 }
+  ' "$ENV_FILE"
+}
+
 if [[ "$(uname -s)" == "Linux" ]]; then
   pass "Linux erkannt ($(uname -m))"
 else
@@ -75,8 +89,8 @@ else
   fail "Die installierte Anwendung wurde unter $APP_DIR nicht gefunden."
 fi
 
-if sudo grep -Eq '^GEOFOX_USER=.+$' "$ENV_FILE" 2>/dev/null &&
-  sudo grep -Eq '^GEOFOX_PASSWORD=.+$' "$ENV_FILE" 2>/dev/null; then
+if credential_present "GEOFOX_USER" &&
+  credential_present "GEOFOX_PASSWORD"; then
   pass "Geofox-Zugangsdaten sind hinterlegt."
 else
   fail "Geofox-Zugangsdaten fehlen oder sind unvollständig."

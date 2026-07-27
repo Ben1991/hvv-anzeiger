@@ -25,6 +25,9 @@ class ProjectArtifactTest(unittest.TestCase):
         diagnostic = ROOT / "diagnose.sh"
         self.assertTrue(diagnostic.stat().st_mode & stat.S_IXUSR)
         self.assertTrue(os.access(diagnostic, os.X_OK))
+        credentials = ROOT / "configure-credentials.sh"
+        self.assertTrue(credentials.stat().st_mode & stat.S_IXUSR)
+        self.assertTrue(os.access(credentials, os.X_OK))
         installer_text = installer.read_text(encoding="utf-8")
         self.assertIn('systemctl stop "$SERVICE_NAME"', installer_text)
         self.assertIn('enable --now "$LOG_CLEANUP_TIMER"', installer_text)
@@ -37,6 +40,11 @@ class ProjectArtifactTest(unittest.TestCase):
         )
         self.assertIn("VENV_BACKED_UP", installer_text)
         self.assertIn("INSTALL_SUCCEEDED", installer_text)
+        self.assertIn(
+            'sudo install -m 0755 \\\n'
+            '    "$SOURCE_DIR/configure-credentials.sh"',
+            installer_text,
+        )
 
     def test_systemd_service_uses_protected_environment_file(self) -> None:
         service = (ROOT / "systemd" / "hvv-anzeiger.service").read_text(
@@ -93,6 +101,8 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("OnCalendar=weekly", timer)
         self.assertIn("Persistent=true", timer)
         self.assertIn("hvv-anzeiger-log-cleanup.timer", diagnostic)
+        self.assertIn('credential_present "GEOFOX_USER"', diagnostic)
+        self.assertIn('credential_present "GEOFOX_PASSWORD"', diagnostic)
 
     def test_readme_documents_every_example_configuration_field(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
