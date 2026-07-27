@@ -7,18 +7,22 @@ name = "hvv-anzeiger"
 version = "0.1.0"
 description = "HVV departure display for a Raspberry Pi and ILI9341 TFT"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
-  "luma.lcd>=2.11,<3",
-  "Pillow>=10,<12",
+  "luma.lcd>=2.13,<3",
+  "Pillow>=12.3,<13",
   "RPi.GPIO>=0.7.1; sys_platform == 'linux' and (platform_machine == 'armv7l' or platform_machine == 'aarch64')",
-  "spidev>=3.6; sys_platform == 'linux' and (platform_machine == 'armv7l' or platform_machine == 'aarch64')",
+  "spidev>=3.7,<4; sys_platform == 'linux' and (platform_machine == 'armv7l' or platform_machine == 'aarch64')",
 ]
 
 [project.optional-dependencies]
+install = [
+  "setuptools>=83,<84",
+]
 test = [
   "build>=1,<2",
   "coverage[toml]>=7.6,<8",
+  "pip-audit>=2.9,<3",
   "ruff>=0.12,<1",
 ]
 
@@ -30,11 +34,11 @@ hvv-preview = "hvv_display.preview:main"
 include = ["hvv_display*"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 line-length = 88
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+select = ["E", "F", "I", "S", "UP"]
 
 [tool.coverage.run]
 branch = true
