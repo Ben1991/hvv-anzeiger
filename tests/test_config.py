@@ -24,7 +24,7 @@ class ConfigTest(unittest.TestCase):
             ["Master:82039", "Master:82015"],
         )
         self.assertEqual([station.label for station in config.stations], ["W", "R"])
-        self.assertTrue(config.night_shutdown.enabled)
+        self.assertFalse(config.night_shutdown.enabled)
         self.assertEqual(config.night_shutdown.start.strftime("%H:%M"), "21:00")
         self.assertEqual(config.night_shutdown.end.strftime("%H:%M"), "06:30")
 
@@ -189,7 +189,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.display.bus_speed_hz, 16_000_000)
         self.assertEqual(config.stations[0].label, "W")
         self.assertEqual(config.stations[0].city, "Hamburg")
-        self.assertTrue(config.night_shutdown.enabled)
+        self.assertFalse(config.night_shutdown.enabled)
         self.assertEqual(config.night_shutdown.start.strftime("%H:%M"), "21:00")
         self.assertEqual(config.night_shutdown.end.strftime("%H:%M"), "06:30")
 

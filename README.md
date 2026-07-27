@@ -37,9 +37,9 @@ welcher Haltestelle der Bus abfährt.
 - Solange die Systemzeit nach einem Start noch nicht synchronisiert ist, wird
   „ZEIT NICHT SYNCHRON“ angezeigt und Geofox nicht abgefragt. Dadurch können
   keine scheinbar plausiblen Abfahrten auf Basis einer falschen Pi-Uhr erscheinen.
-- Standardmäßig wird die Anzeige täglich von 21:00 bis 06:30 Uhr vollständig
-  schwarz geschaltet. Währenddessen pausieren die Geofox-Abrufe. Zeitraum und
-  Aktivierung sind konfigurierbar.
+- Der optionale Nachtmodus kann die Anzeige täglich von 21:00 bis 06:30 Uhr
+  vollständig schwarz schalten und währenddessen die Geofox-Abrufe pausieren.
+  Er ist standardmäßig deaktiviert; Aktivierung und Zeitraum sind konfigurierbar.
 - Bei wiederholten Fehlern verdoppelt sich der Abstand zwischen den Versuchen bis
   maximal fünf Minuten. Der Anzeigezustand wird trotzdem alle 15 Sekunden geprüft.
   Eine von Geofox bei HTTP 429 verlangte längere Wartezeit wird bis maximal eine
@@ -180,7 +180,9 @@ Netzwerkabrufe. Bei der oben gezeigten Verdrahtung bleibt `LED` jedoch an 3,3 V
 und damit elektrisch eingeschaltet. Für eine wirklich ausgeschaltete
 Hintergrundbeleuchtung ist ein zum konkreten Modul passender Transistor- oder
 Treiberbaustein erforderlich; die LED sollte nicht ungeprüft direkt an einen
-GPIO-Pin angeschlossen werden.
+GPIO-Pin angeschlossen werden. Ein schwarzes Bild allein spart bei einem
+beleuchteten TFT praktisch keinen Displaystrom. Der optionale Nachtmodus reduziert
+lediglich etwas CPU-, SPI- und WLAN-Arbeit.
 
 ## Erwarteter Ressourcenverbrauch auf dem Pi Zero 2 W
 
@@ -194,7 +196,7 @@ WLAN-Qualität und Größe der Geofox-Antwort beeinflussen die tatsächlichen We
 | CPU | meist niedriger einstelliger Prozentbereich im zeitlichen Mittel, mit kurzen Spitzen beim API-Abruf und Rendern | die vier Kerne werden nicht dauerhaft belastet; andere kleine Dienste können parallel laufen |
 | Bildspeicher | 230.400 Byte pro 320 × 240-RGB-Bild, zeitweise wenige Bildpuffer | weniger als einige MiB; für den Pi unkritisch |
 | SPI | 230.400 Byte pro vollständig übertragenem Bild | bei unveränderter Anzeige meist nur etwa einmal pro Minute statt viermal; bei jeder sichtbaren Änderung sofort |
-| Netzwerk | bis zu 240 Geofox-Abrufe pro aktiver Stunde; während der Standard-Nachtabschaltung keine | typischerweise wenige MiB pro aktiver Stunde; die Antwortgröße bestimmt den exakten Wert |
+| Netzwerk | bis zu 240 Geofox-Abrufe pro Stunde; bei aktiviertem Nachtmodus während des Nachtfensters keine | typischerweise wenige MiB pro aktiver Stunde; die Antwortgröße bestimmt den exakten Wert |
 | Installation | grob 50–120 MiB für Anwendung, virtuelle Python-Umgebung und Bibliotheken | die Paket-Caches des Betriebssystems können zusätzlich Speicherplatz belegen |
 
 Der größte dauerhafte Stromverbrauch entsteht voraussichtlich durch Raspberry Pi,
@@ -206,9 +208,9 @@ kontrolliert werden.
 Die Anwendung vermeidet unnötige Arbeit:
 
 - Geofox wird weiterhin alle 15 Sekunden abgefragt, damit Echtzeitänderungen schnell
-  sichtbar werden. In der standardmäßigen Nachtabschaltung von 21:00 bis 06:30
-  entfallen die Abrufe vollständig; 240 Abrufe pro Stunde sind deshalb der
-  Höchstwert während der aktiven Anzeigezeit.
+  sichtbar werden. Nur bei aktiviertem Nachtmodus entfallen zwischen 21:00 und
+  06:30 Uhr die Abrufe vollständig; 240 Abrufe pro Stunde sind der Höchstwert
+  während der aktiven Anzeigezeit.
 - Solange Uhrzeit, Abfahrten und Statushinweis gleich bleiben, entfallen Rendering
   und SPI-Transfer vollständig.
 - Geladene Schriftarten werden wiederverwendet.
@@ -505,16 +507,16 @@ weggelassen werden; dann gelten die folgenden Defaults aus dem Programmcode.
 
 | Feld | Default | Bedeutung und Grenze |
 |---|---:|---|
-| `night_shutdown.enabled` | `true` | schaltet das Display im konfigurierten Zeitraum schwarz und pausiert Geofox; mit `false` vollständig deaktivierbar |
+| `night_shutdown.enabled` | `false` | aktiviert mit `true` das schwarze Displaybild und die Geofox-Pause im konfigurierten Zeitraum |
 | `night_shutdown.start` | `"21:00"` | Beginn im lokalen Hamburger Zeitformat `HH:MM` |
 | `night_shutdown.end` | `"06:30"` | Ende im lokalen Hamburger Zeitformat `HH:MM`; muss sich vom Beginn unterscheiden |
 
 Zeiträume über Mitternacht und innerhalb eines Tages werden unterstützt. Beginn
-ist eingeschlossen, das Ende ausgeschlossen. Für einen durchgehenden Betrieb:
+ist eingeschlossen, das Ende ausgeschlossen. Zum Aktivieren des Nachtmodus:
 
 ```json
 "night_shutdown": {
-  "enabled": false,
+  "enabled": true,
   "start": "21:00",
   "end": "06:30"
 }
@@ -635,10 +637,11 @@ Nach Installation, Zugangsdaten und Neustart:
    Aktualisierung zurückkehren.
 7. Den Raspberry Pi neu starten und mit `systemctl status hvv-anzeiger` prüfen,
    dass die Anzeige ohne manuelles Eingreifen wieder läuft.
-8. Für einen Nachtfunktionstest `night_shutdown.start` kurz auf wenige Minuten vor
-   die aktuelle Zeit und `night_shutdown.end` auf wenige Minuten danach setzen:
-   Das Bild muss schwarz werden und nach Ende des Fensters selbstständig
-   zurückkehren. Anschließend die gewünschten Zeiten wiederherstellen.
+8. Für einen Nachtfunktionstest `night_shutdown.enabled` auf `true`,
+   `night_shutdown.start` kurz auf wenige Minuten vor die aktuelle Zeit und
+   `night_shutdown.end` auf wenige Minuten danach setzen: Das Bild muss schwarz
+   werden und nach Ende des Fensters selbstständig zurückkehren. Anschließend die
+   gewünschten Werte wiederherstellen.
 9. `systemctl show hvv-anzeiger -p Type -p WatchdogUSec` muss `Type=notify` und
    einen Watchdog-Wert von 90 Sekunden anzeigen.
 

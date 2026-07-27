@@ -147,7 +147,7 @@ def load_config(path: str | Path) -> AppConfig:
 
     night_shutdown = NightShutdownConfig(
         enabled=_boolean(
-            night_raw.get("enabled", True),
+            night_raw.get("enabled", False),
             "night_shutdown.enabled",
         ),
         start=_clock_time(

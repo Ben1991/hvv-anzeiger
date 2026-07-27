@@ -1,4 +1,5 @@
 import importlib
+import json
 import sys
 import unittest
 from argparse import Namespace
@@ -232,9 +233,15 @@ class MainTest(unittest.TestCase):
         client = Mock()
         now = datetime(2026, 7, 27, 22, 0, tzinfo=HAMBURG_TZ)
         with TemporaryDirectory() as directory:
+            config_raw = json.loads(
+                Path("config.example.json").read_text(encoding="utf-8")
+            )
+            config_raw["night_shutdown"]["enabled"] = True
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(json.dumps(config_raw), encoding="utf-8")
             output = Path(directory) / "board.png"
             arguments = Namespace(
-                config="config.example.json",
+                config=str(config_path),
                 cache=str(Path(directory) / "stations.json"),
                 once=True,
                 output=str(output),
