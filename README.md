@@ -33,9 +33,11 @@ welcher Haltestelle der Bus abfährt.
 - Bei getrennter WLAN-Verbindung zeigt die Statusleiste ausdrücklich „KEIN WLAN“
   und, falls vorhanden, die Uhrzeit des letzten erfolgreichen Datenstands.
 - Bei wiederholten Fehlern verdoppelt sich der Abstand zwischen den Versuchen bis
-  maximal fünf Minuten. Uhrzeit und sichtbare Restzeiten werden trotzdem alle
-  15 Sekunden neu gezeichnet. Nach einem erfolgreichen Abruf gelten auch für die
-  API wieder 15 Sekunden.
+  maximal fünf Minuten. Der Anzeigezustand wird trotzdem alle 15 Sekunden geprüft.
+  Nach einem erfolgreichen Abruf gelten auch für die API wieder 15 Sekunden.
+- Schriftarten werden im Arbeitsspeicher wiederverwendet. Ein neues Bild wird nur
+  gerendert und über SPI übertragen, wenn sich der sichtbare Inhalt geändert hat.
+  Das spart CPU-Zeit und SPI-Übertragungen, ohne die Geofox-Abrufe zu reduzieren.
 - Sowohl HTTP-Fehler als auch Geofox-Fehler im JSON-Feld `returnCode` werden geprüft.
 - Der systemd-Dienst startet erst nach Netzwerk- und Zeitsynchronisierungs-Targets.
   Das ist wichtig, weil ein Raspberry Pi üblicherweise keine Echtzeituhr besitzt.
@@ -85,6 +87,59 @@ Die Bezeichnungen auf Display-Modulen unterscheiden sich. `SCK` kann auch `CLK`,
 > konkreten Moduls prüfen. Die Hintergrundbeleuchtung nicht direkt über einen
 > GPIO-Pin versorgen, wenn das Modul dafür keinen geeigneten Vorwiderstand oder
 > Treiber besitzt.
+
+## Erwarteter Ressourcenverbrauch auf dem Pi Zero 2 W
+
+Die folgenden Werte sind realistische Orientierungswerte, aber noch keine Messung
+auf dem konkreten Raspberry Pi und Display. Betriebssystem, Python-/Pillow-Version,
+WLAN-Qualität und Größe der Geofox-Antwort beeinflussen die tatsächlichen Werte.
+
+| Ressource | Erwartungswert | Auswirkung |
+|---|---:|---|
+| Arbeitsspeicher | ungefähr 40–70 MiB im Dauerbetrieb | deutlich unter den 512 MiB des Pi Zero 2 W; Raspberry Pi OS Lite und die Anzeige sollten ausreichend Reserve haben |
+| CPU | meist niedriger einstelliger Prozentbereich im zeitlichen Mittel, mit kurzen Spitzen beim API-Abruf und Rendern | die vier Kerne werden nicht dauerhaft belastet; andere kleine Dienste können parallel laufen |
+| Bildspeicher | 230.400 Byte pro 320 × 240-RGB-Bild, zeitweise wenige Bildpuffer | weniger als einige MiB; für den Pi unkritisch |
+| SPI | 230.400 Byte pro vollständig übertragenem Bild | bei unveränderter Anzeige meist nur etwa einmal pro Minute statt viermal; bei jeder sichtbaren Änderung sofort |
+| Netzwerk | 240 Geofox-Abrufe pro Stunde; typischerweise wenige MiB pro Stunde | geringes Datenvolumen, aber dauerhaftes WLAN ist erforderlich; die Antwortgröße bestimmt den exakten Wert |
+| Installation | grob 50–120 MiB für Anwendung, virtuelle Python-Umgebung und Bibliotheken | die Paket-Caches des Betriebssystems können zusätzlich Speicherplatz belegen |
+
+Der größte dauerhafte Stromverbrauch entsteht voraussichtlich durch Raspberry Pi,
+WLAN und Display-Hintergrundbeleuchtung, nicht durch das Python-Programm. Für diese
+Anwendung ist normalerweise keine aktive Kühlung nötig. In einem engen,
+schlecht belüfteten Gehäuse sollte die Temperatur nach einigen Stunden dennoch
+kontrolliert werden.
+
+Die Anwendung vermeidet unnötige Arbeit:
+
+- Geofox wird weiterhin alle 15 Sekunden abgefragt, damit Echtzeitänderungen schnell
+  sichtbar werden.
+- Solange Uhrzeit, Abfahrten und Statushinweis gleich bleiben, entfallen Rendering
+  und SPI-Transfer vollständig.
+- Geladene Schriftarten werden wiederverwendet.
+- Zwischen Aktualisierungen wacht der Prozess höchstens einmal pro Sekunde auf.
+  Dadurch reagiert der Dienst weiterhin zeitnah auf ein Stoppsignal, ohne viermal
+  pro Sekunde unnötig aktiv zu werden.
+
+### Verbrauch auf dem eigenen Pi messen
+
+Nach einigen Minuten Laufzeit liefern diese Befehle aussagekräftigere Werte für
+das konkrete Gerät:
+
+```bash
+pid="$(systemctl show --property MainPID --value hvv-anzeiger)"
+ps -p "$pid" -o pid,%cpu,rss,etime,cmd
+systemctl show hvv-anzeiger -p MemoryCurrent -p CPUUsageNSec
+du -sh /opt/hvv-anzeiger
+awk '{printf "%.1f °C\n", $1 / 1000}' /sys/class/thermal/thermal_zone0/temp
+```
+
+`RSS` wird von `ps` in KiB ausgegeben. Für einen belastbaren CPU-Mittelwert den
+`ps`-Befehl mehrmals über einige Minuten ausführen. Das Netzwerkvolumen lässt sich
+vor und nach einer Stunde anhand der RX-/TX-Zähler von `wlan0` vergleichen:
+
+```bash
+grep wlan0 /proc/net/dev
+```
 
 ## Installation
 
@@ -315,7 +370,7 @@ Die automatisierten Tests prüfen unter anderem:
 
 GitHub Actions führt diese Prüfungen nach jedem Push und für jeden Pull Request mit
 Python 3.9, 3.11 und 3.13 aus. Zusätzlich werden Ruff, eine Mindest-Testabdeckung
-von 80 Prozent, beide Shell-Skripte mit Bash und ShellCheck, ein Vorschaubild und
+von 100 Prozent, beide Shell-Skripte mit Bash und ShellCheck, ein Vorschaubild und
 das installierbare Python-Paket geprüft.
 
 Die direkten Laufzeitabhängigkeiten sind in `constraints.txt` festgeschrieben.
@@ -348,4 +403,6 @@ Jede Anfrage bekommt eine eigene `X-TraceId`, die bei Fehlern im Log steht.
 
 Das Display wird über `luma.lcd` angesteuert. Die Oberfläche selbst wird mit Pillow
 als 320 × 240 Pixel großes RGB-Bild erzeugt und anschließend vollständig auf das
-ILI9341 übertragen.
+ILI9341 übertragen. Bereits geladene Schriftarten werden zwischengespeichert.
+Ein Bild wird nur neu erzeugt und übertragen, wenn sich sein sichtbarer Inhalt
+gegenüber dem vorherigen Bild geändert hat.

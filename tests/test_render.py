@@ -1,9 +1,19 @@
 import unittest
 from datetime import datetime, timedelta
+from unittest.mock import patch
+
+from PIL import Image, ImageDraw, ImageFont
 
 from hvv_display.geofox import HAMBURG_TZ
 from hvv_display.models import Departure
-from hvv_display.render import RED, _status_text, render_board
+from hvv_display.render import (
+    RED,
+    _fit_text,
+    _font,
+    _status_text,
+    board_state_key,
+    render_board,
+)
 
 
 class RenderTest(unittest.TestCase):
@@ -81,6 +91,130 @@ class RenderTest(unittest.TestCase):
             ),
             "KEIN WLAN · STAND 12:00",
         )
+
+    def test_status_text_covers_wifi_stale_and_current_states(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        self.assertEqual(
+            _status_text(
+                wifi_is_connected=False,
+                stale=False,
+                last_updated=None,
+            ),
+            "KEIN WLAN",
+        )
+        self.assertEqual(
+            _status_text(
+                wifi_is_connected=True,
+                stale=True,
+                last_updated=now,
+            ),
+            "DATEN VERALTET · 12:00",
+        )
+        self.assertEqual(
+            _status_text(
+                wifi_is_connected=None,
+                stale=True,
+                last_updated=None,
+            ),
+            "DATEN VERALTET",
+        )
+        self.assertIsNone(
+            _status_text(
+                wifi_is_connected=True,
+                stale=False,
+                last_updated=now,
+            )
+        )
+
+    def test_board_state_changes_only_when_visible_content_changes(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, 5, tzinfo=HAMBURG_TZ)
+        departures = [Departure("21", "U Niendorf Nord", now + timedelta(minutes=3))]
+
+        def key(at: datetime, *, stale: bool = False) -> tuple[object, ...]:
+            return board_state_key(
+                departures,
+                now=at,
+                last_updated=now,
+                stale=stale,
+                error_message=None,
+                wifi_is_connected=True,
+                max_rows=5,
+            )
+
+        self.assertEqual(key(now), key(now + timedelta(seconds=10)))
+        self.assertNotEqual(key(now), key(now + timedelta(minutes=1)))
+        self.assertNotEqual(key(now), key(now, stale=True))
+
+    def test_board_state_represents_cancellation_and_empty_error(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        cancelled = Departure(
+            "21",
+            "U Niendorf Nord",
+            now + timedelta(minutes=3),
+            cancelled=True,
+        )
+        cancelled_key = board_state_key(
+            [cancelled],
+            now=now,
+            last_updated=now,
+            stale=False,
+            error_message="ignored while rows are visible",
+            wifi_is_connected=True,
+            max_rows=5,
+        )
+        empty_error_key = board_state_key(
+            [],
+            now=now,
+            last_updated=None,
+            stale=True,
+            error_message="offline",
+            wifi_is_connected=True,
+            max_rows=5,
+        )
+        self.assertIn("AUS", cancelled_key[1][0])
+        self.assertFalse(cancelled_key[2])
+        self.assertTrue(empty_error_key[2])
+
+    def test_cancelled_and_immediate_departures_render_differently(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        immediate = render_board(
+            [Departure("21", "Ziel", now - timedelta(seconds=1))],
+            now=now,
+        )
+        cancelled = render_board(
+            [Departure("21", "Ziel", now, cancelled=True)],
+            now=now,
+        )
+        self.assertNotEqual(immediate.tobytes(), cancelled.tobytes())
+
+    def test_long_text_is_shortened_with_ellipsis(self) -> None:
+        draw = ImageDraw.Draw(Image.new("RGB", (100, 30)))
+        text, _font_object = _fit_text(
+            draw,
+            "Ein außergewöhnlich langes Fahrtziel",
+            35,
+            start_size=18,
+            min_size=12,
+        )
+        self.assertTrue(text.endswith("…"))
+        self.assertNotEqual(text, "Ein außergewöhnlich langes Fahrtziel")
+
+    def test_font_falls_back_and_is_cached(self) -> None:
+        fallback = ImageFont.load_default(size=13)
+        _font.cache_clear()
+        with (
+            patch("hvv_display.render.Path.is_file", return_value=False),
+            patch("hvv_display.render.ImageFont.truetype", side_effect=OSError),
+            patch(
+                "hvv_display.render.ImageFont.load_default",
+                return_value=fallback,
+            ) as load_default,
+        ):
+            self.assertIs(_font(13), fallback)
+            self.assertIs(_font(13), fallback)
+        load_default.assert_called_once_with(size=13)
+        self.assertGreaterEqual(_font.cache_info().hits, 1)
+        _font.cache_clear()
 
 
 if __name__ == "__main__":

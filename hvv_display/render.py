@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -20,6 +21,7 @@ ROW_LINE = "#48515a"
 BLACK = "#090b0d"
 
 
+@lru_cache(maxsize=32)
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     filename = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
     mac_filename = "Arial Bold.ttf" if bold else "Arial.ttf"
@@ -53,9 +55,9 @@ def _fit_text(
             return text, font
     font = _font(min_size, bold)
     shortened = text
-    while shortened and draw.textbbox(
-        (0, 0), shortened + "…", font=font
-    )[2] > max_width:
+    while (
+        shortened and draw.textbbox((0, 0), shortened + "…", font=font)[2] > max_width
+    ):
         shortened = shortened[:-1]
     return shortened.rstrip() + "…", font
 
@@ -83,9 +85,7 @@ def _line_badge(
     )
 
 
-def _station_badge(
-    draw: ImageDraw.ImageDraw, x: int, y: int, label: str
-) -> None:
+def _station_badge(draw: ImageDraw.ImageDraw, x: int, y: int, label: str) -> None:
     if not label:
         return
     draw.rounded_rectangle((x, y, x + 18, y + 17), radius=3, fill=BLUE)
@@ -121,6 +121,47 @@ def _status_text(
     return None
 
 
+def board_state_key(
+    departures: list[Departure],
+    *,
+    now: datetime,
+    last_updated: datetime | None,
+    stale: bool,
+    error_message: str | None,
+    wifi_is_connected: bool | None,
+    max_rows: int,
+) -> tuple[object, ...]:
+    """Describe only visible state so unchanged frames need not be redrawn."""
+    visible_departures = tuple(
+        (
+            departure.line,
+            departure.destination,
+            departure.station_label,
+            departure.cancelled,
+            (
+                "AUS"
+                if departure.cancelled
+                else max(
+                    0,
+                    math.ceil((departure.departure_time - now).total_seconds() / 60),
+                )
+            ),
+            departure.departure_time.strftime("%H:%M"),
+        )
+        for departure in departures[:max_rows]
+    )
+    return (
+        now.strftime("%H:%M"),
+        visible_departures,
+        bool(error_message) if not visible_departures else False,
+        _status_text(
+            wifi_is_connected=wifi_is_connected,
+            stale=stale,
+            last_updated=last_updated,
+        ),
+    )
+
+
 def render_board(
     departures: list[Departure],
     *,
@@ -153,9 +194,7 @@ def render_board(
             draw, message, WIDTH - 24, start_size=22, min_size=16, bold=True
         )
         text_width = draw.textbbox((0, 0), text, font=font)[2]
-        draw.text(
-            ((WIDTH - text_width) / 2, 102), text, font=font, fill=WHITE
-        )
+        draw.text(((WIDTH - text_width) / 2, 102), text, font=font, fill=WHITE)
         draw.text(
             (42, 136),
             "Nächster Versuch automatisch",

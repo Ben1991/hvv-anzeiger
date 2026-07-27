@@ -1,3 +1,4 @@
+import builtins
 import unittest
 from unittest.mock import Mock, patch
 
@@ -38,3 +39,32 @@ class HardwareTest(unittest.TestCase):
         rendered = device.display.call_args.args[0]
         self.assertEqual(rendered.size, (320, 240))
         self.assertEqual(rendered.mode, "RGB")
+
+    def test_missing_display_driver_has_installation_hint(self) -> None:
+        config = load_config("config.example.json").display
+        real_import = builtins.__import__
+
+        def reject_luma(name, *args, **kwargs):
+            if name.startswith("luma."):
+                raise ImportError("missing")
+            return real_import(name, *args, **kwargs)
+
+        with (
+            patch("builtins.__import__", side_effect=reject_luma),
+            self.assertRaisesRegex(RuntimeError, "README"),
+        ):
+            Ili9341Display(config)
+
+    def test_display_keeps_an_image_that_already_has_device_dimensions(self) -> None:
+        config = load_config("config.example.json").display
+        device = Mock()
+        device.size = (320, 240)
+        image = Image.new("RGB", device.size, "blue")
+        with (
+            patch("luma.core.interface.serial.spi"),
+            patch("luma.lcd.device.ili9341", return_value=device),
+        ):
+            display = Ili9341Display(config)
+            display.show(image)
+        rendered = device.display.call_args.args[0]
+        self.assertEqual(rendered.tobytes(), image.tobytes())

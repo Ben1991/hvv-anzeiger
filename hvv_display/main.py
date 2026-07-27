@@ -14,7 +14,7 @@ from .geofox import HAMBURG_TZ, GeofoxClient, GeofoxError
 from .hardware import Ili9341Display
 from .models import Departure
 from .network import wifi_connected
-from .render import render_board
+from .render import board_state_key, render_board
 from .stations import resolve_stations
 
 LOG = logging.getLogger(__name__)
@@ -51,6 +51,53 @@ def _arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def update_board(
+    departures: list[Departure],
+    *,
+    now: datetime,
+    last_updated: datetime | None,
+    stale: bool,
+    error_message: str | None,
+    wifi_is_connected: bool | None,
+    max_rows: int,
+    previous_state: tuple[object, ...] | None,
+    output: str | None,
+    display: Ili9341Display | None,
+) -> tuple[object, ...]:
+    """Render and transfer a frame only when its visible content changed."""
+    current_state = board_state_key(
+        departures,
+        now=now,
+        last_updated=last_updated,
+        stale=stale,
+        error_message=error_message,
+        wifi_is_connected=wifi_is_connected,
+        max_rows=max_rows,
+    )
+    if current_state == previous_state:
+        LOG.debug("Displayinhalt unverändert; Aktualisierung übersprungen")
+        return current_state
+
+    image = render_board(
+        departures,
+        now=now,
+        last_updated=last_updated,
+        stale=stale,
+        error_message=error_message,
+        wifi_is_connected=wifi_is_connected,
+        max_rows=max_rows,
+    )
+    if output:
+        output_path = Path(output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        image.save(output_path)
+    elif display is not None:
+        display.show(image)
+    else:
+        raise RuntimeError("Kein Display oder Ausgabepfad konfiguriert")
+    return current_state
+
+
 def run() -> int:
     args = _arguments()
     try:
@@ -83,6 +130,7 @@ def run() -> int:
     last_error: str | None = None
     next_api_attempt_at = 0.0
     wifi_interface = os.environ.get("HVV_WIFI_INTERFACE", "wlan0")
+    last_board_state: tuple[object, ...] | None = None
     while not stopped:
         now = datetime.now(HAMBURG_TZ)
         if time.monotonic() >= next_api_attempt_at:
@@ -110,27 +158,25 @@ def run() -> int:
             if consecutive_failures:
                 LOG.info("Nächster Geofox-Versuch in %d Sekunden", api_delay)
 
-        image = render_board(
+        wifi_state = wifi_connected(wifi_interface)
+        last_board_state = update_board(
             latest,
             now=now,
             last_updated=last_updated,
             stale=last_error is not None,
             error_message=last_error,
-            wifi_is_connected=wifi_connected(wifi_interface),
+            wifi_is_connected=wifi_state,
             max_rows=config.api.max_departures,
+            previous_state=last_board_state,
+            output=args.output,
+            display=display,
         )
-        if args.output:
-            output_path = Path(args.output)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            image.save(output_path)
-        else:
-            display.show(image)
 
         if args.once:
             return 0 if last_error is None else 1
         deadline = time.monotonic() + config.api.refresh_seconds
         while not stopped and time.monotonic() < deadline:
-            time.sleep(min(0.25, deadline - time.monotonic()))
+            time.sleep(min(1.0, deadline - time.monotonic()))
     return 0
 
 
