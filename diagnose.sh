@@ -115,6 +115,15 @@ else
   fail "Der Dienst läuft nicht."
 fi
 
+RESTART_POLICY="$(
+  systemctl show "$SERVICE_NAME" --property=Restart --value 2>/dev/null
+)"
+if [[ "$RESTART_POLICY" == "always" ]]; then
+  pass "Der Dienst wird nach einem unerwarteten Prozessende automatisch neu gestartet."
+else
+  fail "Die automatische Prozesswiederherstellung ist nicht korrekt aktiviert."
+fi
+
 SERVICE_TYPE="$(
   systemctl show "$SERVICE_NAME" --property=Type --value 2>/dev/null
 )"

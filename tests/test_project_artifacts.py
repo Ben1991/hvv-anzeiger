@@ -35,6 +35,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn('systemctl stop "$SERVICE_NAME"', installer_text)
         self.assertIn('enable --now "$LOG_CLEANUP_TIMER"', installer_text)
         self.assertIn('APP_USER="hvv-anzeiger"', installer_text)
+        self.assertIn('systemctl enable "$SERVICE_NAME"', installer_text)
         self.assertIn("--require-hashes", installer_text)
         self.assertNotIn("pip\" install --upgrade pip", installer_text)
         self.assertIn('chown -R root:root "$STAGING_DIR"', installer_text)
@@ -57,10 +58,11 @@ class ProjectArtifactTest(unittest.TestCase):
         )
         self.assertIn("EnvironmentFile=/etc/hvv-anzeiger.env", service)
         self.assertIn("Environment=HVV_WIFI_INTERFACE=wlan0", service)
-        self.assertIn("Restart=on-failure", service)
+        self.assertIn("Restart=always", service)
         self.assertIn("Type=notify", service)
         self.assertIn("WatchdogSec=90s", service)
         self.assertIn("After=network-online.target time-sync.target", service)
+        self.assertIn("WantedBy=multi-user.target", service)
         self.assertIn("NoNewPrivileges=true", service)
         self.assertIn("ProtectSystem=strict", service)
         self.assertIn("ProtectHome=true", service)
@@ -111,6 +113,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn('credential_present "GEOFOX_USER"', diagnostic)
         self.assertIn('credential_present "GEOFOX_PASSWORD"', diagnostic)
         self.assertIn("load_config", diagnostic)
+        self.assertIn("--property=Restart", diagnostic)
         self.assertIn("WatchdogUSec", diagnostic)
 
     def test_readme_documents_every_example_configuration_field(self) -> None:

@@ -221,6 +221,43 @@ Die Diagnose prüft:
 
 Zugangsdaten werden dabei nicht ausgegeben.
 
+### Automatischer Start nach Reboot oder Stromausfall
+
+Der Installer aktiviert `hvv-anzeiger` dauerhaft als systemd-Dienst. Nach einem
+normalen Neustart oder nachdem die Stromversorgung wiederhergestellt wurde,
+startet die Anzeige ohne Anmeldung und ohne manuellen Befehl.
+
+Beim Hochfahren gilt:
+
+1. systemd startet den Anzeigedienst automatisch.
+2. Solange die Systemzeit noch nicht synchronisiert ist, zeigt das Display
+   `ZEIT NICHT SYNCHRON` und es werden keine Geofox-Daten abgefragt.
+3. Fehlt WLAN, zeigt das Display `KEIN WLAN`.
+4. Sobald Systemzeit und Netzwerk verfügbar sind, lädt die Anwendung selbstständig
+   aktuelle Geofox-Daten und setzt den normalen 15-Sekunden-Zyklus fort.
+5. Endet oder blockiert der Prozess später unerwartet, startet systemd ihn erneut.
+
+Autostart und aktuellen Zustand prüfen:
+
+```bash
+systemctl is-enabled hvv-anzeiger
+systemctl status hvv-anzeiger --no-pager
+```
+
+Der erste Befehl muss `enabled` ausgeben. Falls nicht:
+
+```bash
+sudo systemctl enable --now hvv-anzeiger
+```
+
+`install.sh` wird bewusst nicht bei jedem Boot ausgeführt. Es dient nur zur
+Installation und für Updates; automatisch gestartet wird die bereits installierte
+Anzeige.
+
+Ein harter Stromausfall kann unabhängig von dieser Anwendung eine beschriebene
+microSD-Karte beschädigen. Für häufige oder kritische Stromunterbrechungen sind
+ein zuverlässiges Netzteil und gegebenenfalls eine kleine USV sinnvoll.
+
 ## Konfiguration
 
 Die aktive Konfiguration liegt unter:
