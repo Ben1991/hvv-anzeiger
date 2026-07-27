@@ -40,6 +40,25 @@ welcher Haltestelle der Bus abfährt.
 - Der systemd-Dienst startet erst nach Netzwerk- und Zeitsynchronisierungs-Targets.
   Das ist wichtig, weil ein Raspberry Pi üblicherweise keine Echtzeituhr besitzt.
 
+## Welche Abfahrtszeit wird angezeigt?
+
+Die Anzeige verwendet nicht einfach die unveränderte Fahrplanzeit, sondern die
+aktuelle Geofox-Echtzeitprognose:
+
+```text
+angezeigte Abfahrt = Planabfahrt + von Geofox gemeldete Verspätung
+```
+
+Geofox liefert die Verspätung in Sekunden. Sowohl die große Restzeit wie
+`7 min` als auch die kleine absolute Uhrzeit wie `12:34` werden aus dieser
+korrigierten Abfahrtszeit berechnet. Die Prognose wird regulär alle 15 Sekunden
+neu abgerufen.
+
+Wichtig: Bei einer zukünftigen Abfahrt ist dies die aktuell bestmögliche
+Prognose, nicht eine bereits gemessene tatsächliche Abfahrt. Liefert Geofox keine
+Verspätung, wird die planmäßige Abfahrtszeit verwendet. Gemeldete Ausfälle werden
+statt einer Restzeit mit `AUS` gekennzeichnet.
+
 ## Benötigte Hardware
 
 - Raspberry Pi Zero 2 W mit Raspberry Pi OS Lite (64 Bit empfohlen)
