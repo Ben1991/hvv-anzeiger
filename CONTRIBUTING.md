@@ -35,7 +35,8 @@ Danach:
 
 Ein Pull Request muss die Motivation, die sichtbare Auswirkung, Risiken und die
 ausgeführten Prüfungen beschreiben. Er darf keine sachfremden Änderungen
-enthalten.
+enthalten. Das beim Öffnen automatisch eingeblendete Pull-Request-Template
+vollständig ausfüllen und nicht zutreffende Punkte kurz kennzeichnen.
 
 ## Lizenz der Beiträge
 
