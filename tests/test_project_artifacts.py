@@ -41,6 +41,27 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("$adjust-hvv-stations", metadata)
         self.assertTrue(script.is_file())
 
+    def test_security_and_contribution_policies_are_present(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+        codeowners = (ROOT / ".github" / "CODEOWNERS").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("[SECURITY.md](SECURITY.md)", readme)
+        self.assertIn("[CONTRIBUTING.md](CONTRIBUTING.md)", readme)
+        self.assertIn("/security/advisories/new", security)
+        self.assertIn("Keine echten Geofox-Zugangsdaten", security)
+        self.assertIn("Pull Request", contributing)
+        self.assertIn("Niemals direkt auf `main`", contributing)
+        self.assertIn("100 Prozent", contributing)
+        self.assertIn("GPL-3.0-only", contributing)
+        self.assertIn("GNU GENERAL PUBLIC LICENSE", license_text)
+        self.assertIn("Version 3, 29 June 2007", license_text)
+        self.assertIn("[GNU General Public License Version 3](LICENSE)", readme)
+        self.assertEqual(codeowners.strip().splitlines()[-1], "* @Ben1991")
+
     def test_installer_is_executable_and_syntax_is_checked_by_ci(self) -> None:
         installer = ROOT / "install.sh"
         mode = installer.stat().st_mode
