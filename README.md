@@ -52,6 +52,69 @@ verwendet. Gemeldete Ausfälle erscheinen als `AUS`.
 Eine zukünftige Abfahrt ist immer eine Prognose. Sie ist nicht mit einer bereits
 gemessenen tatsächlichen Abfahrt gleichzusetzen.
 
+## Datenquelle und Geofox-Zugang
+
+### Was ist Geofox GTI?
+
+Das
+[Geofox Thin Interface (GTI)](https://gti.geofox.de/)
+ist die REST-ähnliche Web-Service-Schnittstelle der Geofox-Fahrplanauskunft. Sie
+stellt unter anderem Haltestellen, Linien, Abfahrten, Fahrtverläufe sowie Plan- und
+Echtzeitinformationen bereit. Dieses Projekt verwendet die Abfahrtsliste mit
+aktivierten Echtzeitdaten, um Verspätungen und gemeldete Ausfälle zu
+berücksichtigen.
+
+Geofox beziehungsweise die Schnittstelle wird von der HBT Hamburger Berater Team
+GmbH betrieben. Der Schnittstellenzugang und die Datenbereitstellung für
+HVV-Fahrplandaten werden auf der
+[offiziellen HVV-Seite für individuelle Entwicklerprojekte](https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf)
+beschrieben. Dieses Repository ist ein unabhängiges Projekt und kein offizielles
+Produkt von HVV, HOCHBAHN oder HBT.
+
+### Zugang beantragen
+
+Der Zugriff ist beschränkt und wird nicht automatisch freigeschaltet. Laut HVV
+besteht kein grundsätzlicher Anspruch auf einen Zugang. Für die Beantragung:
+
+1. Die
+   [HVV-Zugangsseite und Nutzungsbedingungen](https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf)
+   lesen.
+2. Den Zugang über die dort angebotene E-Mail-Adresse beantragen.
+3. Im Antrag einen Ansprechpartner und eine kurze Beschreibung des Vorhabens
+   nennen. Für dieses Projekt passt beispielsweise: private, kostenfreie
+   Abfahrtsanzeige auf einem Raspberry Pi, verwendete Haltestellen und ein Abruf
+   alle 15 Sekunden.
+4. Nach Freigabe werden eine Geofox Application-ID und ein Passwort benötigt.
+5. Repository installieren und beide Werte bei der interaktiven Abfrage von
+   `./install.sh` eingeben.
+
+Die Zugangsdaten niemals in `config.json`, im Repository, in einem GitHub-Issue
+oder in einem Screenshot speichern. Der Installer legt sie geschützt unter
+`/etc/hvv-anzeiger.env` ab.
+
+### Nutzungs- und Betriebsgrenzen
+
+- Maßgeblich sind immer die aktuellen Bedingungen von HVV, HOCHBAHN und HBT.
+- Die Fahrplanauskunft muss für Endnutzer kostenfrei bleiben. Eine freiwillige
+  Unterstützung dieses Open-Source-Projekts schaltet keine Funktionen oder
+  Fahrplandaten frei.
+- Herkunft und Anbieter der Fahrplandaten müssen erkennbar sein. Datenquelle für
+  dieses Projekt ist Geofox/HVV.
+- Bei einer öffentlichen Bereitstellung die aktuellen Darstellungs- und
+  Hinweispflichten vollständig prüfen. Die HVV-Bedingungen nennen unter anderem
+  einen sichtbaren Link zu `www.hvv.de` und einen Hinweis `ohne Gewähr`. Das
+  kleine Display dieses privaten Zielsetups stellt diese Hinweise nicht
+  automatisch dar.
+- Für Vollständigkeit, Richtigkeit, Aktualität oder Verfügbarkeit der Daten gibt
+  es keine Garantie.
+- Geofox kann Zugriffe begrenzen. Laut
+  [GTI-Anwenderhandbuch](https://gti.geofox.de/html/GTIHandbuch_p.html)
+  kann ein Durchschnitt von mehr als einem API-Aufruf pro Sekunde zu einer
+  temporären Sperre führen. Der Standard dieses Projekts liegt mit einem
+  gemeinsamen Abruf alle 15 Sekunden deutlich darunter.
+- Das Anwenderhandbuch weist darauf hin, dass inaktive Konten nach einem Jahr
+  gelöscht werden können.
+
 ## Unterstütztes Setup
 
 ### Hardware
@@ -549,3 +612,16 @@ Bei jedem Push und Pull Request prüft GitHub Actions:
 - Shell-Skripte und systemd-Units
 - vollständige Installation und Rollback in einer isolierten Ubuntu-Umgebung
 - Paket-Build und Display-Vorschau
+
+## Projekt unterstützen
+
+Der HVV-Anzeiger bleibt frei verfügbar. Wer Entwicklung, Tests und Dokumentation
+freiwillig unterstützen möchte, kann das hier tun:
+
+[HVV-Anzeiger auf Ko-fi unterstützen](https://ko-fi.com/bema1991)
+
+Eine Unterstützung ist vollständig freiwillig und hat keinen Einfluss auf
+Geofox-Zugang, Funktionen oder Updates. Für jede Nutzung der Geofox-Daten haben
+die erteilten Zugangs- und Nutzungsbedingungen Vorrang; ob eine öffentliche
+Finanzierung oder Spendeneinbindung damit vereinbar ist, muss der Betreiber im
+Zweifel vorab mit dem Schnittstellenanbieter klären.
