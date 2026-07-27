@@ -10,6 +10,39 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProjectArtifactTest(unittest.TestCase):
+    def test_readme_has_open_source_user_journey(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        headings = [
+            line
+            for line in readme.splitlines()
+            if line.startswith("## ") and not line.startswith("### ")
+        ]
+        self.assertEqual(
+            headings,
+            [
+                "## Inhalt",
+                "## Funktionen",
+                "## Vorkonfigurierte Anzeige",
+                "## Voraussetzungen",
+                "## Geofox-Zugang beantragen",
+                "## Display anschließen",
+                "## Installieren",
+                "## Konfigurieren",
+                "## Betrieb und Updates",
+                "## Fehlerverhalten und Diagnose",
+                "## Ressourcen- und Stromverbrauch",
+                "## Sicherheit und Datenschutz",
+                "## Projektentwicklung",
+                "## Grenzen",
+                "## Haftungsausschluss",
+                "## Lizenz und Unterstützung",
+            ],
+        )
+        self.assertIn(
+            "https://github.com/Ben1991/hvv-anzeiger/issues",
+            readme,
+        )
+
     def test_readme_screenshot_exists_with_display_dimensions(self) -> None:
         screenshot = ROOT / "docs" / "hvv-anzeiger-preview.png"
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
