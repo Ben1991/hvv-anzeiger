@@ -87,11 +87,15 @@ jobs:
         run: bash -n install.sh configure-credentials.sh diagnose.sh
 
       - name: Run ShellCheck
-        run: shellcheck install.sh configure-credentials.sh diagnose.sh
+        run: shellcheck install.sh configure-credentials.sh diagnose.sh tests/install-smoke.sh
 
-      - name: Verify log cleanup systemd units
+      - name: Run transactional installer smoke test
+        run: tests/install-smoke.sh
+
+      - name: Verify systemd units
         run: |
           systemd-analyze verify \
+            systemd/hvv-anzeiger.service \
             systemd/hvv-anzeiger-log-cleanup.service \
             systemd/hvv-anzeiger-log-cleanup.timer
 

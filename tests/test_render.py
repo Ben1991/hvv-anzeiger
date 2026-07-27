@@ -91,6 +91,15 @@ class RenderTest(unittest.TestCase):
             ),
             "KEIN WLAN · STAND 12:00",
         )
+        self.assertEqual(
+            _status_text(
+                wifi_is_connected=False,
+                stale=True,
+                last_updated=now,
+                time_is_synchronized=False,
+            ),
+            "ZEIT NICHT SYNCHRON",
+        )
 
     def test_status_text_covers_wifi_stale_and_current_states(self) -> None:
         now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
@@ -124,6 +133,31 @@ class RenderTest(unittest.TestCase):
                 stale=False,
                 last_updated=now,
             )
+        )
+
+    def test_unsynchronized_time_has_visible_priority(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        image = render_board(
+            [],
+            now=now,
+            stale=True,
+            error_message="Systemzeit ist noch nicht synchronisiert",
+            wifi_is_connected=False,
+            time_is_synchronized=False,
+        )
+        self.assertEqual(image.getpixel((0, 239)), (213, 43, 47))
+        self.assertIn(
+            "ZEIT NICHT SYNCHRON",
+            board_state_key(
+                [],
+                now=now,
+                last_updated=None,
+                stale=True,
+                error_message="time",
+                wifi_is_connected=False,
+                max_rows=5,
+                time_is_synchronized=False,
+            ),
         )
 
     def test_board_state_changes_only_when_visible_content_changes(self) -> None:

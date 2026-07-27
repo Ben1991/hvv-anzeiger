@@ -24,6 +24,9 @@ class ConfigTest(unittest.TestCase):
             ["Master:82039", "Master:82015"],
         )
         self.assertEqual([station.label for station in config.stations], ["W", "R"])
+        self.assertTrue(config.night_shutdown.enabled)
+        self.assertEqual(config.night_shutdown.start.strftime("%H:%M"), "21:00")
+        self.assertEqual(config.night_shutdown.end.strftime("%H:%M"), "06:30")
 
     def test_refresh_below_limit_is_rejected(self) -> None:
         raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
@@ -178,6 +181,7 @@ class ConfigTest(unittest.TestCase):
             raw["display"].pop(field, None)
         raw["stations"][0].pop("label")
         raw["stations"][0].pop("city")
+        raw.pop("night_shutdown")
         with tempfile.TemporaryDirectory() as directory:
             config = load_config(self.write_config(raw, directory))
         self.assertEqual(config.api.version, 63)
@@ -185,6 +189,27 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.display.bus_speed_hz, 16_000_000)
         self.assertEqual(config.stations[0].label, "W")
         self.assertEqual(config.stations[0].city, "Hamburg")
+        self.assertTrue(config.night_shutdown.enabled)
+        self.assertEqual(config.night_shutdown.start.strftime("%H:%M"), "21:00")
+        self.assertEqual(config.night_shutdown.end.strftime("%H:%M"), "06:30")
+
+    def test_night_shutdown_configuration_is_validated(self) -> None:
+        original = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
+        mutations = (
+            ("enabled", "yes", "true oder false"),
+            ("start", "later", "HH:MM"),
+            ("start", "6:30", "HH:MM"),
+            ("start", "06:30:00", "HH:MM"),
+            ("end", "25:00", "HH:MM"),
+            ("end", "21:00", "verschieden"),
+        )
+        for field, value, message in mutations:
+            with self.subTest(field=field, value=value):
+                raw = json.loads(json.dumps(original))
+                raw["night_shutdown"][field] = value
+                with tempfile.TemporaryDirectory() as directory:
+                    with self.assertRaisesRegex(ConfigError, message):
+                        load_config(self.write_config(raw, directory))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
+from datetime import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -36,9 +38,17 @@ class DisplayConfig:
 
 
 @dataclass(frozen=True)
+class NightShutdownConfig:
+    enabled: bool
+    start: time
+    end: time
+
+
+@dataclass(frozen=True)
 class AppConfig:
     api: ApiConfig
     display: DisplayConfig
+    night_shutdown: NightShutdownConfig
     stations: tuple[Station, ...]
 
 
@@ -77,6 +87,13 @@ def _geofox_base_url(value: Any) -> str:
     return base_url
 
 
+def _clock_time(value: Any, field: str) -> time:
+    raw = str(value)
+    if re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", raw) is None:
+        raise ConfigError(f"{field} muss als HH:MM angegeben werden")
+    return time.fromisoformat(raw)
+
+
 def load_config(path: str | Path) -> AppConfig:
     config_path = Path(path)
     try:
@@ -89,6 +106,7 @@ def load_config(path: str | Path) -> AppConfig:
     try:
         api_raw = raw["api"]
         display_raw = raw["display"]
+        night_raw = raw.get("night_shutdown", {})
         stations_raw = raw["stations"]
     except (KeyError, TypeError) as exc:
         raise ConfigError("Konfiguration benötigt api, display und stations") from exc
@@ -127,6 +145,25 @@ def load_config(path: str | Path) -> AppConfig:
     if display.bus_speed_hz <= 0:
         raise ConfigError("display.bus_speed_hz muss größer als 0 sein")
 
+    night_shutdown = NightShutdownConfig(
+        enabled=_boolean(
+            night_raw.get("enabled", True),
+            "night_shutdown.enabled",
+        ),
+        start=_clock_time(
+            night_raw.get("start", "21:00"),
+            "night_shutdown.start",
+        ),
+        end=_clock_time(
+            night_raw.get("end", "06:30"),
+            "night_shutdown.end",
+        ),
+    )
+    if night_shutdown.start == night_shutdown.end:
+        raise ConfigError(
+            "night_shutdown.start und night_shutdown.end müssen verschieden sein"
+        )
+
     stations: list[Station] = []
     for index, station_raw in enumerate(stations_raw):
         station_name = str(_required(station_raw, "name", f"stations[{index}]"))
@@ -161,4 +198,9 @@ def load_config(path: str | Path) -> AppConfig:
     labels = [station.label for station in stations]
     if len(labels) != len(set(labels)):
         raise ConfigError("stations[].label muss pro Haltestelle eindeutig sein")
-    return AppConfig(api=api, display=display, stations=tuple(stations))
+    return AppConfig(
+        api=api,
+        display=display,
+        night_shutdown=night_shutdown,
+        stations=tuple(stations),
+    )

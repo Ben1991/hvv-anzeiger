@@ -9,12 +9,17 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from PIL import Image
+
+from .clock import in_night_shutdown
+from .clock import time_is_synchronized as clock_is_synchronized
 from .config import ConfigError, load_config
 from .geofox import HAMBURG_TZ, GeofoxClient, GeofoxError
 from .hardware import Ili9341Display
 from .models import Departure
 from .network import wifi_connected
-from .render import board_state_key, render_board
+from .render import HEIGHT, WIDTH, board_state_key, render_board
+from .service import SystemdNotifier
 from .stations import resolve_stations
 
 LOG = logging.getLogger(__name__)
@@ -22,14 +27,19 @@ MAX_REFRESH_BACKOFF_SECONDS = 300
 SUCCESS_HEARTBEAT_SECONDS = 3600
 
 
-def refresh_delay(refresh_seconds: int, consecutive_failures: int) -> int:
+def refresh_delay(
+    refresh_seconds: int,
+    consecutive_failures: int,
+    retry_after_seconds: int | None = None,
+) -> int:
     """Return a bounded retry delay; the first failure doubles the normal interval."""
     if consecutive_failures <= 0:
         return refresh_seconds
-    return min(
+    backoff = min(
         MAX_REFRESH_BACKOFF_SECONDS,
         refresh_seconds * (2 ** min(consecutive_failures, 5)),
     )
+    return max(backoff, retry_after_seconds or 0)
 
 
 def log_success(
@@ -100,30 +110,40 @@ def update_board(
     previous_state: tuple[object, ...] | None,
     output: str | None,
     display: Ili9341Display | None,
+    time_is_synchronized: bool | None = True,
+    night_shutdown: bool = False,
 ) -> tuple[object, ...]:
     """Render and transfer a frame only when its visible content changed."""
-    current_state = board_state_key(
-        departures,
-        now=now,
-        last_updated=last_updated,
-        stale=stale,
-        error_message=error_message,
-        wifi_is_connected=wifi_is_connected,
-        max_rows=max_rows,
-    )
+    if night_shutdown:
+        current_state: tuple[object, ...] = ("night-shutdown",)
+    else:
+        current_state = board_state_key(
+            departures,
+            now=now,
+            last_updated=last_updated,
+            stale=stale,
+            error_message=error_message,
+            wifi_is_connected=wifi_is_connected,
+            max_rows=max_rows,
+            time_is_synchronized=time_is_synchronized,
+        )
     if current_state == previous_state:
         LOG.debug("Displayinhalt unverändert; Aktualisierung übersprungen")
         return current_state
 
-    image = render_board(
-        departures,
-        now=now,
-        last_updated=last_updated,
-        stale=stale,
-        error_message=error_message,
-        wifi_is_connected=wifi_is_connected,
-        max_rows=max_rows,
-    )
+    if night_shutdown:
+        image = Image.new("RGB", (WIDTH, HEIGHT), "black")
+    else:
+        image = render_board(
+            departures,
+            now=now,
+            last_updated=last_updated,
+            stale=stale,
+            error_message=error_message,
+            wifi_is_connected=wifi_is_connected,
+            max_rows=max_rows,
+            time_is_synchronized=time_is_synchronized,
+        )
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -137,6 +157,7 @@ def update_board(
 
 def run() -> int:
     args = _arguments()
+    notifier = SystemdNotifier()
     try:
         config = load_config(args.config)
         client = GeofoxClient(
@@ -146,7 +167,6 @@ def run() -> int:
             version=config.api.version,
             timeout=config.api.request_timeout_seconds,
         )
-        stations = resolve_stations(client, config.stations, args.cache)
         display = None if args.output else Ili9341Display(config.display)
     except (ConfigError, GeofoxError, RuntimeError) as exc:
         LOG.error("%s", exc)
@@ -162,6 +182,7 @@ def run() -> int:
     signal.signal(signal.SIGINT, stop)
 
     latest: list[Departure] = []
+    stations = None
     last_updated: datetime | None = None
     consecutive_failures = 0
     last_error: str | None = None
@@ -169,11 +190,38 @@ def run() -> int:
     wifi_interface = os.environ.get("HVV_WIFI_INTERFACE", "wlan0")
     last_board_state: tuple[object, ...] | None = None
     last_success_heartbeat_at: float | None = None
+    clock_confirmed = False
+    notifier.ready()
     while not stopped:
         now = datetime.now(HAMBURG_TZ)
         current_monotonic = time.monotonic()
-        if current_monotonic >= next_api_attempt_at:
+        notifier.ping_if_due(current_monotonic)
+        sync_probe = True if clock_confirmed else clock_is_synchronized()
+        if sync_probe is True:
+            clock_confirmed = True
+        clock_ready = clock_confirmed
+        night_active = (
+            clock_ready
+            and config.night_shutdown.enabled
+            and in_night_shutdown(
+                now,
+                config.night_shutdown.start,
+                config.night_shutdown.end,
+            )
+        )
+
+        if (
+            clock_ready
+            and not night_active
+            and current_monotonic >= next_api_attempt_at
+        ):
             try:
+                if stations is None:
+                    stations = resolve_stations(
+                        client,
+                        config.stations,
+                        args.cache,
+                    )
                 latest = client.departure_list(
                     stations,
                     now=now,
@@ -191,42 +239,55 @@ def run() -> int:
             except GeofoxError as exc:
                 last_error = str(exc)
                 consecutive_failures += 1
+                retry_after_seconds = exc.retry_after_seconds
                 LOG.warning("Aktualisierung fehlgeschlagen: %s", exc)
+            else:
+                retry_after_seconds = None
 
             api_delay = refresh_delay(
                 config.api.refresh_seconds,
                 consecutive_failures,
+                retry_after_seconds,
             )
             next_api_attempt_at = time.monotonic() + api_delay
             if consecutive_failures:
                 LOG.info("Nächster Geofox-Versuch in %d Sekunden", api_delay)
 
-        wifi_state = wifi_connected(wifi_interface)
+        wifi_state = None if night_active else wifi_connected(wifi_interface)
+        visible_error = last_error
+        if not clock_ready:
+            visible_error = "Systemzeit ist noch nicht synchronisiert"
         visible_departures = departures_for_display(
             latest,
             now=now,
             last_updated=last_updated,
-            stale=last_error is not None,
+            stale=visible_error is not None,
             max_stale_age_minutes=config.api.max_stale_age_minutes,
         )
         last_board_state = update_board(
             visible_departures,
             now=now,
             last_updated=last_updated,
-            stale=last_error is not None,
-            error_message=last_error,
+            stale=visible_error is not None,
+            error_message=visible_error,
             wifi_is_connected=wifi_state,
             max_rows=config.api.max_departures,
             previous_state=last_board_state,
             output=args.output,
             display=display,
+            time_is_synchronized=clock_ready,
+            night_shutdown=night_active,
         )
 
         if args.once:
-            return 0 if last_error is None else 1
+            return 0 if clock_ready and last_error is None else 1
         deadline = time.monotonic() + config.api.refresh_seconds
-        while not stopped and time.monotonic() < deadline:
-            time.sleep(min(1.0, deadline - time.monotonic()))
+        while not stopped:
+            sleep_now = time.monotonic()
+            if sleep_now >= deadline:
+                break
+            notifier.ping_if_due(sleep_now)
+            time.sleep(min(1.0, deadline - sleep_now))
     return 0
 
 
