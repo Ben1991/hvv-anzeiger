@@ -7,6 +7,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
+from PIL import Image
+
 from hvv_display.config import ConfigError, load_config
 from hvv_display.geofox import HAMBURG_TZ, GeofoxError
 from hvv_display.main import (
@@ -55,6 +57,7 @@ class MainTest(unittest.TestCase):
         self.assertEqual(refresh_delay(15, 2), 60)
         self.assertEqual(refresh_delay(15, 3), 120)
         self.assertEqual(refresh_delay(15, 20), MAX_REFRESH_BACKOFF_SECONDS)
+        self.assertEqual(refresh_delay(15, 1, retry_after_seconds=600), 600)
 
     def test_success_is_logged_as_info_at_most_hourly(self) -> None:
         with self.assertLogs("hvv_display.main", level="DEBUG") as logs:
@@ -155,6 +158,10 @@ class MainTest(unittest.TestCase):
                     "hvv_display.main.resolve_stations",
                     return_value=config.stations,
                 ),
+                patch(
+                    "hvv_display.main.clock_is_synchronized",
+                    return_value=True,
+                ),
                 patch("hvv_display.main.signal.signal"),
             ):
                 result = run()
@@ -184,12 +191,71 @@ class MainTest(unittest.TestCase):
                     "hvv_display.main.resolve_stations",
                     return_value=config.stations,
                 ),
+                patch(
+                    "hvv_display.main.clock_is_synchronized",
+                    return_value=True,
+                ),
                 patch("hvv_display.main.signal.signal"),
             ):
                 result = run()
 
             self.assertEqual(result, 1)
             self.assertTrue(output.is_file())
+
+    def test_unsynchronized_time_is_rendered_without_geofox_request(self) -> None:
+        config = load_config("config.example.json")
+        client = Mock()
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "board.png"
+            arguments = Namespace(
+                config="config.example.json",
+                cache=str(Path(directory) / "stations.json"),
+                once=True,
+                output=str(output),
+            )
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient", return_value=client),
+                patch(
+                    "hvv_display.main.clock_is_synchronized",
+                    return_value=False,
+                ),
+                patch("hvv_display.main.signal.signal"),
+            ):
+                result = run()
+
+        self.assertEqual(result, 1)
+        client.departure_list.assert_not_called()
+        self.assertEqual(config.night_shutdown.start.strftime("%H:%M"), "21:00")
+
+    def test_night_shutdown_blanks_display_and_pauses_geofox(self) -> None:
+        client = Mock()
+        now = datetime(2026, 7, 27, 22, 0, tzinfo=HAMBURG_TZ)
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "board.png"
+            arguments = Namespace(
+                config="config.example.json",
+                cache=str(Path(directory) / "stations.json"),
+                once=True,
+                output=str(output),
+            )
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient", return_value=client),
+                patch(
+                    "hvv_display.main.clock_is_synchronized",
+                    return_value=True,
+                ),
+                patch("hvv_display.main.datetime") as mocked_datetime,
+                patch("hvv_display.main.signal.signal"),
+            ):
+                mocked_datetime.now.return_value = now
+                result = run()
+
+            with Image.open(output) as image:
+                self.assertEqual(image.getextrema(), ((0, 0), (0, 0), (0, 0)))
+        self.assertEqual(result, 0)
+        client.departure_list.assert_not_called()
 
     def test_startup_error_returns_configuration_exit_code(self) -> None:
         arguments = Namespace(
@@ -285,6 +351,10 @@ class MainTest(unittest.TestCase):
                     return_value=config.stations,
                 ),
                 patch(
+                    "hvv_display.main.clock_is_synchronized",
+                    return_value=True,
+                ),
+                patch(
                     "hvv_display.main.signal.signal",
                     side_effect=lambda _signal, handler: handlers.append(handler),
                 ),
@@ -315,12 +385,16 @@ class MainTest(unittest.TestCase):
                     return_value=config.stations,
                 ),
                 patch(
+                    "hvv_display.main.clock_is_synchronized",
+                    return_value=True,
+                ),
+                patch(
                     "hvv_display.main.signal.signal",
                     side_effect=lambda _signal, handler: handlers.append(handler),
                 ),
                 patch(
                     "hvv_display.main.time.monotonic",
-                    side_effect=[0, 0, 0, 15, 1, 1, 1, 1],
+                    return_value=0,
                 ),
                 patch(
                     "hvv_display.main.time.sleep",
@@ -330,6 +404,50 @@ class MainTest(unittest.TestCase):
                 self.assertEqual(run(), 0)
         client.departure_list.assert_called_once()
         sleep.assert_called_once_with(1.0)
+
+    def test_continuous_mode_reuses_resolved_stations_after_deadline(self) -> None:
+        config = load_config("config.example.json")
+        handlers = []
+        calls = 0
+
+        def departures(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                handlers[0](15, None)
+            return []
+
+        client = Mock()
+        client.departure_list.side_effect = departures
+        resolved = Mock(return_value=config.stations)
+        with TemporaryDirectory() as directory:
+            arguments = Namespace(
+                config="config.example.json",
+                cache=str(Path(directory) / "stations.json"),
+                once=False,
+                output=str(Path(directory) / "board.png"),
+            )
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient", return_value=client),
+                patch("hvv_display.main.resolve_stations", resolved),
+                patch(
+                    "hvv_display.main.clock_is_synchronized",
+                    return_value=True,
+                ),
+                patch(
+                    "hvv_display.main.signal.signal",
+                    side_effect=lambda _signal, handler: handlers.append(handler),
+                ),
+                patch(
+                    "hvv_display.main.time.monotonic",
+                    side_effect=[0, 0, 0, 15, 15, 15, 15],
+                ),
+            ):
+                self.assertEqual(run(), 0)
+
+        self.assertEqual(client.departure_list.call_count, 2)
+        resolved.assert_called_once()
 
     def test_main_exits_with_run_result(self) -> None:
         with (

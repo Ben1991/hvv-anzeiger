@@ -34,9 +34,16 @@ welcher Haltestelle der Bus abfährt.
   als „sofort“ erscheinen. Die Uhrzeit des letzten Datenstands bleibt sichtbar.
 - Bei getrennter WLAN-Verbindung zeigt die Statusleiste ausdrücklich „KEIN WLAN“
   und, falls vorhanden, die Uhrzeit des letzten erfolgreichen Datenstands.
+- Solange die Systemzeit nach einem Start noch nicht synchronisiert ist, wird
+  „ZEIT NICHT SYNCHRON“ angezeigt und Geofox nicht abgefragt. Dadurch können
+  keine scheinbar plausiblen Abfahrten auf Basis einer falschen Pi-Uhr erscheinen.
+- Standardmäßig wird die Anzeige täglich von 21:00 bis 06:30 Uhr vollständig
+  schwarz geschaltet. Währenddessen pausieren die Geofox-Abrufe. Zeitraum und
+  Aktivierung sind konfigurierbar.
 - Bei wiederholten Fehlern verdoppelt sich der Abstand zwischen den Versuchen bis
   maximal fünf Minuten. Der Anzeigezustand wird trotzdem alle 15 Sekunden geprüft.
-  Nach einem erfolgreichen Abruf gelten auch für die API wieder 15 Sekunden.
+  Eine von Geofox bei HTTP 429 verlangte längere Wartezeit wird bis maximal eine
+  Stunde respektiert. Nach einem erfolgreichen Abruf gelten wieder 15 Sekunden.
 - Schriftarten werden im Arbeitsspeicher wiederverwendet. Ein neues Bild wird nur
   gerendert und über SPI übertragen, wenn sich der sichtbare Inhalt geändert hat.
   Das spart CPU-Zeit und SPI-Übertragungen, ohne die Geofox-Abrufe zu reduzieren.
@@ -51,6 +58,9 @@ welcher Haltestelle der Bus abfährt.
   Journalbestand auf 100 MiB begrenzt.
 - Der systemd-Dienst startet erst nach Netzwerk- und Zeitsynchronisierungs-Targets.
   Das ist wichtig, weil ein Raspberry Pi üblicherweise keine Echtzeituhr besitzt.
+- Ein systemd-Watchdog erwartet spätestens alle 90 Sekunden ein Lebenszeichen.
+  Dadurch wird nicht nur ein abgestürzter, sondern auch ein hängender Prozess
+  automatisch neu gestartet.
 - Der systemd-Dienst darf das Betriebssystem, Benutzerverzeichnisse und den
   Anwendungscode nicht verändern. Schreibzugriff besteht nur auf den lokalen
   Haltestellen-Cache unter `/opt/hvv-anzeiger/var`.
@@ -165,6 +175,13 @@ Die Bezeichnungen auf Display-Modulen unterscheiden sich. `SCK` kann auch `CLK`,
 > GPIO-Pin versorgen, wenn das Modul dafür keinen geeigneten Vorwiderstand oder
 > Treiber besitzt.
 
+Die Nachtabschaltung schreibt ein vollständig schwarzes Bild und pausiert die
+Netzwerkabrufe. Bei der oben gezeigten Verdrahtung bleibt `LED` jedoch an 3,3 V
+und damit elektrisch eingeschaltet. Für eine wirklich ausgeschaltete
+Hintergrundbeleuchtung ist ein zum konkreten Modul passender Transistor- oder
+Treiberbaustein erforderlich; die LED sollte nicht ungeprüft direkt an einen
+GPIO-Pin angeschlossen werden.
+
 ## Erwarteter Ressourcenverbrauch auf dem Pi Zero 2 W
 
 Die folgenden Werte sind realistische Orientierungswerte, aber noch keine Messung
@@ -177,7 +194,7 @@ WLAN-Qualität und Größe der Geofox-Antwort beeinflussen die tatsächlichen We
 | CPU | meist niedriger einstelliger Prozentbereich im zeitlichen Mittel, mit kurzen Spitzen beim API-Abruf und Rendern | die vier Kerne werden nicht dauerhaft belastet; andere kleine Dienste können parallel laufen |
 | Bildspeicher | 230.400 Byte pro 320 × 240-RGB-Bild, zeitweise wenige Bildpuffer | weniger als einige MiB; für den Pi unkritisch |
 | SPI | 230.400 Byte pro vollständig übertragenem Bild | bei unveränderter Anzeige meist nur etwa einmal pro Minute statt viermal; bei jeder sichtbaren Änderung sofort |
-| Netzwerk | 240 Geofox-Abrufe pro Stunde; typischerweise wenige MiB pro Stunde | geringes Datenvolumen, aber dauerhaftes WLAN ist erforderlich; die Antwortgröße bestimmt den exakten Wert |
+| Netzwerk | bis zu 240 Geofox-Abrufe pro aktiver Stunde; während der Standard-Nachtabschaltung keine | typischerweise wenige MiB pro aktiver Stunde; die Antwortgröße bestimmt den exakten Wert |
 | Installation | grob 50–120 MiB für Anwendung, virtuelle Python-Umgebung und Bibliotheken | die Paket-Caches des Betriebssystems können zusätzlich Speicherplatz belegen |
 
 Der größte dauerhafte Stromverbrauch entsteht voraussichtlich durch Raspberry Pi,
@@ -189,7 +206,9 @@ kontrolliert werden.
 Die Anwendung vermeidet unnötige Arbeit:
 
 - Geofox wird weiterhin alle 15 Sekunden abgefragt, damit Echtzeitänderungen schnell
-  sichtbar werden.
+  sichtbar werden. In der standardmäßigen Nachtabschaltung von 21:00 bis 06:30
+  entfallen die Abrufe vollständig; 240 Abrufe pro Stunde sind deshalb der
+  Höchstwert während der aktiven Anzeigezeit.
 - Solange Uhrzeit, Abfahrten und Statushinweis gleich bleiben, entfallen Rendering
   und SPI-Transfer vollständig.
 - Geladene Schriftarten werden wiederverwendet.
@@ -267,9 +286,11 @@ Das Skript:
   interaktiv ab; das Passwort bleibt bei der Eingabe unsichtbar,
 - übernimmt eine vorhandene `config.json` und vollständige Zugangsdaten bei
   späteren Updates unverändert,
-- stoppt bei einer Wiederholungsinstallation zuerst den laufenden Dienst,
-- sichert die bisherige Python-Umgebung und stellt sie bei einem Installationsfehler
-  automatisch wieder her,
+- baut Programmcode und Python-Umgebung zuerst vollständig in einem separaten
+  Verzeichnis auf und rendert dort ein Testbild,
+- stoppt den laufenden Dienst erst für die kurze Umschaltung,
+- stellt bei einem Installations- oder Startfehler die komplette vorherige
+  Anwendung einschließlich Python-Umgebung und systemd-Units wieder her,
 - aktiviert die Netzwerk-Zeitsynchronisierung,
 - legt den nicht interaktiven Systembenutzer `hvv-anzeiger` an,
 - schützt Programmcode und Konfiguration als `root:root` und gibt dem Dienst nur
@@ -277,13 +298,20 @@ Das Skript:
 - installiert ausschließlich die in `requirements.txt` festgelegten Pakete mit
   geprüften SHA-256-Hashes,
 - aktiviert die wöchentliche Journal-Bereinigung,
-- aktiviert den Autostart.
+- aktiviert den Autostart und den 90-Sekunden-Watchdog,
+- zeigt zum Abschluss einen kompakten Statusblock für Dienst, Autostart,
+  Log-Bereinigung und SPI.
 
 Die Zugangsdaten werden weder als Kommandozeilenparameter noch im Repository
 gespeichert. Der Installer schreibt sie atomar mit den Dateirechten `0600` nach
 `/etc/hvv-anzeiger.env`. Bricht die Eingabe ab oder bleibt ein Wert leer, startet
 der Dienst nicht mit einer unvollständigen Konfiguration. Nach der erstmaligen
 SPI-Aktivierung sollte der Raspberry Pi neu gestartet werden.
+
+Der laufende Dienst wird erst beendet, nachdem Abhängigkeiten, Paketinstallation
+und lokales Rendern der neuen Version erfolgreich waren. Schlägt der anschließende
+Start fehl, wird die vorherige Version automatisch zurückgeschaltet und erneut
+gestartet.
 
 ### Manuelle Installation
 
@@ -382,7 +410,7 @@ cd /opt/hvv-anzeiger
 set -a
 . /etc/hvv-anzeiger.env
 set +a
-.venv/bin/hvv-anzeiger --config config.json --once
+.venv/bin/python -m hvv_display --config config.json --once
 ```
 
 Die Beispielkonfiguration enthält die geprüften IDs `Master:82039` für
@@ -395,13 +423,13 @@ beim entsprechenden Eintrag in `config.json` ergänzen.
 Für einen Test ohne angeschlossenes Display kann eine PNG-Datei geschrieben werden:
 
 ```bash
-.venv/bin/hvv-preview preview.png
+.venv/bin/python -m hvv_display.preview preview.png
 ```
 
 Oder mit echten API-Daten:
 
 ```bash
-.venv/bin/hvv-anzeiger --config config.json --once --output preview.png
+.venv/bin/python -m hvv_display --config config.json --once --output preview.png
 ```
 
 ### 5. Automatischen Start einrichten
@@ -473,6 +501,25 @@ weggelassen werden; dann gelten die folgenden Defaults aus dem Programmcode.
 | `display.bus_speed_hz` | `16000000` | SPI-Takt in Hertz; muss größer als 0 sein |
 | `display.bgr` | `false` | auf `true` setzen, falls Rot und Blau vertauscht sind |
 
+### Nachtabschaltungs-Defaults
+
+| Feld | Default | Bedeutung und Grenze |
+|---|---:|---|
+| `night_shutdown.enabled` | `true` | schaltet das Display im konfigurierten Zeitraum schwarz und pausiert Geofox; mit `false` vollständig deaktivierbar |
+| `night_shutdown.start` | `"21:00"` | Beginn im lokalen Hamburger Zeitformat `HH:MM` |
+| `night_shutdown.end` | `"06:30"` | Ende im lokalen Hamburger Zeitformat `HH:MM`; muss sich vom Beginn unterscheiden |
+
+Zeiträume über Mitternacht und innerhalb eines Tages werden unterstützt. Beginn
+ist eingeschlossen, das Ende ausgeschlossen. Für einen durchgehenden Betrieb:
+
+```json
+"night_shutdown": {
+  "enabled": false,
+  "start": "21:00",
+  "end": "06:30"
+}
+```
+
 ### Haltestellen-Defaults
 
 | Feld | Default | Bedeutung und Grenze |
@@ -523,10 +570,16 @@ python3.11 -m venv .venv
 .venv/bin/coverage run -m unittest discover -s tests -v
 .venv/bin/coverage report
 .venv/bin/pip-audit --requirement requirements.txt --disable-pip
-.venv/bin/hvv-preview preview.png
+.venv/bin/python -m hvv_display.preview preview.png
 bash -n install.sh configure-credentials.sh diagnose.sh
-shellcheck install.sh configure-credentials.sh diagnose.sh
+shellcheck install.sh configure-credentials.sh diagnose.sh tests/install-smoke.sh
 ```
+
+`tests/install-smoke.sh` läuft in GitHub Actions auf Ubuntu. Es führt eine
+vollständige Erstinstallation mit isolierten Systempfaden und Kommando-Doubles
+für Raspberry-Pi-Systembefehle aus. Anschließend erzwingt es einen fehlgeschlagenen
+Dienststart und prüft, dass Anwendung, Zugangsdaten und systemd-Units vollständig
+auf den vorherigen Stand zurückgesetzt werden.
 
 Die automatisierten Tests prüfen unter anderem:
 
@@ -538,6 +591,8 @@ Die automatisierten Tests prüfen unter anderem:
 - eine dokumentationsnahe, anonymisierte Geofox-Beispielantwort vom API-Eingang
   bis zum gerenderten Displaybild,
 - Herkunftskennzeichnung pro Haltestelle und begrenztes Fehler-Backoff,
+- Geofox-`Retry-After`, Nachtfenster über Mitternacht und das Pausieren der API,
+- Zeitstatus vor dem ersten Geofox-Abruf und Watchdog-Lebenszeichen,
 - stündlich begrenztes Erfolgs-Logging, gehärteten systemd-Dienst und
   wiederherstellbare Python-Installation,
 - HTTPS-/Host-Prüfung, einzeilige externe Fehlertexte, den dedizierten
@@ -550,12 +605,14 @@ Die automatisierten Tests prüfen unter anderem:
 - Screenshot, Installationsskript, Pi-Diagnose und systemd-Konfiguration.
 - einmalige, verdeckte Zugangsdatenabfrage, sichere Dateirechte, Wiederverwendung
   vorhandener Zugangsdaten und bewusste Rotation mit `--force`.
+- vollständige isolierte Erstinstallation und transaktionales Rollback bei einem
+  simulierten Dienstfehler.
 
 GitHub Actions führt diese Prüfungen nach jedem Push und für jeden Pull Request mit
 Python 3.10, 3.11 und 3.13 aus. Zusätzlich werden Ruff einschließlich seiner
 Security-Regeln, eine Mindest-Testabdeckung von 100 Prozent, `pip-audit`, beide
 Shell-Skripte mit Bash und ShellCheck, ein Vorschaubild und das installierbare
-Python-Paket geprüft.
+Python-Paket sowie der transaktionale Installer-Smoke-Test geprüft.
 
 Alle direkten und transitiven Laufzeitabhängigkeiten sind mit Prüfsummen in
 `requirements.txt` festgeschrieben. `requirements-dev.txt` ergänzt die ebenfalls
@@ -578,6 +635,12 @@ Nach Installation, Zugangsdaten und Neustart:
    Aktualisierung zurückkehren.
 7. Den Raspberry Pi neu starten und mit `systemctl status hvv-anzeiger` prüfen,
    dass die Anzeige ohne manuelles Eingreifen wieder läuft.
+8. Für einen Nachtfunktionstest `night_shutdown.start` kurz auf wenige Minuten vor
+   die aktuelle Zeit und `night_shutdown.end` auf wenige Minuten danach setzen:
+   Das Bild muss schwarz werden und nach Ende des Fensters selbstständig
+   zurückkehren. Anschließend die gewünschten Zeiten wiederherstellen.
+9. `systemctl show hvv-anzeiger -p Type -p WatchdogUSec` muss `Type=notify` und
+   einen Watchdog-Wert von 90 Sekunden anzeigen.
 
 ## Technischer Hintergrund
 
@@ -585,12 +648,20 @@ Die Anwendung verwendet die Geofox-Methode
 `POST /gti/public/departureList` mit API-Version 63 und `useRealtime: true`.
 Die Signatur ist Base64-codiertes HMAC-SHA1 über den exakten UTF-8-JSON-Body.
 Jede Anfrage bekommt eine eigene `X-TraceId`, die bei Fehlern im Log steht.
+Bei HTTP 429 wird ein gültiger `Retry-After`-Wert respektiert und aus
+Sicherheitsgründen auf höchstens eine Stunde begrenzt.
 
 Das Display wird über `luma.lcd` angesteuert. Die Oberfläche selbst wird mit Pillow
 als 320 × 240 Pixel großes RGB-Bild erzeugt und anschließend vollständig auf das
 ILI9341 übertragen. Bereits geladene Schriftarten werden zwischengespeichert.
 Ein Bild wird nur neu erzeugt und übertragen, wenn sich sein sichtbarer Inhalt
 gegenüber dem vorherigen Bild geändert hat.
+
+Vor dem ersten API-Abruf prüft die Anwendung den Synchronisationsmarker von
+`systemd-timesyncd` und ersatzweise `timedatectl`. Nach der ersten bestätigten
+Synchronisierung gilt die Uhr für die Laufzeit des Prozesses als verwendbar.
+Während des Nachtfensters wird genau einmal ein schwarzes Bild übertragen; weitere
+Renderings und Geofox-Anfragen entfallen bis zum Ende des Zeitraums.
 
 Der Dienst läuft als nicht interaktiver Benutzer `hvv-anzeiger` mit
 systemd-Schutzmechanismen wie `NoNewPrivileges` und einem schreibgeschützten
@@ -600,3 +671,8 @@ Schreibausnahme für den Haltestellen-Cache. Ein bewusstes RAM-Limit ist nicht
 gesetzt: Die dokumentierten Messbefehle sollten zuerst auf dem konkreten Pi
 ausgeführt werden, damit ein zu knapp angesetztes Limit nicht unnötig zu
 Neustarts führt.
+
+Der Dienst verwendet `Type=notify` und meldet Bereitschaft sowie regelmäßige
+Watchdog-Lebenszeichen direkt über den von systemd bereitgestellten Unix-Socket.
+Bleibt ein Lebenszeichen länger als 90 Sekunden aus, beendet und startet systemd
+den Prozess neu.

@@ -107,7 +107,10 @@ def _status_text(
     wifi_is_connected: bool | None,
     stale: bool,
     last_updated: datetime | None,
+    time_is_synchronized: bool | None = True,
 ) -> str | None:
+    if time_is_synchronized is False:
+        return "ZEIT NICHT SYNCHRON"
     if wifi_is_connected is False:
         label = "KEIN WLAN"
         if last_updated:
@@ -130,6 +133,7 @@ def board_state_key(
     error_message: str | None,
     wifi_is_connected: bool | None,
     max_rows: int,
+    time_is_synchronized: bool | None = True,
 ) -> tuple[object, ...]:
     """Describe only visible state so unchanged frames need not be redrawn."""
     visible_departures = tuple(
@@ -156,6 +160,7 @@ def board_state_key(
         bool(error_message) if not visible_departures else False,
         _status_text(
             wifi_is_connected=wifi_is_connected,
+            time_is_synchronized=time_is_synchronized,
             stale=stale,
             last_updated=last_updated,
         ),
@@ -171,6 +176,7 @@ def render_board(
     error_message: str | None = None,
     wifi_is_connected: bool | None = None,
     max_rows: int = 5,
+    time_is_synchronized: bool | None = True,
 ) -> Image.Image:
     image = Image.new("RGB", (WIDTH, HEIGHT), BLACK)
     draw = ImageDraw.Draw(image)
@@ -256,6 +262,7 @@ def render_board(
 
     status_label = _status_text(
         wifi_is_connected=wifi_is_connected,
+        time_is_synchronized=time_is_synchronized,
         stale=stale,
         last_updated=last_updated,
     )

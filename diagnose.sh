@@ -78,8 +78,15 @@ else
   fail "timedatectl wurde nicht gefunden."
 fi
 
-if [[ -x "$APP_DIR/.venv/bin/hvv-preview" ]]; then
-  if "$APP_DIR/.venv/bin/hvv-preview" "$PREVIEW_FILE"; then
+if [[ -x "$APP_DIR/.venv/bin/python" ]]; then
+  if "$APP_DIR/.venv/bin/python" -c \
+    'import sys; from hvv_display.config import load_config; load_config(sys.argv[1])' \
+    "$APP_DIR/config.json"; then
+    pass "Die installierte Konfiguration ist gültig."
+  else
+    fail "Die installierte config.json ist ungültig."
+  fi
+  if "$APP_DIR/.venv/bin/python" -m hvv_display.preview "$PREVIEW_FILE"; then
     pass "Die lokale Display-Vorschau wurde erfolgreich gerendert."
     rm -f "$PREVIEW_FILE"
   else
@@ -106,6 +113,19 @@ if systemctl is-active --quiet "$SERVICE_NAME"; then
   pass "Der Dienst läuft."
 else
   fail "Der Dienst läuft nicht."
+fi
+
+SERVICE_TYPE="$(
+  systemctl show "$SERVICE_NAME" --property=Type --value 2>/dev/null
+)"
+WATCHDOG_USEC="$(
+  systemctl show "$SERVICE_NAME" --property=WatchdogUSec --value 2>/dev/null
+)"
+if [[ "$SERVICE_TYPE" == "notify" && "$WATCHDOG_USEC" != "0" &&
+  -n "$WATCHDOG_USEC" ]]; then
+  pass "Der systemd-Watchdog ist aktiviert (${WATCHDOG_USEC})."
+else
+  fail "Der systemd-Watchdog ist nicht korrekt aktiviert."
 fi
 
 if systemctl is-enabled --quiet "$LOG_CLEANUP_TIMER" &&

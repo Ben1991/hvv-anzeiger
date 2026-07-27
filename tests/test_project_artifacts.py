@@ -28,23 +28,28 @@ class ProjectArtifactTest(unittest.TestCase):
         credentials = ROOT / "configure-credentials.sh"
         self.assertTrue(credentials.stat().st_mode & stat.S_IXUSR)
         self.assertTrue(os.access(credentials, os.X_OK))
+        smoke_test = ROOT / "tests" / "install-smoke.sh"
+        self.assertTrue(smoke_test.stat().st_mode & stat.S_IXUSR)
+        self.assertTrue(os.access(smoke_test, os.X_OK))
         installer_text = installer.read_text(encoding="utf-8")
         self.assertIn('systemctl stop "$SERVICE_NAME"', installer_text)
         self.assertIn('enable --now "$LOG_CLEANUP_TIMER"', installer_text)
         self.assertIn('APP_USER="hvv-anzeiger"', installer_text)
         self.assertIn("--require-hashes", installer_text)
         self.assertNotIn("pip\" install --upgrade pip", installer_text)
-        self.assertIn('chown -R root:root "$APP_DIR"', installer_text)
+        self.assertIn('chown -R root:root "$STAGING_DIR"', installer_text)
         self.assertIn(
-            'chown -R "$APP_USER:$APP_GROUP" "$APP_DIR/var"', installer_text
+            'chown -R "$APP_USER:$APP_GROUP" "$STAGING_DIR/var"', installer_text
         )
-        self.assertIn("VENV_BACKED_UP", installer_text)
+        self.assertIn("BACKUP_DIR", installer_text)
+        self.assertIn("restore_units", installer_text)
         self.assertIn("INSTALL_SUCCEEDED", installer_text)
-        self.assertIn(
-            'sudo install -m 0755 \\\n'
-            '    "$SOURCE_DIR/configure-credentials.sh"',
-            installer_text,
+        self.assertIn('sudo install -m 0755 \\', installer_text)
+        self.assertIn('"$SOURCE_DIR/configure-credentials.sh"', installer_text)
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
         )
+        self.assertIn("tests/install-smoke.sh", workflow)
 
     def test_systemd_service_uses_protected_environment_file(self) -> None:
         service = (ROOT / "systemd" / "hvv-anzeiger.service").read_text(
@@ -53,6 +58,8 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("EnvironmentFile=/etc/hvv-anzeiger.env", service)
         self.assertIn("Environment=HVV_WIFI_INTERFACE=wlan0", service)
         self.assertIn("Restart=on-failure", service)
+        self.assertIn("Type=notify", service)
+        self.assertIn("WatchdogSec=90s", service)
         self.assertIn("After=network-online.target time-sync.target", service)
         self.assertIn("NoNewPrivileges=true", service)
         self.assertIn("ProtectSystem=strict", service)
@@ -103,6 +110,8 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("hvv-anzeiger-log-cleanup.timer", diagnostic)
         self.assertIn('credential_present "GEOFOX_USER"', diagnostic)
         self.assertIn('credential_present "GEOFOX_PASSWORD"', diagnostic)
+        self.assertIn("load_config", diagnostic)
+        self.assertIn("WatchdogUSec", diagnostic)
 
     def test_readme_documents_every_example_configuration_field(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -112,6 +121,7 @@ class ProjectArtifactTest(unittest.TestCase):
         fields = [
             *(f"api.{field}" for field in config["api"]),
             *(f"display.{field}" for field in config["display"]),
+            *(f"night_shutdown.{field}" for field in config["night_shutdown"]),
             *(f"stations[].{field}" for field in config["stations"][0]),
             *(
                 f"stations[].routes[].{field}"

@@ -7,8 +7,10 @@ from unittest.mock import patch
 from hvv_display.geofox import (
     HAMBURG_TZ,
     MAX_RESPONSE_BYTES,
+    MAX_RETRY_AFTER_SECONDS,
     GeofoxClient,
     GeofoxError,
+    _retry_after_seconds,
 )
 from hvv_display.models import Route, Station
 
@@ -94,6 +96,50 @@ class GeofoxErrorTest(unittest.TestCase):
                 )
                 with self.assertRaisesRegex(GeofoxError, message):
                     client._post("departureList", {})
+
+    def test_rate_limit_exposes_bounded_retry_after(self) -> None:
+        error = urllib.error.HTTPError(
+            "https://example.test/departureList",
+            429,
+            "Too Many Requests",
+            {"Retry-After": "9000"},
+            io.BytesIO(b""),
+        )
+        client = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",
+            min_request_interval=0,
+            urlopen=lambda *_args, **_kwargs: (_ for _ in ()).throw(error),
+        )
+
+        with self.assertRaises(GeofoxError) as raised:
+            client._post("departureList", {})
+        self.assertEqual(
+            raised.exception.retry_after_seconds,
+            MAX_RETRY_AFTER_SECONDS,
+        )
+
+    def test_retry_after_supports_seconds_dates_and_invalid_values(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        self.assertEqual(_retry_after_seconds("45", now=now), 45)
+        self.assertEqual(
+            _retry_after_seconds(
+                "Mon, 27 Jul 2026 10:02:00 GMT",
+                now=now,
+            ),
+            120,
+        )
+        self.assertEqual(
+            _retry_after_seconds(
+                "Mon, 27 Jul 2026 10:02:00",
+                now=now,
+            ),
+            120,
+        )
+        for value in (None, "", "invalid", "0", "-2"):
+            with self.subTest(value=value):
+                self.assertIsNone(_retry_after_seconds(value, now=now))
 
     def test_network_errors_have_safe_message(self) -> None:
         client = GeofoxClient(

@@ -17,6 +17,11 @@
     "bus_speed_hz": 16000000,
     "bgr": false
   },
+  "night_shutdown": {
+    "enabled": true,
+    "start": "21:00",
+    "end": "06:30"
+  },
   "stations": [
     {
       "name": "Weistritzstraße",

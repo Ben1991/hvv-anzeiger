@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import threading
 import time
 import unicodedata
@@ -13,6 +14,7 @@ import urllib.request
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
@@ -22,10 +24,40 @@ from .models import Departure, Route, Station
 LOG = logging.getLogger(__name__)
 HAMBURG_TZ = ZoneInfo("Europe/Berlin")
 MAX_RESPONSE_BYTES = 1024 * 1024
+MAX_RETRY_AFTER_SECONDS = 3600
 
 
 class GeofoxError(RuntimeError):
     """A safe, user-displayable Geofox error."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after_seconds: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+def _retry_after_seconds(value: Any, *, now: datetime | None = None) -> int | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    try:
+        seconds = int(raw)
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(raw)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=timezone.utc)
+            reference = now or datetime.now(timezone.utc)
+            seconds = math.ceil((retry_at - reference).total_seconds())
+        except (TypeError, ValueError, OverflowError):
+            return None
+    if seconds <= 0:
+        return None
+    return min(seconds, MAX_RETRY_AFTER_SECONDS)
 
 
 def normalize(value: str) -> str:
@@ -148,7 +180,12 @@ class GeofoxClient:
             if exc.code == 401:
                 raise GeofoxError("Geofox-Zugangsdaten wurden abgelehnt") from exc
             if exc.code == 429:
-                raise GeofoxError("Geofox-Anfragelimit erreicht") from exc
+                raise GeofoxError(
+                    "Geofox-Anfragelimit erreicht",
+                    retry_after_seconds=_retry_after_seconds(
+                        exc.headers.get("Retry-After")
+                    ),
+                ) from exc
             raise GeofoxError(f"Geofox antwortet mit HTTP {exc.code}") from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             LOG.error("Geofox nicht erreichbar, Trace-ID %s", trace_id)

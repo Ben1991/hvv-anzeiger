@@ -4,7 +4,9 @@ After=network-online.target time-sync.target
 Wants=network-online.target time-sync.target
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=90s
 User=hvv-anzeiger
 Group=hvv-anzeiger
 SupplementaryGroups=spi gpio
@@ -12,7 +14,7 @@ WorkingDirectory=/opt/hvv-anzeiger
 EnvironmentFile=/etc/hvv-anzeiger.env
 Environment=PYTHONUNBUFFERED=1
 Environment=HVV_WIFI_INTERFACE=wlan0
-ExecStart=/opt/hvv-anzeiger/.venv/bin/hvv-anzeiger --config /opt/hvv-anzeiger/config.json
+ExecStart=/opt/hvv-anzeiger/.venv/bin/python -m hvv_display --config /opt/hvv-anzeiger/config.json
 Restart=on-failure
 RestartSec=10
 UMask=0077
