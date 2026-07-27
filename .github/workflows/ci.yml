@@ -94,6 +94,8 @@ jobs:
 
       - name: Verify systemd units
         run: |
+          sudo install -d /opt/hvv-anzeiger/.venv/bin
+          sudo ln -s /usr/bin/python3 /opt/hvv-anzeiger/.venv/bin/python
           systemd-analyze verify \
             systemd/hvv-anzeiger.service \
             systemd/hvv-anzeiger-log-cleanup.service \
