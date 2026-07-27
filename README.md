@@ -115,14 +115,14 @@ zum unten dokumentierten Aufbau passen.
 
 ### Unterstütztes Zielsystem
 
-- Raspberry Pi Zero 2 W
+- [Raspberry Pi Zero 2 W (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W&tag=bema19910e-21)
 - Raspberry Pi OS Lite Bookworm, 64 Bit empfohlen
 - Python 3.10 oder neuer
-- microSD-Karte
-- zuverlässiges 5-V-Netzteil mit mindestens 2 A
+- [microSD-Karte (Affiliate-Link)](https://www.amazon.de/s?k=microSD+32GB+High+Endurance&tag=bema19910e-21)
+- [zuverlässiges 5-V-Netzteil mit mindestens 2 A (Affiliate-Link)](https://www.amazon.de/s?k=5V+2A+Micro+USB+Netzteil+Raspberry+Pi+Zero+2+W&tag=bema19910e-21)
 - WLAN mit Internetzugang
-- 2,2-Zoll-TFT mit ILI9341-Controller und 240 × 320 Pixeln
-- passende Jumper-Kabel
+- [2,2-Zoll-TFT mit ILI9341-Controller und 240 × 320 Pixeln (Affiliate-Link)](https://www.amazon.de/s?k=2%2C2+Zoll+ILI9341+SPI+Display+240x320&tag=bema19910e-21)
+- [passende Jumper-Kabel (Affiliate-Link)](https://www.amazon.de/s?k=Jumper+Kabel+Buchse+Buchse+2%2C54mm&tag=bema19910e-21)
 - gültige Geofox-GTI-Zugangsdaten
 - Terminal- oder SSH-Zugang zum Raspberry Pi
 
