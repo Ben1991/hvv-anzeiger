@@ -26,6 +26,20 @@ class ProjectArtifactTest(unittest.TestCase):
         )
         self.assertIn("https://gti.geofox.de/html/GTIHandbuch_p.html", readme)
         self.assertIn("https://ko-fi.com/bema1991", readme)
+        self.assertIn("## Haftungsausschluss", readme)
+        self.assertIn("keine Rechtsberatung", readme)
+
+    def test_station_adjustment_skill_is_complete(self) -> None:
+        skill = ROOT / ".agents" / "skills" / "adjust-hvv-stations"
+        instructions = (skill / "SKILL.md").read_text(encoding="utf-8")
+        metadata = (skill / "agents" / "openai.yaml").read_text(encoding="utf-8")
+        script = skill / "scripts" / "update_stations.py"
+        self.assertIn("name: adjust-hvv-stations", instructions)
+        self.assertIn("--stations-file", instructions)
+        self.assertIn("config.example.json", instructions)
+        self.assertIn("/opt/hvv-anzeiger/config.json", instructions)
+        self.assertIn("$adjust-hvv-stations", metadata)
+        self.assertTrue(script.is_file())
 
     def test_installer_is_executable_and_syntax_is_checked_by_ci(self) -> None:
         installer = ROOT / "install.sh"
