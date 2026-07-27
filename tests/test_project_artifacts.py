@@ -102,6 +102,30 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("[GNU General Public License Version 3](LICENSE)", readme)
         self.assertEqual(codeowners.strip().splitlines()[-1], "* @Ben1991")
 
+    def test_pull_request_template_covers_review_context(self) -> None:
+        template = (
+            ROOT / ".github" / "pull_request_template.md"
+        ).read_text(encoding="utf-8")
+        expected_sections = (
+            "## Ticket / Referenz",
+            "## Kontext",
+            "## Änderungen",
+            "## Produktwirkung",
+            "## Risiken und Grenzen",
+            "## Verifikation",
+            "## Screenshots oder Beispiele",
+            "## Offene Punkte",
+            "## Review-Hinweise",
+        )
+        positions = [template.index(section) for section in expected_sections]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("- [ ] Tests", template)
+        self.assertIn("- [ ] Coverage", template)
+        self.assertIn(
+            "This change has been created with the support of Codex.",
+            template,
+        )
+
     def test_installer_is_executable_and_syntax_is_checked_by_ci(self) -> None:
         installer = ROOT / "install.sh"
         mode = installer.stat().st_mode
