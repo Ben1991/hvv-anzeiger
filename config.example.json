@@ -18,7 +18,7 @@
     "bgr": false
   },
   "night_shutdown": {
-    "enabled": true,
+    "enabled": false,
     "start": "21:00",
     "end": "06:30"
   },
