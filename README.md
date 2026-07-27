@@ -1,6 +1,6 @@
 # HVV-Anzeiger für Raspberry Pi
 
-<sub>☕ Projekt unterstützen: <a href="https://ko-fi.com/bema1991">Ko-fi</a></sub>
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/U3D523YISZ)
 
 [![CI](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml)
 [![Lizenz: GPL-3.0-only](https://img.shields.io/badge/Lizenz-GPL--3.0--only-blue.svg)](LICENSE)
