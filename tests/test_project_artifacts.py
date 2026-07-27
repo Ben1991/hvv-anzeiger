@@ -17,6 +17,16 @@ class ProjectArtifactTest(unittest.TestCase):
         with Image.open(screenshot) as image:
             self.assertEqual(image.size, (320, 240))
 
+    def test_readme_documents_geofox_access_and_project_support(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("https://gti.geofox.de/", readme)
+        self.assertIn(
+            "https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf",
+            readme,
+        )
+        self.assertIn("https://gti.geofox.de/html/GTIHandbuch_p.html", readme)
+        self.assertIn("https://ko-fi.com/bema1991", readme)
+
     def test_installer_is_executable_and_syntax_is_checked_by_ci(self) -> None:
         installer = ROOT / "install.sh"
         mode = installer.stat().st_mode
