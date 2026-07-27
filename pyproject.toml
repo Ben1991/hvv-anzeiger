@@ -11,8 +11,13 @@ requires-python = ">=3.9"
 dependencies = [
   "luma.lcd>=2.11,<3",
   "Pillow>=10,<12",
-  "RPi.GPIO>=0.7.1; sys_platform == 'linux'",
-  "spidev>=3.6; sys_platform == 'linux'",
+  "RPi.GPIO>=0.7.1; sys_platform == 'linux' and (platform_machine == 'armv7l' or platform_machine == 'aarch64')",
+  "spidev>=3.6; sys_platform == 'linux' and (platform_machine == 'armv7l' or platform_machine == 'aarch64')",
+]
+
+[project.optional-dependencies]
+test = [
+  "build>=1,<2",
 ]
 
 [project.scripts]

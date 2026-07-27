@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.9"
+          - "3.11"
+          - "3.13"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install project and test tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --editable ".[test]"
+
+      - name: Compile Python sources
+        run: python -m compileall -q hvv_display tests
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Render display preview
+        run: hvv-preview /tmp/hvv-anzeiger-preview.png
+
+  shell:
+    name: Shell installer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Check Bash syntax
+        run: bash -n install.sh
+
+      - name: Run ShellCheck
+        run: shellcheck install.sh
+
+  package:
+    name: Build package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install build tool
+        run: python -m pip install --upgrade pip "build>=1,<2"
+
+      - name: Build wheel and source archive
+        run: python -m build

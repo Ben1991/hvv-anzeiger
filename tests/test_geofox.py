@@ -77,6 +77,31 @@ class GeofoxClientTest(unittest.TestCase):
         self.assertEqual(result[0].departure_time.strftime("%H:%M"), "12:04")
         self.assertEqual(result[1].departure_time.strftime("%H:%M"), "12:11")
 
+    def test_offset_uses_real_minutes_across_daylight_saving_change(self) -> None:
+        response = FakeResponse(
+            b'{"returnCode":"OK","departures":['
+            b'{"line":{"name":"21","direction":"U Niendorf Nord"},'
+            b'"timeOffset":60}]}'
+        )
+        client = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",
+            min_request_interval=0,
+            urlopen=lambda *_args, **_kwargs: response,
+        )
+        station = Station(
+            "Recknitzstraße",
+            "Hamburg",
+            (Route("21", "U Niendorf Nord"),),
+            "Master:2",
+        )
+        now = datetime(2026, 3, 29, 1, 30, tzinfo=HAMBURG_TZ)
+
+        result = client.departure_list((station,), now=now)
+
+        self.assertEqual(result[0].departure_time.strftime("%H:%M %z"), "03:30 +0200")
+
 
 if __name__ == "__main__":
     unittest.main()

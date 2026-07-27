@@ -1,5 +1,7 @@
 # HVV-Anzeiger für Raspberry Pi
 
+[![CI](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml)
+
 Zeigt die nächsten passenden HVV-Busabfahrten auf einem 2,2-Zoll-ILI9341-SPI-Display
 mit 320 × 240 Pixeln im Querformat. Die Daten kommen alle 15 Sekunden aus der
 Geofox-GTI-API.
@@ -224,9 +226,22 @@ python3 -m venv .venv
 .venv/bin/hvv-preview preview.png
 ```
 
-Die automatisierten Tests prüfen Konfiguration, HMAC-Signatur, Linienfilter,
-Sortierung und Bildgröße. Der echte Displayzugriff und echte Geofox-Daten können
-erst mit Hardware beziehungsweise gültigen Zugangsdaten geprüft werden.
+Die automatisierten Tests prüfen unter anderem:
+
+- Konfigurationsgrenzen und die vorkonfigurierten Haltestellen,
+- HMAC-Signatur, HTTP-/Geofox-Fehler und mehrdeutige Haltestellensuchen,
+- Linienfilter, Echtzeitverspätungen, Sortierung und Zeitumstellungen,
+- Haltestellen-Cache und atomisches Speichern gefundener IDs,
+- normale, leere und veraltete Anzeigezustände,
+- Screenshot, Installationsskript und systemd-Konfiguration.
+
+GitHub Actions führt diese Prüfungen nach jedem Push und für jeden Pull Request mit
+Python 3.9, 3.11 und 3.13 aus. Zusätzlich werden `install.sh` mit Bash und
+ShellCheck geprüft, ein Vorschaubild gerendert und das installierbare Python-Paket
+gebaut.
+
+Der echte Displayzugriff und der authentifizierte Geofox-Produktivzugang können
+weiterhin erst mit Hardware beziehungsweise gültigen Zugangsdaten geprüft werden.
 
 ## Technischer Hintergrund
 
