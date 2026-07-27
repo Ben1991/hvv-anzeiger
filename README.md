@@ -263,7 +263,10 @@ Das Skript:
 - installiert die benötigten System- und Python-Pakete,
 - aktiviert SPI,
 - installiert die Anwendung unter `/opt/hvv-anzeiger`,
-- übernimmt eine vorhandene `config.json` und Zugangsdaten unverändert,
+- fragt bei der ersten Installation die Geofox Application-ID und das Passwort
+  interaktiv ab; das Passwort bleibt bei der Eingabe unsichtbar,
+- übernimmt eine vorhandene `config.json` und vollständige Zugangsdaten bei
+  späteren Updates unverändert,
 - stoppt bei einer Wiederholungsinstallation zuerst den laufenden Dienst,
 - sichert die bisherige Python-Umgebung und stellt sie bei einem Installationsfehler
   automatisch wieder her,
@@ -276,10 +279,11 @@ Das Skript:
 - aktiviert die wöchentliche Journal-Bereinigung,
 - aktiviert den Autostart.
 
-Die Zugangsdaten werden nicht als Kommandozeilenparameter abgefragt oder
-gespeichert. Wenn sie noch fehlen, nennt das Skript am Ende die beiden
-erforderlichen Befehle. Nach der erstmaligen SPI-Aktivierung sollte der
-Raspberry Pi neu gestartet werden.
+Die Zugangsdaten werden weder als Kommandozeilenparameter noch im Repository
+gespeichert. Der Installer schreibt sie atomar mit den Dateirechten `0600` nach
+`/etc/hvv-anzeiger.env`. Bricht die Eingabe ab oder bleibt ein Wert leer, startet
+der Dienst nicht mit einer unvollständigen Konfiguration. Nach der erstmaligen
+SPI-Aktivierung sollte der Raspberry Pi neu gestartet werden.
 
 ### Manuelle Installation
 
@@ -331,7 +335,8 @@ sudo install -d -m 0755 -o root -g root /opt/hvv-anzeiger
 sudo cp -R hvv_display systemd /opt/hvv-anzeiger/
 sudo install -m 0644 README.md config.example.json pyproject.toml \
   requirements.txt /opt/hvv-anzeiger/
-sudo install -m 0755 diagnose.sh /opt/hvv-anzeiger/diagnose.sh
+sudo install -m 0755 configure-credentials.sh diagnose.sh \
+  /opt/hvv-anzeiger/
 sudo install -d -m 0750 -o hvv-anzeiger -g hvv-anzeiger \
   /opt/hvv-anzeiger/var
 
@@ -350,22 +355,25 @@ steht, `display.rotate` von `0` auf `2` ändern. Bei vertauschten Farben
 
 ### 3. Geofox-Zugangsdaten hinterlegen
 
-Die von Geofox erhaltene Application-ID und das Passwort werden in einer
-geschützten Systemdatei gespeichert:
+Die von Geofox erhaltene Application-ID und das Passwort werden einmalig
+interaktiv abgefragt und in einer geschützten Systemdatei gespeichert. Das
+Passwort ist während der Eingabe nicht sichtbar:
 
 ```bash
-sudo install -m 600 /dev/null /etc/hvv-anzeiger.env
-sudo nano /etc/hvv-anzeiger.env
+./configure-credentials.sh
 ```
 
-Folgenden Inhalt eintragen:
+Eine Wiederholungsinstallation übernimmt vollständige Zugangsdaten automatisch.
+Um sie später bewusst zu ersetzen:
 
-```text
-GEOFOX_USER=DEINE_APPLICATION_ID
-GEOFOX_PASSWORD=DEIN_PASSWORT
+```bash
+cd /opt/hvv-anzeiger
+./configure-credentials.sh --force
+sudo systemctl restart hvv-anzeiger
 ```
 
-Keine Anführungszeichen um die Werte schreiben.
+Das Hilfsskript gibt das Passwort nie aus, speichert Sonderzeichen korrekt und
+setzt Eigentümer und Rechte der Datei auf `root:root` und `0600`.
 
 ### 4. Einmaliger Funktionstest
 
@@ -516,8 +524,8 @@ python3.11 -m venv .venv
 .venv/bin/coverage report
 .venv/bin/pip-audit --requirement requirements.txt --disable-pip
 .venv/bin/hvv-preview preview.png
-bash -n install.sh diagnose.sh
-shellcheck install.sh diagnose.sh
+bash -n install.sh configure-credentials.sh diagnose.sh
+shellcheck install.sh configure-credentials.sh diagnose.sh
 ```
 
 Die automatisierten Tests prüfen unter anderem:
@@ -540,6 +548,8 @@ Die automatisierten Tests prüfen unter anderem:
 - verbundene, getrennte, unbekannte und alternativ benannte WLAN-Schnittstellen,
 - normale, leere und veraltete Anzeigezustände,
 - Screenshot, Installationsskript, Pi-Diagnose und systemd-Konfiguration.
+- einmalige, verdeckte Zugangsdatenabfrage, sichere Dateirechte, Wiederverwendung
+  vorhandener Zugangsdaten und bewusste Rotation mit `--force`.
 
 GitHub Actions führt diese Prüfungen nach jedem Push und für jeden Pull Request mit
 Python 3.10, 3.11 und 3.13 aus. Zusätzlich werden Ruff einschließlich seiner

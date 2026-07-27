@@ -84,10 +84,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Check Bash syntax
-        run: bash -n install.sh diagnose.sh
+        run: bash -n install.sh configure-credentials.sh diagnose.sh
 
       - name: Run ShellCheck
-        run: shellcheck install.sh diagnose.sh
+        run: shellcheck install.sh configure-credentials.sh diagnose.sh
 
       - name: Verify log cleanup systemd units
         run: |

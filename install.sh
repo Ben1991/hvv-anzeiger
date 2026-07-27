@@ -112,6 +112,7 @@ if [[ "$(realpath "$SOURCE_DIR")" != "$(realpath "$APP_DIR")" ]]; then
     "$SOURCE_DIR/requirements.txt" \
     "$APP_DIR/"
   sudo install -m 0755 \
+    "$SOURCE_DIR/configure-credentials.sh" \
     "$SOURCE_DIR/diagnose.sh" \
     "$SOURCE_DIR/install.sh" \
     "$APP_DIR/"
@@ -144,10 +145,8 @@ fi
 sudo chown root:root "$APP_DIR/config.json"
 sudo chmod 0644 "$APP_DIR/config.json"
 
-echo "[7/8] Zugangsdaten-Datei vorbereiten"
-if [[ ! -e "$ENV_FILE" ]]; then
-  sudo install -m 0600 -o root -g root /dev/null "$ENV_FILE"
-fi
+echo "[7/8] Geofox-Zugangsdaten einrichten"
+HVV_ENV_FILE="$ENV_FILE" "$SOURCE_DIR/configure-credentials.sh"
 
 echo "[8/8] Autostart installieren"
 sudo install -m 0644 \
@@ -158,22 +157,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl enable --now "$LOG_CLEANUP_TIMER"
 
-if sudo grep -Eq '^GEOFOX_USER=.+$' "$ENV_FILE" &&
-  sudo grep -Eq '^GEOFOX_PASSWORD=.+$' "$ENV_FILE"; then
-  sudo systemctl restart "$SERVICE_NAME"
-  echo
-  echo "Installation abgeschlossen. Der Dienst läuft."
-  echo "Status: systemctl status ${SERVICE_NAME}"
-else
-  echo
-  echo "Installation abgeschlossen. Vor dem Start fehlen noch die Geofox-Zugangsdaten:"
-  echo "  sudo nano ${ENV_FILE}"
-  echo "  GEOFOX_USER=DEINE_APPLICATION_ID"
-  echo "  GEOFOX_PASSWORD=DEIN_PASSWORT"
-  echo
-  echo "Danach starten:"
-  echo "  sudo systemctl start ${SERVICE_NAME}"
-fi
+sudo systemctl restart "$SERVICE_NAME"
+echo
+echo "Installation abgeschlossen. Der Dienst wurde gestartet."
+echo "Status: systemctl status ${SERVICE_NAME}"
 
 if ((VENV_BACKED_UP == 1)); then
   sudo rm -rf "$VENV_BACKUP"
