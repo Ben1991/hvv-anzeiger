@@ -126,10 +126,11 @@ zum unten dokumentierten Aufbau passen.
 - gültige Geofox-GTI-Zugangsdaten
 - Terminal- oder SSH-Zugang zum Raspberry Pi
 
-Andere Raspberry-Pi-Modelle oder ILI9341-Module können funktionieren, gehören
-aber nicht zum dokumentierten und getesteten Zielsetup. Pinbelegung,
-Spannungsversorgung, Hintergrundbeleuchtung und Farbreihenfolge müssen zum
-konkreten Display-Modul passen.
+Andere Raspberry-Pi-Modelle können potenziell ebenfalls funktionieren, gehören
+aber nicht zum dokumentierten und getesteten Zielsetup. Getestet wurde das
+Projekt auf einem Raspberry Pi Zero 2 W. Pinbelegung, Spannungsversorgung,
+Hintergrundbeleuchtung und Farbreihenfolge müssen zum konkreten Display-Modul
+passen.
 
 ## Geofox-Zugang beantragen
 
