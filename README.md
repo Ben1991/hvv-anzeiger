@@ -211,6 +211,12 @@ Dateirechten unter `/etc/hvv-anzeiger.env`.
 Die Bezeichnungen unterscheiden sich je nach Modul. `SCK` kann auch `CLK`,
 `MOSI` auch `SDI` oder `DIN` und `CS` auch `CE` heißen.
 
+![Raspberry Pi Zero 2 W Pinbelegung](docs/raspberry-pi-zero2w-pinout.png)
+
+![Raspberry Pi GPIO Pinbelegung](docs/raspberry-pi-pinout-40.png)
+
+Quellen der Pinout-Grafiken: eTechnophiles.com.
+
 | Display | Raspberry Pi | Physischer Pin |
 |---|---|---:|
 | VCC | 3,3 V | 1 |
