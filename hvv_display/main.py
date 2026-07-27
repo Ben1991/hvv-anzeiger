@@ -13,6 +13,7 @@ from .config import ConfigError, load_config
 from .geofox import HAMBURG_TZ, GeofoxClient, GeofoxError
 from .hardware import Ili9341Display
 from .models import Departure
+from .network import wifi_connected
 from .render import render_board
 from .stations import resolve_stations
 
@@ -81,6 +82,7 @@ def run() -> int:
     consecutive_failures = 0
     last_error: str | None = None
     next_api_attempt_at = 0.0
+    wifi_interface = os.environ.get("HVV_WIFI_INTERFACE", "wlan0")
     while not stopped:
         now = datetime.now(HAMBURG_TZ)
         if time.monotonic() >= next_api_attempt_at:
@@ -114,6 +116,7 @@ def run() -> int:
             last_updated=last_updated,
             stale=last_error is not None,
             error_message=last_error,
+            wifi_is_connected=wifi_connected(wifi_interface),
             max_rows=config.api.max_departures,
         )
         if args.output:

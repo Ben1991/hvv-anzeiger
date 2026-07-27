@@ -11,6 +11,7 @@ SupplementaryGroups=spi gpio
 WorkingDirectory=/opt/hvv-anzeiger
 EnvironmentFile=/etc/hvv-anzeiger.env
 Environment=PYTHONUNBUFFERED=1
+Environment=HVV_WIFI_INTERFACE=wlan0
 ExecStart=/opt/hvv-anzeiger/.venv/bin/hvv-anzeiger --config /opt/hvv-anzeiger/config.json
 Restart=on-failure
 RestartSec=10

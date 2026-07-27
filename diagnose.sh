@@ -5,6 +5,7 @@ set -u
 APP_DIR="/opt/hvv-anzeiger"
 ENV_FILE="/etc/hvv-anzeiger.env"
 SERVICE_NAME="hvv-anzeiger"
+WIFI_INTERFACE="${HVV_WIFI_INTERFACE:-wlan0}"
 FAILURES=0
 WARNINGS=0
 PREVIEW_FILE="/tmp/hvv-anzeiger-diagnose-preview.png"
@@ -33,6 +34,13 @@ if [[ -e /dev/spidev0.0 ]]; then
   pass "SPI-Gerät /dev/spidev0.0 ist verfügbar."
 else
   fail "SPI-Gerät /dev/spidev0.0 fehlt. SPI aktivieren und neu starten."
+fi
+
+if [[ -r "/sys/class/net/${WIFI_INTERFACE}/carrier" ]] &&
+  [[ "$(<"/sys/class/net/${WIFI_INTERFACE}/carrier")" == "1" ]]; then
+  pass "WLAN-Schnittstelle ${WIFI_INTERFACE} ist verbunden."
+else
+  fail "WLAN-Schnittstelle ${WIFI_INTERFACE} ist nicht verbunden."
 fi
 
 if command -v timedatectl >/dev/null 2>&1; then

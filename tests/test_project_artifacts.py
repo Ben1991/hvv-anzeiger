@@ -30,6 +30,7 @@ class ProjectArtifactTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("EnvironmentFile=/etc/hvv-anzeiger.env", service)
+        self.assertIn("Environment=HVV_WIFI_INTERFACE=wlan0", service)
         self.assertIn("Restart=on-failure", service)
         self.assertIn("After=network-online.target time-sync.target", service)
         self.assertNotIn("GEOFOX_PASSWORD=", service)

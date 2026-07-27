@@ -102,6 +102,25 @@ def _station_badge(
     )
 
 
+def _status_text(
+    *,
+    wifi_is_connected: bool | None,
+    stale: bool,
+    last_updated: datetime | None,
+) -> str | None:
+    if wifi_is_connected is False:
+        label = "KEIN WLAN"
+        if last_updated:
+            label += f" · STAND {last_updated.strftime('%H:%M')}"
+        return label
+    if stale:
+        label = "DATEN VERALTET"
+        if last_updated:
+            label += f" · {last_updated.strftime('%H:%M')}"
+        return label
+    return None
+
+
 def render_board(
     departures: list[Departure],
     *,
@@ -109,6 +128,7 @@ def render_board(
     last_updated: datetime | None = None,
     stale: bool = False,
     error_message: str | None = None,
+    wifi_is_connected: bool | None = None,
     max_rows: int = 5,
 ) -> Image.Image:
     image = Image.new("RGB", (WIDTH, HEIGHT), BLACK)
@@ -195,10 +215,17 @@ def render_board(
                 fill=MUTED,
             )
 
-    if stale:
-        label = "DATEN VERALTET"
-        if last_updated:
-            label += f" · {last_updated.strftime('%H:%M')}"
+    status_label = _status_text(
+        wifi_is_connected=wifi_is_connected,
+        stale=stale,
+        last_updated=last_updated,
+    )
+    if status_label:
         draw.rectangle((0, HEIGHT - 14, WIDTH, HEIGHT), fill=RED)
-        draw.text((7, HEIGHT - 14), label, font=_font(10, bold=True), fill=WHITE)
+        draw.text(
+            (7, HEIGHT - 14),
+            status_label,
+            font=_font(10, bold=True),
+            fill=WHITE,
+        )
     return image

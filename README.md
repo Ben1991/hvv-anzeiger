@@ -30,6 +30,8 @@ welcher Haltestelle der Bus abfährt.
   pro Sekunde.
 - Bei einem Netzwerk- oder API-Fehler bleibt der letzte erfolgreiche Stand sichtbar
   und erhält einen roten Hinweis „DATEN VERALTET“.
+- Bei getrennter WLAN-Verbindung zeigt die Statusleiste ausdrücklich „KEIN WLAN“
+  und, falls vorhanden, die Uhrzeit des letzten erfolgreichen Datenstands.
 - Bei wiederholten Fehlern verdoppelt sich der Abstand zwischen den Versuchen bis
   maximal fünf Minuten. Uhrzeit und sichtbare Restzeiten werden trotzdem alle
   15 Sekunden neu gezeichnet. Nach einem erfolgreichen Abruf gelten auch für die
@@ -215,8 +217,8 @@ cd /opt/hvv-anzeiger
 ```
 
 Sie prüft Linux, SPI, Zeitsynchronisierung, Installation, Zugangsdaten,
-Autostart, Dienststatus und das lokale Rendern eines Displaybilds. Zugangsdaten
-werden dabei nicht ausgegeben.
+WLAN-Verbindung, Autostart, Dienststatus und das lokale Rendern eines
+Displaybilds. Zugangsdaten werden dabei nicht ausgegeben.
 
 Nach Änderungen an `config.json`:
 
@@ -238,6 +240,27 @@ Die wichtigsten Werte in `config.json`:
 | `display.bgr` | auf `true`, falls Rot und Blau vertauscht sind |
 | `stations[].label` | eindeutiges Kürzel mit 1 bis 3 Zeichen für die Anzeige |
 | `stations[].routes` | erlaubte Kombinationen aus Linie und Ziel |
+
+Die WLAN-Schnittstelle ist standardmäßig `wlan0`. Falls das Betriebssystem einen
+anderen Namen verwendet, den systemd-Dienst überschreiben:
+
+```bash
+sudo systemctl edit hvv-anzeiger
+```
+
+Folgenden Inhalt eintragen:
+
+```ini
+[Service]
+Environment=HVV_WIFI_INTERFACE=DEINE_WLAN_SCHNITTSTELLE
+```
+
+Danach neu laden und starten:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart hvv-anzeiger
+```
 
 Linien und Ziele werden tolerant gegenüber Groß-/Kleinschreibung, Umlauten und
 Schreibweisen wie `Straße`/`Strasse` verglichen. Dadurch passt zum Beispiel das
@@ -267,6 +290,7 @@ Die automatisierten Tests prüfen unter anderem:
 - eine dokumentationsnahe, anonymisierte Geofox-Beispielantwort vom API-Eingang
   bis zum gerenderten Displaybild,
 - Herkunftskennzeichnung pro Haltestelle und begrenztes Fehler-Backoff,
+- verbundene, getrennte, unbekannte und alternativ benannte WLAN-Schnittstellen,
 - normale, leere und veraltete Anzeigezustände,
 - Screenshot, Installationsskript, Pi-Diagnose und systemd-Konfiguration.
 
@@ -290,7 +314,7 @@ Nach Installation, Zugangsdaten und Neustart:
 2. Das Display muss fünf Zeilen vollständig und scharf darstellen.
 3. Rot und Blau müssen korrekt sein; andernfalls `display.bgr` ändern.
 4. `W` und `R` müssen die richtige Ausgangshaltestelle kennzeichnen.
-5. WLAN kurz trennen: Der letzte Stand muss mit „DATEN VERALTET“ sichtbar bleiben.
+5. WLAN kurz trennen: Der letzte Stand muss mit „KEIN WLAN“ sichtbar bleiben.
 6. WLAN wieder verbinden: Die Anzeige muss selbstständig zu 15 Sekunden
    Aktualisierung zurückkehren.
 7. Den Raspberry Pi neu starten und mit `systemctl status hvv-anzeiger` prüfen,
