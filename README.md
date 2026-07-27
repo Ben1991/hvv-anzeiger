@@ -13,6 +13,8 @@ Vorkonfiguriert sind:
 Die in der Anforderung doppelt erscheinende Bezeichnung „D21“ wird als
 Formatierungsfehler behandelt. Es wird nur Linie 21 angezeigt.
 
+![Beispielansicht der HVV-Abfahrtsanzeige](docs/hvv-anzeiger-preview.png)
+
 ## Was das Programm robust macht
 
 - Es nutzt Geofox-Echtzeitdaten, rechnet Verspätungen in die sichtbare Zeit ein und
@@ -55,6 +57,34 @@ Die Bezeichnungen auf Display-Modulen unterscheiden sich. `SCK` kann auch `CLK`,
 > Treiber besitzt.
 
 ## Installation
+
+### Schnellinstallation
+
+Raspberry Pi OS verwendet Linux. Deshalb ist die Installationsdatei ein
+Bash-Skript (`install.sh`) und keine Windows-`.bat`-Datei.
+
+```bash
+git clone https://github.com/Ben1991/hvv-anzeiger.git
+cd hvv-anzeiger
+chmod +x install.sh
+./install.sh
+```
+
+Das Skript:
+
+- installiert die benötigten System- und Python-Pakete,
+- aktiviert SPI,
+- installiert die Anwendung unter `/opt/hvv-anzeiger`,
+- übernimmt eine vorhandene `config.json` und Zugangsdaten unverändert,
+- passt den systemd-Dienst an den aktuellen Linux-Benutzer an,
+- aktiviert den Autostart.
+
+Die Zugangsdaten werden nicht als Kommandozeilenparameter abgefragt oder
+gespeichert. Wenn sie noch fehlen, nennt das Skript am Ende die beiden
+erforderlichen Befehle. Nach der erstmaligen SPI-Aktivierung sollte der
+Raspberry Pi neu gestartet werden.
+
+### Manuelle Installation
 
 ### 1. Raspberry Pi vorbereiten
 
