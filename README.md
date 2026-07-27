@@ -93,6 +93,28 @@ Sicherheitsupdates werden in zwei Stufen geprüft:
 - GitHub Actions führt `pip-audit` gegen die Laufzeit-Lockdatei aus. Bekannte
   Abhängigkeitsschwachstellen lassen den Workflow fehlschlagen.
 
+### Einmalige GitHub-Einstellungen für den Repository-Owner
+
+Einige Schutzfunktionen liegen nicht im Repository und können deshalb nicht durch
+einen Commit aktiviert werden. Der Owner sollte einmalig in den
+Repository-Einstellungen prüfen:
+
+- **Dependabot Alerts** und **Dependabot Security Updates** aktivieren. Die Datei
+  `.github/dependabot.yml` übernimmt danach die wöchentlichen, in CI geprüften
+  Versionsupdates.
+- `main` mit einer Branch-Regel oder einem Ruleset schützen, den Workflow **CI**
+  als erforderlichen Check setzen und Force-Push sowie Branch-Löschung
+  deaktivieren.
+- **Secret Scanning** aktivieren, falls es für den verwendeten GitHub-Tarif
+  verfügbar ist.
+- Optional **Code Scanning/CodeQL** aktivieren, falls es für das private
+  Repository verfügbar ist. Ruff Security und `pip-audit` laufen unabhängig
+  davon bereits bei jedem Push und Pull Request.
+
+Nur ein Repository-Owner oder Benutzer mit Admin-Rechten kann diese Einstellungen
+ändern. Der aktuelle Zustand lässt sich unter **Settings → Security** und
+**Settings → Rules** kontrollieren.
+
 Voraussetzung ist **Python 3.10 oder neuer**. Empfohlen wird Raspberry Pi OS
 Bookworm 64 Bit mit Python 3.11. Python 3.9 wird nicht mehr unterstützt, weil die
 bereinigte Pillow-Version 12.3.0 mindestens Python 3.10 benötigt.
