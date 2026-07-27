@@ -6,6 +6,7 @@ APP_DIR="/opt/hvv-anzeiger"
 ENV_FILE="/etc/hvv-anzeiger.env"
 SERVICE_NAME="hvv-anzeiger"
 LOG_CLEANUP_TIMER="hvv-anzeiger-log-cleanup.timer"
+EXPECTED_SERVICE_USER="hvv-anzeiger"
 WIFI_INTERFACE="${HVV_WIFI_INTERFACE:-wlan0}"
 FAILURES=0
 WARNINGS=0
@@ -101,7 +102,8 @@ else
 fi
 
 SERVICE_USER="$(systemctl show "$SERVICE_NAME" --property=User --value 2>/dev/null)"
-if [[ -n "$SERVICE_USER" ]]; then
+if [[ "$SERVICE_USER" == "$EXPECTED_SERVICE_USER" ]]; then
+  pass "Der Dienst läuft unter dem eingeschränkten Benutzer ${SERVICE_USER}."
   USER_GROUPS="$(id -nG "$SERVICE_USER" 2>/dev/null || true)"
   if [[ " $USER_GROUPS " == *" spi "* && " $USER_GROUPS " == *" gpio "* ]]; then
     pass "Dienstbenutzer hat Zugriff auf die Gruppen spi und gpio."
@@ -109,7 +111,20 @@ if [[ -n "$SERVICE_USER" ]]; then
     warn "Dienstbenutzer ist nicht Mitglied in spi und gpio; SupplementaryGroups wird verwendet."
   fi
 else
-  fail "Dienstbenutzer konnte nicht ermittelt werden."
+  fail "Dienst läuft nicht unter dem erwarteten Benutzer ${EXPECTED_SERVICE_USER}."
+fi
+
+if [[ "$(stat -c '%U:%G' "$APP_DIR" 2>/dev/null)" == "root:root" ]]; then
+  pass "Der Anwendungscode gehört root und ist für den Dienst schreibgeschützt."
+else
+  fail "Der Anwendungscode unter ${APP_DIR} muss root:root gehören."
+fi
+
+if [[ "$(stat -c '%U:%G' "$APP_DIR/var" 2>/dev/null)" ==
+  "${EXPECTED_SERVICE_USER}:${EXPECTED_SERVICE_USER}" ]]; then
+  pass "Nur das Laufzeitverzeichnis gehört dem Dienstbenutzer."
+else
+  fail "Das Laufzeitverzeichnis ${APP_DIR}/var hat einen falschen Eigentümer."
 fi
 
 echo

@@ -5,8 +5,8 @@ Wants=network-online.target time-sync.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
+User=hvv-anzeiger
+Group=hvv-anzeiger
 SupplementaryGroups=spi gpio
 WorkingDirectory=/opt/hvv-anzeiger
 EnvironmentFile=/etc/hvv-anzeiger.env
