@@ -411,15 +411,48 @@ haben die Dateirechte `0600`.
 
 ### Anwendung aktualisieren
 
-Im ursprünglich geklonten Repository:
+Wenn auf GitHub eine neue Version verfügbar ist, per SSH am Raspberry Pi
+anmelden und in das ursprünglich geklonte Repository wechseln. Der Ordner heißt
+normalerweise `hvv-anzeiger`:
 
 ```bash
-git pull --ff-only
+cd ~/hvv-anzeiger
+git pull --ff-only origin main
 ./install.sh
 ```
 
-Vorhandene Konfiguration und vollständige Zugangsdaten bleiben erhalten. Neue
-Defaults verändern deshalb keine bereits vorhandene `config.json`.
+Der Installer aktualisiert die Anwendung unter `/opt/hvv-anzeiger` und startet
+den Dienst neu. Danach den Status und die Installation prüfen:
+
+```bash
+systemctl status hvv-anzeiger --no-pager
+cd /opt/hvv-anzeiger
+./diagnose.sh
+```
+
+Ein Neustart des Raspberry Pi ist bei einem normalen Anwendungsupdate nicht
+erforderlich. Er ist nur nötig, wenn der Installer darauf hinweist oder zugleich
+Betriebssystem-, Kernel- oder SPI-Einstellungen geändert wurden.
+
+Vorhandene `config.json` und vollständige Geofox-Zugangsdaten bleiben erhalten.
+Neue Defaults aus dem Repository verändern deshalb keine vorhandene
+Konfiguration. Kann `git pull` wegen eigener lokaler Änderungen nicht ausgeführt
+werden, diese Änderungen nicht ungeprüft überschreiben, sondern zuerst sichern
+oder in Git committen.
+
+Falls das ursprünglich geklonte Repository nicht mehr existiert, kann es erneut
+heruntergeladen werden. Die bestehende Installation und Konfiguration werden
+trotzdem übernommen:
+
+```bash
+cd ~
+git clone https://github.com/Ben1991/hvv-anzeiger.git
+cd hvv-anzeiger
+./install.sh
+```
+
+Schlägt die Prüfung oder der Start der neuen Version fehl, stellt der Installer
+automatisch die vorherige funktionsfähige Installation wieder her.
 
 ### Vorschau ohne Display erzeugen
 
