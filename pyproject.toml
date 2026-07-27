@@ -18,6 +18,8 @@ dependencies = [
 [project.optional-dependencies]
 test = [
   "build>=1,<2",
+  "coverage[toml]>=7.6,<8",
+  "ruff>=0.12,<1",
 ]
 
 [project.scripts]
@@ -26,3 +28,19 @@ hvv-preview = "hvv_display.preview:main"
 
 [tool.setuptools.packages.find]
 include = ["hvv_display*"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.coverage.run]
+branch = true
+source = ["hvv_display"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true

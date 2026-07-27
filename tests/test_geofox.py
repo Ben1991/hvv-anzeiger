@@ -4,7 +4,7 @@ import hmac
 import unittest
 from datetime import datetime
 
-from hvv_display.geofox import GeofoxClient, HAMBURG_TZ, normalize, route_matches
+from hvv_display.geofox import HAMBURG_TZ, GeofoxClient, normalize, route_matches
 from hvv_display.models import Route, Station
 
 

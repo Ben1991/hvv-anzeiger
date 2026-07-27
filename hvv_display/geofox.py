@@ -182,7 +182,8 @@ class GeofoxClient:
         if len(matches) > 1:
             names = ", ".join(str(item.get("combinedName")) for item in matches[:3])
             raise GeofoxError(
-                f"Haltestelle {name} ist nicht eindeutig ({names}); ID in config.json setzen"
+                f"Haltestelle {name} ist nicht eindeutig ({names}); "
+                "ID in config.json setzen"
             )
         station = matches[0]
         return {
@@ -221,20 +222,45 @@ class GeofoxClient:
             payload["stations"] = station_names
 
         result = self._post("departureList", payload)
-        routes_by_station_id = {
-            station.station_id: station.routes
+        stations_by_id = {
+            station.station_id: station
             for station in stations
             if station.station_id
         }
-        all_routes = tuple(route for station in stations for route in station.routes)
         departures: list[Departure] = []
-        for raw in (result.get("departures") or []):
+        raw_departures = result.get("departures") or []
+        if not isinstance(raw_departures, list):
+            raise GeofoxError("Geofox liefert keine gültige Abfahrtsliste")
+        for raw in raw_departures:
+            if not isinstance(raw, dict):
+                LOG.warning("Ungültiger Eintrag in der Abfahrtsliste ignoriert")
+                continue
             line = raw.get("line") or {}
+            if not isinstance(line, dict):
+                LOG.warning("Abfahrt ohne gültige Linienangabe ignoriert")
+                continue
             line_name = str(line.get("name", ""))
             direction = str(line.get("direction", ""))
             response_station = raw.get("station") or {}
-            routes = routes_by_station_id.get(response_station.get("id"), all_routes)
-            if not route_matches(line_name, direction, routes):
+            response_station_id = (
+                response_station.get("id")
+                if isinstance(response_station, dict)
+                else None
+            )
+            selected_station = stations_by_id.get(response_station_id)
+            if selected_station:
+                matching_stations = (
+                    [selected_station]
+                    if route_matches(line_name, direction, selected_station.routes)
+                    else []
+                )
+            else:
+                matching_stations = [
+                    station
+                    for station in stations
+                    if route_matches(line_name, direction, station.routes)
+                ]
+            if not matching_stations:
                 continue
             try:
                 offset = int(raw["timeOffset"])
@@ -253,6 +279,11 @@ class GeofoxClient:
                     departure_time=departure_time,
                     delay_seconds=delay_seconds,
                     cancelled=bool(raw.get("cancelled", False)),
+                    station_label=(
+                        matching_stations[0].label
+                        if len(matching_stations) == 1
+                        else ""
+                    ),
                 )
             )
         return sorted(departures, key=lambda departure: departure.departure_time)

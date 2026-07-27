@@ -15,11 +15,25 @@ def main() -> None:
 
     now = datetime.now(HAMBURG_TZ).replace(second=0, microsecond=0)
     departures = [
-        Departure("186", "S Othmarschen", now + timedelta(minutes=3)),
-        Departure("21", "U Niendorf Nord", now + timedelta(minutes=7)),
-        Departure("184", "S Halstenbek", now + timedelta(minutes=12), delay_seconds=120),
-        Departure("384", "S Elbgaustraße", now + timedelta(minutes=18)),
-        Departure("186", "S Othmarschen", now + timedelta(minutes=24)),
+        Departure(
+            "186", "S Othmarschen", now + timedelta(minutes=3), station_label="W"
+        ),
+        Departure(
+            "21", "U Niendorf Nord", now + timedelta(minutes=7), station_label="R"
+        ),
+        Departure(
+            "184",
+            "S Halstenbek",
+            now + timedelta(minutes=12),
+            delay_seconds=120,
+            station_label="W",
+        ),
+        Departure(
+            "384", "S Elbgaustraße", now + timedelta(minutes=18), station_label="W"
+        ),
+        Departure(
+            "186", "S Othmarschen", now + timedelta(minutes=24), station_label="W"
+        ),
     ]
     render_board(departures, now=now, last_updated=now).save(args.output)
 

@@ -23,6 +23,7 @@ class ConfigTest(unittest.TestCase):
             [station.station_id for station in config.stations],
             ["Master:82039", "Master:82015"],
         )
+        self.assertEqual([station.label for station in config.stations], ["W", "R"])
 
     def test_refresh_below_limit_is_rejected(self) -> None:
         raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
@@ -55,6 +56,20 @@ class ConfigTest(unittest.TestCase):
         raw["stations"] = []
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ConfigError):
+                load_config(self.write_config(raw, directory))
+
+    def test_duplicate_station_labels_are_rejected(self) -> None:
+        raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
+        raw["stations"][1]["label"] = raw["stations"][0]["label"]
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ConfigError, "eindeutig"):
+                load_config(self.write_config(raw, directory))
+
+    def test_string_boolean_is_rejected(self) -> None:
+        raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
+        raw["display"]["bgr"] = "false"
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ConfigError, "true oder false"):
                 load_config(self.write_config(raw, directory))
 
 

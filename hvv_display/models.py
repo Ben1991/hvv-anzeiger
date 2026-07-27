@@ -16,6 +16,7 @@ class Station:
     city: str
     routes: tuple[Route, ...]
     station_id: str | None = None
+    label: str = ""
 
     def as_geofox_name(self) -> dict[str, str]:
         if not self.station_id:
@@ -35,3 +36,4 @@ class Departure:
     departure_time: datetime
     delay_seconds: int = 0
     cancelled: bool = False
+    station_label: str = ""

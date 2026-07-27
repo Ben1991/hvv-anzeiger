@@ -5,7 +5,6 @@ from pathlib import Path
 
 from PIL import Image
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -22,6 +21,9 @@ class ProjectArtifactTest(unittest.TestCase):
         mode = installer.stat().st_mode
         self.assertTrue(mode & stat.S_IXUSR)
         self.assertTrue(os.access(installer, os.X_OK))
+        diagnostic = ROOT / "diagnose.sh"
+        self.assertTrue(diagnostic.stat().st_mode & stat.S_IXUSR)
+        self.assertTrue(os.access(diagnostic, os.X_OK))
 
     def test_systemd_service_uses_protected_environment_file(self) -> None:
         service = (ROOT / "systemd" / "hvv-anzeiger.service").read_text(
@@ -29,6 +31,7 @@ class ProjectArtifactTest(unittest.TestCase):
         )
         self.assertIn("EnvironmentFile=/etc/hvv-anzeiger.env", service)
         self.assertIn("Restart=on-failure", service)
+        self.assertIn("After=network-online.target time-sync.target", service)
         self.assertNotIn("GEOFOX_PASSWORD=", service)
 
 

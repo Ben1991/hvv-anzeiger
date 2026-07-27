@@ -46,6 +46,12 @@ def _required(data: dict[str, Any], key: str, section: str) -> Any:
     return data[key]
 
 
+def _boolean(value: Any, field: str) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigError(f"{field} muss true oder false sein")
+    return value
+
+
 def load_config(path: str | Path) -> AppConfig:
     config_path = Path(path)
     try:
@@ -74,6 +80,10 @@ def load_config(path: str | Path) -> AppConfig:
         raise ConfigError("api.refresh_seconds muss mindestens 15 sein")
     if not 1 <= api.max_departures <= 5:
         raise ConfigError("api.max_departures muss zwischen 1 und 5 liegen")
+    if api.request_timeout_seconds <= 0:
+        raise ConfigError("api.request_timeout_seconds muss größer als 0 sein")
+    if api.max_time_offset_minutes <= 0:
+        raise ConfigError("api.max_time_offset_minutes muss größer als 0 sein")
 
     display = DisplayConfig(
         spi_port=int(display_raw.get("spi_port", 0)),
@@ -82,13 +92,21 @@ def load_config(path: str | Path) -> AppConfig:
         gpio_reset=int(display_raw.get("gpio_reset", 25)),
         rotate=int(display_raw.get("rotate", 0)),
         bus_speed_hz=int(display_raw.get("bus_speed_hz", 16_000_000)),
-        bgr=bool(display_raw.get("bgr", False)),
+        bgr=_boolean(display_raw.get("bgr", False), "display.bgr"),
     )
     if display.rotate not in (0, 1, 2, 3):
         raise ConfigError("display.rotate muss 0, 1, 2 oder 3 sein")
+    if display.bus_speed_hz <= 0:
+        raise ConfigError("display.bus_speed_hz muss größer als 0 sein")
 
     stations: list[Station] = []
     for index, station_raw in enumerate(stations_raw):
+        station_name = str(_required(station_raw, "name", f"stations[{index}]"))
+        label = str(station_raw.get("label") or station_name[:1]).strip().upper()
+        if not 1 <= len(label) <= 3:
+            raise ConfigError(
+                f"stations[{index}].label muss zwischen 1 und 3 Zeichen lang sein"
+            )
         routes = tuple(
             Route(
                 line=str(_required(route, "line", f"stations[{index}].routes")),
@@ -98,15 +116,21 @@ def load_config(path: str | Path) -> AppConfig:
             )
             for route in _required(station_raw, "routes", f"stations[{index}]")
         )
+        if not routes:
+            raise ConfigError(f"stations[{index}].routes darf nicht leer sein")
         stations.append(
             Station(
-                name=str(_required(station_raw, "name", f"stations[{index}]")),
+                name=station_name,
                 city=str(station_raw.get("city", "Hamburg")),
                 station_id=station_raw.get("id"),
                 routes=routes,
+                label=label,
             )
         )
 
     if not stations:
         raise ConfigError("Mindestens eine Haltestelle muss konfiguriert sein")
+    labels = [station.label for station in stations]
+    if len(labels) != len(set(labels)):
+        raise ConfigError("stations[].label muss pro Haltestelle eindeutig sein")
     return AppConfig(api=api, display=display, stations=tuple(stations))

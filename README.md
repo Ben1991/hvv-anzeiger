@@ -14,6 +14,10 @@ Vorkonfiguriert sind:
 
 ![Beispielansicht der HVV-Abfahrtsanzeige](docs/hvv-anzeiger-preview.png)
 
+Das Kürzel `W` kennzeichnet die Weistritzstraße, `R` die Recknitzstraße. Dadurch
+bleibt auch bei einer gemeinsamen, chronologisch sortierten Liste erkennbar, von
+welcher Haltestelle der Bus abfährt.
+
 ## Was das Programm robust macht
 
 - Es nutzt Geofox-Echtzeitdaten, rechnet Verspätungen in die sichtbare Zeit ein und
@@ -26,7 +30,13 @@ Vorkonfiguriert sind:
   pro Sekunde.
 - Bei einem Netzwerk- oder API-Fehler bleibt der letzte erfolgreiche Stand sichtbar
   und erhält einen roten Hinweis „DATEN VERALTET“.
+- Bei wiederholten Fehlern verdoppelt sich der Abstand zwischen den Versuchen bis
+  maximal fünf Minuten. Uhrzeit und sichtbare Restzeiten werden trotzdem alle
+  15 Sekunden neu gezeichnet. Nach einem erfolgreichen Abruf gelten auch für die
+  API wieder 15 Sekunden.
 - Sowohl HTTP-Fehler als auch Geofox-Fehler im JSON-Feld `returnCode` werden geprüft.
+- Der systemd-Dienst startet erst nach Netzwerk- und Zeitsynchronisierungs-Targets.
+  Das ist wichtig, weil ein Raspberry Pi üblicherweise keine Echtzeituhr besitzt.
 
 ## Benötigte Hardware
 
@@ -75,6 +85,7 @@ Das Skript:
 - aktiviert SPI,
 - installiert die Anwendung unter `/opt/hvv-anzeiger`,
 - übernimmt eine vorhandene `config.json` und Zugangsdaten unverändert,
+- aktiviert die Netzwerk-Zeitsynchronisierung,
 - passt den systemd-Dienst an den aktuellen Linux-Benutzer an,
 - aktiviert den Autostart.
 
@@ -92,6 +103,7 @@ sudo apt update
 sudo apt install -y git python3-venv python3-dev fonts-dejavu-core \
   libjpeg-dev zlib1g-dev libfreetype6-dev
 sudo raspi-config
+sudo timedatectl set-ntp true
 ```
 
 In `raspi-config` **Interface Options → SPI → Yes** wählen und anschließend neu
@@ -105,7 +117,11 @@ Nach dem Neustart sollte `/dev/spidev0.0` existieren:
 
 ```bash
 ls -l /dev/spidev0.0
+timedatectl status
 ```
+
+Bei `System clock synchronized` muss `yes` stehen, bevor die echten Abfahrtszeiten
+geprüft werden.
 
 ### 2. Anwendung installieren
 
@@ -117,7 +133,7 @@ sudo chown -R "$USER":"$USER" /opt/hvv-anzeiger
 cd /opt/hvv-anzeiger
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install .
+.venv/bin/pip install --constraint constraints.txt .
 cp config.example.json config.json
 ```
 
@@ -191,6 +207,17 @@ systemctl status hvv-anzeiger
 journalctl -u hvv-anzeiger -f
 ```
 
+Eine vollständige Softwarediagnose auf dem Raspberry Pi ausführen:
+
+```bash
+cd /opt/hvv-anzeiger
+./diagnose.sh
+```
+
+Sie prüft Linux, SPI, Zeitsynchronisierung, Installation, Zugangsdaten,
+Autostart, Dienststatus und das lokale Rendern eines Displaybilds. Zugangsdaten
+werden dabei nicht ausgegeben.
+
 Nach Änderungen an `config.json`:
 
 ```bash
@@ -209,6 +236,7 @@ Die wichtigsten Werte in `config.json`:
 | `display.gpio_dc` / `gpio_reset` | verwendete GPIO-Nummern |
 | `display.rotate` | Drehung: 0, 1, 2 oder 3 |
 | `display.bgr` | auf `true`, falls Rot und Blau vertauscht sind |
+| `stations[].label` | eindeutiges Kürzel mit 1 bis 3 Zeichen für die Anzeige |
 | `stations[].routes` | erlaubte Kombinationen aus Linie und Ziel |
 
 Linien und Ziele werden tolerant gegenüber Groß-/Kleinschreibung, Umlauten und
@@ -221,9 +249,13 @@ Auf einem Entwicklungsrechner:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install .
-.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/pip install --constraint constraints.txt --editable ".[test]"
+.venv/bin/ruff check .
+.venv/bin/coverage run -m unittest discover -s tests -v
+.venv/bin/coverage report
 .venv/bin/hvv-preview preview.png
+bash -n install.sh diagnose.sh
+shellcheck install.sh diagnose.sh
 ```
 
 Die automatisierten Tests prüfen unter anderem:
@@ -232,16 +264,37 @@ Die automatisierten Tests prüfen unter anderem:
 - HMAC-Signatur, HTTP-/Geofox-Fehler und mehrdeutige Haltestellensuchen,
 - Linienfilter, Echtzeitverspätungen, Sortierung und Zeitumstellungen,
 - Haltestellen-Cache und atomisches Speichern gefundener IDs,
+- eine dokumentationsnahe, anonymisierte Geofox-Beispielantwort vom API-Eingang
+  bis zum gerenderten Displaybild,
+- Herkunftskennzeichnung pro Haltestelle und begrenztes Fehler-Backoff,
 - normale, leere und veraltete Anzeigezustände,
-- Screenshot, Installationsskript und systemd-Konfiguration.
+- Screenshot, Installationsskript, Pi-Diagnose und systemd-Konfiguration.
 
 GitHub Actions führt diese Prüfungen nach jedem Push und für jeden Pull Request mit
-Python 3.9, 3.11 und 3.13 aus. Zusätzlich werden `install.sh` mit Bash und
-ShellCheck geprüft, ein Vorschaubild gerendert und das installierbare Python-Paket
-gebaut.
+Python 3.9, 3.11 und 3.13 aus. Zusätzlich werden Ruff, eine Mindest-Testabdeckung
+von 80 Prozent, beide Shell-Skripte mit Bash und ShellCheck, ein Vorschaubild und
+das installierbare Python-Paket geprüft.
+
+Die direkten Laufzeitabhängigkeiten sind in `constraints.txt` festgeschrieben.
+Dependabot sucht wöchentlich nach kontrollierten Aktualisierungen für Python-Pakete
+und GitHub Actions.
 
 Der echte Displayzugriff und der authentifizierte Geofox-Produktivzugang können
 weiterhin erst mit Hardware beziehungsweise gültigen Zugangsdaten geprüft werden.
+
+## Abnahme auf dem Raspberry Pi
+
+Nach Installation, Zugangsdaten und Neustart:
+
+1. `./diagnose.sh` muss ohne Fehler enden.
+2. Das Display muss fünf Zeilen vollständig und scharf darstellen.
+3. Rot und Blau müssen korrekt sein; andernfalls `display.bgr` ändern.
+4. `W` und `R` müssen die richtige Ausgangshaltestelle kennzeichnen.
+5. WLAN kurz trennen: Der letzte Stand muss mit „DATEN VERALTET“ sichtbar bleiben.
+6. WLAN wieder verbinden: Die Anzeige muss selbstständig zu 15 Sekunden
+   Aktualisierung zurückkehren.
+7. Den Raspberry Pi neu starten und mit `systemctl status hvv-anzeiger` prüfen,
+   dass die Anzeige ohne manuelles Eingreifen wieder läuft.
 
 ## Technischer Hintergrund
 

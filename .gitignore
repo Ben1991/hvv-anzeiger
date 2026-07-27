@@ -5,6 +5,7 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+.coverage
 .DS_Store
 .env
 var/

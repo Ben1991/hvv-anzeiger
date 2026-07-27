@@ -21,6 +21,7 @@
       "name": "Weistritzstraße",
       "city": "Hamburg",
       "id": "Master:82039",
+      "label": "W",
       "routes": [
         {
           "line": "186",
@@ -40,6 +41,7 @@
       "name": "Recknitzstraße",
       "city": "Hamburg",
       "id": "Master:82015",
+      "label": "R",
       "routes": [
         {
           "line": "21",

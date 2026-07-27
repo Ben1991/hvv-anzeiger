@@ -10,13 +10,24 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import ConfigError, load_config
-from .geofox import GeofoxClient, GeofoxError, HAMBURG_TZ
+from .geofox import HAMBURG_TZ, GeofoxClient, GeofoxError
 from .hardware import Ili9341Display
 from .models import Departure
 from .render import render_board
 from .stations import resolve_stations
 
 LOG = logging.getLogger(__name__)
+MAX_REFRESH_BACKOFF_SECONDS = 300
+
+
+def refresh_delay(refresh_seconds: int, consecutive_failures: int) -> int:
+    """Return a bounded retry delay; the first failure doubles the normal interval."""
+    if consecutive_failures <= 0:
+        return refresh_seconds
+    return min(
+        MAX_REFRESH_BACKOFF_SECONDS,
+        refresh_seconds * (2 ** min(consecutive_failures, 5)),
+    )
 
 
 def _arguments() -> argparse.Namespace:
@@ -67,28 +78,42 @@ def run() -> int:
 
     latest: list[Departure] = []
     last_updated: datetime | None = None
+    consecutive_failures = 0
+    last_error: str | None = None
+    next_api_attempt_at = 0.0
     while not stopped:
         now = datetime.now(HAMBURG_TZ)
-        error: str | None = None
-        try:
-            latest = client.departure_list(
-                stations,
-                now=now,
-                max_list=30,
-                max_time_offset=config.api.max_time_offset_minutes,
+        if time.monotonic() >= next_api_attempt_at:
+            try:
+                latest = client.departure_list(
+                    stations,
+                    now=now,
+                    max_list=30,
+                    max_time_offset=config.api.max_time_offset_minutes,
+                )
+                last_updated = now
+                last_error = None
+                consecutive_failures = 0
+                LOG.info("%d passende Abfahrten geladen", len(latest))
+            except GeofoxError as exc:
+                last_error = str(exc)
+                consecutive_failures += 1
+                LOG.warning("Aktualisierung fehlgeschlagen: %s", exc)
+
+            api_delay = refresh_delay(
+                config.api.refresh_seconds,
+                consecutive_failures,
             )
-            last_updated = now
-            LOG.info("%d passende Abfahrten geladen", len(latest))
-        except GeofoxError as exc:
-            error = str(exc)
-            LOG.warning("Aktualisierung fehlgeschlagen: %s", exc)
+            next_api_attempt_at = time.monotonic() + api_delay
+            if consecutive_failures:
+                LOG.info("Nächster Geofox-Versuch in %d Sekunden", api_delay)
 
         image = render_board(
             latest,
             now=now,
             last_updated=last_updated,
-            stale=error is not None,
-            error_message=error,
+            stale=last_error is not None,
+            error_message=last_error,
             max_rows=config.api.max_departures,
         )
         if args.output:
@@ -99,7 +124,7 @@ def run() -> int:
             display.show(image)
 
         if args.once:
-            return 0 if error is None else 1
+            return 0 if last_error is None else 1
         deadline = time.monotonic() + config.api.refresh_seconds
         while not stopped and time.monotonic() < deadline:
             time.sleep(min(0.25, deadline - time.monotonic()))

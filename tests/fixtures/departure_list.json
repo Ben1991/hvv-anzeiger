@@ -1,0 +1,57 @@
+{
+  "returnCode": "OK",
+  "time": {
+    "date": "27.07.2026",
+    "time": "12:00"
+  },
+  "departures": [
+    {
+      "line": {
+        "name": "184",
+        "direction": "S Halstenbek"
+      },
+      "station": {
+        "id": "Master:82039"
+      },
+      "timeOffset": 8,
+      "delay": 120
+    },
+    {
+      "line": {
+        "name": "21",
+        "direction": "U Niendorf Nord"
+      },
+      "station": {
+        "id": "Master:82015"
+      },
+      "timeOffset": 3,
+      "delay": 0
+    },
+    {
+      "line": {
+        "name": "186",
+        "direction": "S Othmarschen"
+      },
+      "timeOffset": 5,
+      "delay": 0
+    },
+    {
+      "line": {
+        "name": "384",
+        "direction": "S Elbgaustraße"
+      },
+      "station": {
+        "id": "Master:82039"
+      },
+      "timeOffset": 12,
+      "cancelled": true
+    },
+    {
+      "line": {
+        "name": "22",
+        "direction": "U Kellinghusenstraße"
+      },
+      "timeOffset": 1
+    }
+  ]
+}

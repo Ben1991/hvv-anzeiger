@@ -3,6 +3,7 @@ import unittest
 import urllib.error
 
 from hvv_display.geofox import GeofoxClient, GeofoxError
+from hvv_display.models import Route, Station
 
 
 class FakeResponse:
@@ -64,6 +65,20 @@ class GeofoxErrorTest(unittest.TestCase):
         client = self.client_for(b"<html>not json</html>")
         with self.assertRaisesRegex(GeofoxError, "ungültige Antwort"):
             client._post("departureList", {})
+
+    def test_invalid_departure_collection_is_rejected(self) -> None:
+        client = self.client_for(
+            b'{"returnCode":"OK","departures":{"unexpected":"object"}}'
+        )
+        station = Station(
+            "Test",
+            "Hamburg",
+            (Route("1", "Ziel"),),
+            "Master:1",
+            "T",
+        )
+        with self.assertRaisesRegex(GeofoxError, "Abfahrtsliste"):
+            client.departure_list((station,))
 
     def test_station_search_rejects_ambiguous_exact_matches(self) -> None:
         client = self.client_for(

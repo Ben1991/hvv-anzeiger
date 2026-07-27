@@ -83,6 +83,25 @@ def _line_badge(
     )
 
 
+def _station_badge(
+    draw: ImageDraw.ImageDraw, x: int, y: int, label: str
+) -> None:
+    if not label:
+        return
+    draw.rounded_rectangle((x, y, x + 18, y + 17), radius=3, fill=BLUE)
+    font = _font(10, bold=True)
+    box = draw.textbbox((0, 0), label, font=font)
+    draw.text(
+        (
+            x + (18 - (box[2] - box[0])) / 2,
+            y + (17 - (box[3] - box[1])) / 2 - 1,
+        ),
+        label,
+        font=font,
+        fill=WHITE,
+    )
+
+
 def render_board(
     departures: list[Departure],
     *,
@@ -126,17 +145,27 @@ def render_board(
     else:
         for index, departure in enumerate(available):
             y = header_height + index * row_height
-            draw.line((8, y + row_height - 1, WIDTH - 8, y + row_height - 1), fill=ROW_LINE)
+            draw.line(
+                (8, y + row_height - 1, WIDTH - 8, y + row_height - 1),
+                fill=ROW_LINE,
+            )
             _line_badge(draw, 9, y + 6, 58, 27, departure.line)
+            _station_badge(draw, 75, y + 10, departure.station_label)
 
             destination, destination_font = _fit_text(
                 draw,
                 departure.destination,
-                164,
+                143 if departure.station_label else 164,
                 start_size=18,
                 min_size=13,
             )
-            draw.text((76, y + 7), destination, font=destination_font, fill=WHITE)
+            destination_x = 99 if departure.station_label else 76
+            draw.text(
+                (destination_x, y + 7),
+                destination,
+                font=destination_font,
+                fill=WHITE,
+            )
 
             if departure.cancelled:
                 right_text = "AUS"

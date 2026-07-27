@@ -30,7 +30,7 @@ command -v sudo >/dev/null 2>&1 || fail "sudo wurde nicht gefunden."
 command -v apt-get >/dev/null 2>&1 || fail "Dieses Skript benötigt Raspberry Pi OS/Debian."
 command -v raspi-config >/dev/null 2>&1 || fail "raspi-config wurde nicht gefunden."
 
-echo "[1/6] Systempakete installieren"
+echo "[1/7] Systempakete installieren"
 sudo apt-get update
 sudo apt-get install -y \
   git \
@@ -41,41 +41,53 @@ sudo apt-get install -y \
   zlib1g-dev \
   libfreetype6-dev
 
-echo "[2/6] SPI aktivieren"
+echo "[2/7] SPI aktivieren"
 sudo raspi-config nonint do_spi 0
 
-echo "[3/6] Anwendung nach ${APP_DIR} kopieren"
+echo "[3/7] Netzwerk-Zeitsynchronisierung aktivieren"
+if command -v timedatectl >/dev/null 2>&1; then
+  sudo timedatectl set-ntp true
+else
+  fail "timedatectl wurde nicht gefunden; eine korrekte Systemzeit ist erforderlich."
+fi
+
+echo "[4/7] Anwendung nach ${APP_DIR} kopieren"
 sudo install -d -o "$INSTALL_USER" -g "$INSTALL_GROUP" "$APP_DIR"
 if [[ "$(realpath "$SOURCE_DIR")" != "$(realpath "$APP_DIR")" ]]; then
   sudo cp -R \
     "$SOURCE_DIR/hvv_display" \
     "$SOURCE_DIR/systemd" \
     "$SOURCE_DIR/docs" \
+    "$SOURCE_DIR/tests" \
     "$APP_DIR/"
   sudo install -m 0644 \
     "$SOURCE_DIR/.gitignore" \
     "$SOURCE_DIR/README.md" \
     "$SOURCE_DIR/config.example.json" \
+    "$SOURCE_DIR/constraints.txt" \
     "$SOURCE_DIR/pyproject.toml" \
     "$APP_DIR/"
+  sudo install -m 0755 "$SOURCE_DIR/diagnose.sh" "$APP_DIR/diagnose.sh"
 fi
 sudo chown -R "$INSTALL_USER:$INSTALL_GROUP" "$APP_DIR"
 
-echo "[4/6] Python-Umgebung installieren"
+echo "[5/7] Python-Umgebung installieren"
 python3 -m venv "$APP_DIR/.venv"
 "$APP_DIR/.venv/bin/pip" install --upgrade pip
-"$APP_DIR/.venv/bin/pip" install "$APP_DIR"
+"$APP_DIR/.venv/bin/pip" install \
+  --constraint "$APP_DIR/constraints.txt" \
+  "$APP_DIR"
 
 if [[ ! -f "$APP_DIR/config.json" ]]; then
   install -m 0644 "$APP_DIR/config.example.json" "$APP_DIR/config.json"
 fi
 
-echo "[5/6] Zugangsdaten-Datei vorbereiten"
+echo "[6/7] Zugangsdaten-Datei vorbereiten"
 if [[ ! -e "$ENV_FILE" ]]; then
   sudo install -m 0600 -o root -g root /dev/null "$ENV_FILE"
 fi
 
-echo "[6/6] Autostart installieren"
+echo "[7/7] Autostart installieren"
 TEMP_SERVICE="$(mktemp)"
 sed \
   -e "s/^User=.*/User=${INSTALL_USER}/" \

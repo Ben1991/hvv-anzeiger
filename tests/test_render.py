@@ -38,6 +38,25 @@ class RenderTest(unittest.TestCase):
         expected = render_board(departures[:5], now=now, max_rows=5)
         self.assertEqual(limited.tobytes(), expected.tobytes())
 
+    def test_station_label_changes_the_rendered_row(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        without_label = render_board(
+            [Departure("21", "U Niendorf Nord", now + timedelta(minutes=3))],
+            now=now,
+        )
+        with_label = render_board(
+            [
+                Departure(
+                    "21",
+                    "U Niendorf Nord",
+                    now + timedelta(minutes=3),
+                    station_label="R",
+                )
+            ],
+            now=now,
+        )
+        self.assertNotEqual(without_label.tobytes(), with_label.tobytes())
+
 
 if __name__ == "__main__":
     unittest.main()
