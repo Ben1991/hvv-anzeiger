@@ -15,7 +15,7 @@ EnvironmentFile=/etc/hvv-anzeiger.env
 Environment=PYTHONUNBUFFERED=1
 Environment=HVV_WIFI_INTERFACE=wlan0
 ExecStart=/opt/hvv-anzeiger/.venv/bin/python -m hvv_display --config /opt/hvv-anzeiger/config.json
-Restart=on-failure
+Restart=always
 RestartSec=10
 UMask=0077
 NoNewPrivileges=true
