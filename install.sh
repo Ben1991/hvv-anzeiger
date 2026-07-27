@@ -5,6 +5,7 @@ set -Eeuo pipefail
 APP_DIR="/opt/hvv-anzeiger"
 ENV_FILE="/etc/hvv-anzeiger.env"
 SERVICE_NAME="hvv-anzeiger"
+LOG_CLEANUP_TIMER="hvv-anzeiger-log-cleanup.timer"
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_USER="$(id -un)"
 INSTALL_GROUP="$(id -gn)"
@@ -118,8 +119,13 @@ sed \
   -e "s/^Group=.*/Group=${INSTALL_GROUP}/" \
   "$APP_DIR/systemd/hvv-anzeiger.service" >"$TEMP_SERVICE"
 sudo install -m 0644 "$TEMP_SERVICE" "/etc/systemd/system/${SERVICE_NAME}.service"
+sudo install -m 0644 \
+  "$APP_DIR/systemd/hvv-anzeiger-log-cleanup.service" \
+  "$APP_DIR/systemd/hvv-anzeiger-log-cleanup.timer" \
+  /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
+sudo systemctl enable --now "$LOG_CLEANUP_TIMER"
 
 if sudo grep -Eq '^GEOFOX_USER=.+$' "$ENV_FILE" &&
   sudo grep -Eq '^GEOFOX_PASSWORD=.+$' "$ENV_FILE"; then

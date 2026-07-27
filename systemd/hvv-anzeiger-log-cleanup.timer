@@ -1,0 +1,11 @@
+[Unit]
+Description=Wöchentliche Bereinigung alter systemd-Journale
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=1h
+Unit=hvv-anzeiger-log-cleanup.service
+
+[Install]
+WantedBy=timers.target

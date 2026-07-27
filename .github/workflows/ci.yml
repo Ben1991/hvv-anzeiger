@@ -86,6 +86,12 @@ jobs:
       - name: Run ShellCheck
         run: shellcheck install.sh diagnose.sh
 
+      - name: Verify log cleanup systemd units
+        run: |
+          systemd-analyze verify \
+            systemd/hvv-anzeiger-log-cleanup.service \
+            systemd/hvv-anzeiger-log-cleanup.timer
+
   package:
     name: Build package
     runs-on: ubuntu-latest

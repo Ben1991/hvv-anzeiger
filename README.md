@@ -46,6 +46,9 @@ welcher Haltestelle der Bus abfährt.
 - Erfolgreiche Routineabrufe stehen im Debug-Log. Auf Info-Ebene erscheint höchstens
   einmal pro Stunde ein Lebenszeichen; Fehler bleiben sofort sichtbar. Das reduziert
   unnötige Schreibzugriffe auf die SD-Karte.
+- Ein systemd-Timer bereinigt das Journal wöchentlich. Archivierte Einträge, die
+  älter als sieben Tage sind, werden entfernt; zusätzlich wird der archivierte
+  Journalbestand auf 100 MiB begrenzt.
 - Der systemd-Dienst startet erst nach Netzwerk- und Zeitsynchronisierungs-Targets.
   Das ist wichtig, weil ein Raspberry Pi üblicherweise keine Echtzeituhr besitzt.
 - Der systemd-Dienst darf das Betriebssystem, Benutzerverzeichnisse und den
@@ -151,6 +154,32 @@ vor und nach einer Stunde anhand der RX-/TX-Zähler von `wlan0` vergleichen:
 grep wlan0 /proc/net/dev
 ```
 
+### Log-Aufbewahrung
+
+`hvv-anzeiger-log-cleanup.timer` läuft standardmäßig einmal pro Woche. Durch
+`Persistent=true` wird eine während eines ausgeschalteten Raspberry Pi verpasste
+Ausführung beim nächsten Start nachgeholt. Vor der Bereinigung wird das aktive
+Journal rotiert. Danach gelten zwei Grenzen:
+
+- archivierte Journal-Einträge älter als sieben Tage werden gelöscht,
+- archivierte Journale belegen zusammen höchstens 100 MiB.
+
+Journald verwaltet die Meldungen aller systemd-Dienste gemeinsam. Die Bereinigung
+betrifft deshalb das gesamte Systemjournal, nicht nur `hvv-anzeiger`. Die jeweils
+letzte Woche bleibt weiterhin beispielsweise mit `journalctl -u hvv-anzeiger`
+abrufbar. Status und aktuellen Speicherverbrauch prüfen:
+
+```bash
+systemctl status hvv-anzeiger-log-cleanup.timer
+journalctl --disk-usage
+```
+
+Für einen sofortigen manuellen Bereinigungslauf:
+
+```bash
+sudo systemctl start hvv-anzeiger-log-cleanup.service
+```
+
 ## Installation
 
 ### Schnellinstallation
@@ -176,6 +205,7 @@ Das Skript:
   automatisch wieder her,
 - aktiviert die Netzwerk-Zeitsynchronisierung,
 - passt den systemd-Dienst an den aktuellen Linux-Benutzer an,
+- aktiviert die wöchentliche Journal-Bereinigung,
 - aktiviert den Autostart.
 
 Die Zugangsdaten werden nicht als Kommandozeilenparameter abgefragt oder
@@ -285,9 +315,13 @@ Der Dienst verwendet im Beispiel den Benutzer `pi`. Falls dein Benutzer anders
 heißt, `User=` und `Group=` in `systemd/hvv-anzeiger.service` anpassen.
 
 ```bash
-sudo cp systemd/hvv-anzeiger.service /etc/systemd/system/
+sudo cp systemd/hvv-anzeiger.service \
+  systemd/hvv-anzeiger-log-cleanup.service \
+  systemd/hvv-anzeiger-log-cleanup.timer \
+  /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now hvv-anzeiger
+sudo systemctl enable --now hvv-anzeiger-log-cleanup.timer
 ```
 
 Status und Protokoll anzeigen:
@@ -295,6 +329,7 @@ Status und Protokoll anzeigen:
 ```bash
 systemctl status hvv-anzeiger
 journalctl -u hvv-anzeiger -f
+systemctl list-timers hvv-anzeiger-log-cleanup.timer
 ```
 
 Eine vollständige Softwarediagnose auf dem Raspberry Pi ausführen:
@@ -305,8 +340,8 @@ cd /opt/hvv-anzeiger
 ```
 
 Sie prüft Linux, SPI, Zeitsynchronisierung, Installation, Zugangsdaten,
-WLAN-Verbindung, Autostart, Dienststatus und das lokale Rendern eines
-Displaybilds. Zugangsdaten werden dabei nicht ausgegeben.
+WLAN-Verbindung, Autostart, Dienststatus, Journal-Bereinigung und das lokale
+Rendern eines Displaybilds. Zugangsdaten werden dabei nicht ausgegeben.
 
 Nach Änderungen an `config.json`:
 
@@ -408,6 +443,7 @@ Die automatisierten Tests prüfen unter anderem:
 - Herkunftskennzeichnung pro Haltestelle und begrenztes Fehler-Backoff,
 - stündlich begrenztes Erfolgs-Logging, gehärteten systemd-Dienst und
   wiederherstellbare Python-Installation,
+- wöchentliche Journal-Bereinigung mit Alters- und Größenlimit,
 - verbundene, getrennte, unbekannte und alternativ benannte WLAN-Schnittstellen,
 - normale, leere und veraltete Anzeigezustände,
 - Screenshot, Installationsskript, Pi-Diagnose und systemd-Konfiguration.

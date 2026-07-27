@@ -1,0 +1,12 @@
+[Unit]
+Description=Alte systemd-Journale für den HVV-Anzeiger bereinigen
+Documentation=man:journalctl(1)
+ConditionPathExists=/run/systemd/journal
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/journalctl --rotate
+ExecStart=/usr/bin/journalctl --vacuum-time=7d --vacuum-size=100M
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true

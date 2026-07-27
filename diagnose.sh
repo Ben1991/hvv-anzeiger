@@ -5,6 +5,7 @@ set -u
 APP_DIR="/opt/hvv-anzeiger"
 ENV_FILE="/etc/hvv-anzeiger.env"
 SERVICE_NAME="hvv-anzeiger"
+LOG_CLEANUP_TIMER="hvv-anzeiger-log-cleanup.timer"
 WIFI_INTERFACE="${HVV_WIFI_INTERFACE:-wlan0}"
 FAILURES=0
 WARNINGS=0
@@ -90,6 +91,13 @@ if systemctl is-active --quiet "$SERVICE_NAME"; then
   pass "Der Dienst läuft."
 else
   fail "Der Dienst läuft nicht."
+fi
+
+if systemctl is-enabled --quiet "$LOG_CLEANUP_TIMER" &&
+  systemctl is-active --quiet "$LOG_CLEANUP_TIMER"; then
+  pass "Die wöchentliche Journal-Bereinigung ist aktiviert."
+else
+  fail "Die wöchentliche Journal-Bereinigung ist nicht aktiv."
 fi
 
 SERVICE_USER="$(systemctl show "$SERVICE_NAME" --property=User --value 2>/dev/null)"

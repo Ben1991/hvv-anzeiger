@@ -27,6 +27,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertTrue(os.access(diagnostic, os.X_OK))
         installer_text = installer.read_text(encoding="utf-8")
         self.assertIn('systemctl stop "$SERVICE_NAME"', installer_text)
+        self.assertIn('enable --now "$LOG_CLEANUP_TIMER"', installer_text)
         self.assertIn("VENV_BACKED_UP", installer_text)
         self.assertIn("INSTALL_SUCCEEDED", installer_text)
 
@@ -43,6 +44,21 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("ProtectHome=true", service)
         self.assertIn("ReadWritePaths=/opt/hvv-anzeiger/var", service)
         self.assertNotIn("GEOFOX_PASSWORD=", service)
+
+    def test_weekly_log_cleanup_has_retention_and_size_limits(self) -> None:
+        cleanup = (
+            ROOT / "systemd" / "hvv-anzeiger-log-cleanup.service"
+        ).read_text(encoding="utf-8")
+        timer = (ROOT / "systemd" / "hvv-anzeiger-log-cleanup.timer").read_text(
+            encoding="utf-8"
+        )
+        diagnostic = (ROOT / "diagnose.sh").read_text(encoding="utf-8")
+        self.assertIn("journalctl --rotate", cleanup)
+        self.assertIn("--vacuum-time=7d", cleanup)
+        self.assertIn("--vacuum-size=100M", cleanup)
+        self.assertIn("OnCalendar=weekly", timer)
+        self.assertIn("Persistent=true", timer)
+        self.assertIn("hvv-anzeiger-log-cleanup.timer", diagnostic)
 
     def test_readme_documents_every_example_configuration_field(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
