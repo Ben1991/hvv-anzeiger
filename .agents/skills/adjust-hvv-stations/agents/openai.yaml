@@ -1,0 +1,4 @@
+interface:
+  display_name: "HVV-Haltestellen anpassen"
+  short_description: "Haltestellen und Linien sicher konfigurieren"
+  default_prompt: "Use $adjust-hvv-stations to update the configured HVV stops, lines, and destinations safely."

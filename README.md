@@ -433,6 +433,23 @@ Schreibweisen wie `Straße` und `Strasse` verglichen. Ein zusätzliches
 Verkehrsmittel-Präfix im Geofox-Ziel, beispielsweise `S Elbgaustraße`, wird
 ebenfalls berücksichtigt.
 
+### Haltestellen mit Codex anpassen
+
+Das Repository enthält den Skill `$adjust-hvv-stations`. Er kann verwendet
+werden, wenn Codex Haltestellen, Linien, Ziele oder Kürzel ändern soll, zum
+Beispiel:
+
+```text
+Nutze $adjust-hvv-stations und ersetze die vorkonfigurierten Verbindungen durch
+Linie 5 Richtung Hauptbahnhof ab Rathausmarkt.
+```
+
+Der Skill ändert nur den Haltestellenbereich, prüft die vollständige
+Konfiguration vor dem Schreiben und legt bei Änderungen an einer Installation
+eine Sicherung an. Eine unbekannte Geofox-ID wird nicht geraten, sondern beim
+nächsten Programmstart über Geofox aufgelöst. Zugangsdaten werden dabei weder
+gelesen noch in die Konfiguration übernommen.
+
 ### WLAN-Schnittstelle
 
 Der Dienst überwacht standardmäßig `wlan0`. Falls die WLAN-Schnittstelle anders
@@ -584,6 +601,28 @@ set +a
 - Geofox-Antworten sind auf 1 MiB begrenzt.
 - Python-Abhängigkeiten sind mit Versionen und SHA-256-Prüfsummen festgelegt.
 - GitHub Actions prüft Abhängigkeiten auf bekannte Schwachstellen.
+
+## Haftungsausschluss
+
+Dieses unabhängige Open-Source-Projekt wird ohne Zusicherung einer bestimmten
+Eigenschaft oder dauerhaften Verfügbarkeit bereitgestellt. Fahrplandaten,
+Echtzeitprognosen und Störungshinweise stammen von externen Anbietern und können
+unvollständig, verspätet oder fehlerhaft sein. Die Anzeige ist deshalb nicht als
+alleinige Grundlage für zeitkritische Reiseentscheidungen gedacht; im Zweifel
+die offiziellen HVV-Auskünfte prüfen.
+
+Installation, elektrische Verdrahtung und Betrieb erfolgen in eigener
+Verantwortung. Vor Arbeiten an Raspberry Pi und Display die Stromversorgung
+trennen und die Vorgaben der jeweiligen Hardwarehersteller beachten. Der
+Betreiber ist außerdem selbst dafür verantwortlich, die für seinen
+Geofox-Zugang geltenden Nutzungs-, Kennzeichnungs- und Datenschutzbedingungen
+einzuhalten.
+
+Soweit gesetzlich zulässig, haften die Projektverantwortlichen nicht für Schäden
+oder Folgeschäden aus Nutzung, Nichtverfügbarkeit oder Fehlfunktion der Software
+und der angezeigten Daten. Zwingende gesetzliche Haftung, insbesondere für
+Vorsatz, grobe Fahrlässigkeit sowie Schäden an Leben, Körper oder Gesundheit,
+bleibt unberührt. Dieser Hinweis ist keine Rechtsberatung.
 
 ## Grenzen
 
