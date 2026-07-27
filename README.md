@@ -10,9 +10,6 @@ Vorkonfiguriert sind:
   Elbgaustraße
 - Recknitzstraße: 21 nach U Niendorf Nord
 
-Die in der Anforderung doppelt erscheinende Bezeichnung „D21“ wird als
-Formatierungsfehler behandelt. Es wird nur Linie 21 angezeigt.
-
 ![Beispielansicht der HVV-Abfahrtsanzeige](docs/hvv-anzeiger-preview.png)
 
 ## Was das Programm robust macht
