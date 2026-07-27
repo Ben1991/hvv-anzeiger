@@ -652,6 +652,35 @@ Bei jedem Push und Pull Request prüft GitHub Actions:
 - vollständige Installation und Rollback in einer isolierten Ubuntu-Umgebung
 - Paket-Build und Display-Vorschau
 
+## Mitwirken und Sicherheit
+
+Änderungen werden ausschließlich über einen neuen Branch und einen Pull Request
+eingereicht. Ablauf, lokale Prüfungen und Review-Anforderungen stehen in
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+Vermutete Sicherheitslücken nicht öffentlich melden. Dafür die vertrauliche
+Meldung nach [SECURITY.md](SECURITY.md) verwenden.
+
+## Lizenz
+
+Copyright © 2026 Benjamin Maier.
+
+Dieses Projekt ist freie Open-Source-Software unter der
+[GNU General Public License Version 3](LICENSE), ausschließlich Version 3
+(`GPL-3.0-only`).
+
+Die GPL erlaubt Nutzung, Kopieren, Veränderung, Weitergabe und auch kommerzielle
+Nutzung. Wer das Programm oder abgeleitete Versionen weitergibt, muss dabei
+insbesondere den korrespondierenden Quellcode bereitstellen, Änderungen
+kennzeichnen sowie Copyright- und Lizenzhinweise erhalten. Weitergegebene
+abgeleitete Werke müssen ebenfalls unter GPL-3.0 lizenziert werden.
+
+Eine zusätzliche Zustimmung ist für Nutzungen innerhalb der GPL nicht
+erforderlich. Abweichende Lizenzbedingungen bedürfen einer separaten
+schriftlichen Vereinbarung mit den jeweiligen Rechteinhabern. Die GPL enthält
+einen Gewährleistungs- und Haftungsausschluss; ergänzend gilt der oben
+dokumentierte Haftungsausschluss dieses Projekts.
+
 ## Projekt unterstützen
 
 Der HVV-Anzeiger bleibt frei verfügbar. Wer Entwicklung, Tests und Dokumentation
