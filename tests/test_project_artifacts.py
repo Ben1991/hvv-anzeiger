@@ -24,6 +24,13 @@ class ProjectArtifactTest(unittest.TestCase):
             "https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf",
             readme,
         )
+        self.assertIn("Der Antrag erfolgt so:", readme)
+        self.assertIn("Eine mögliche Beschreibung für den Antrag:", readme)
+        self.assertIn("Die HOCHBAHN stellt die GTI-Schnittstelle", readme)
+        self.assertNotIn(
+            "Geofox beziehungsweise die Schnittstelle wird von der HBT",
+            readme,
+        )
         self.assertIn("https://gti.geofox.de/html/GTIHandbuch_p.html", readme)
         self.assertIn("https://ko-fi.com/bema1991", readme)
         self.assertIn("## Haftungsausschluss", readme)

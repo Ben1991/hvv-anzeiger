@@ -64,29 +64,50 @@ Echtzeitinformationen bereit. Dieses Projekt verwendet die Abfahrtsliste mit
 aktivierten Echtzeitdaten, um Verspätungen und gemeldete Ausfälle zu
 berücksichtigen.
 
-Geofox beziehungsweise die Schnittstelle wird von der HBT Hamburger Berater Team
-GmbH betrieben. Der Schnittstellenzugang und die Datenbereitstellung für
-HVV-Fahrplandaten werden auf der
-[offiziellen HVV-Seite für individuelle Entwicklerprojekte](https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf)
-beschrieben. Dieses Repository ist ein unabhängiges Projekt und kein offizielles
-Produkt von HVV, HOCHBAHN oder HBT.
+Die HOCHBAHN stellt die GTI-Schnittstelle für hvv-Fahrplandaten bereit. Die
+verbindlichen Informationen zum Zugang, die aktuellen Nutzungsbedingungen und
+der Antragsweg stehen auf der
+[offiziellen hvv-Seite „Fahrplandaten für Entwickler mit individuellen Projekten“](https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf).
+Dieses Repository ist ein unabhängiges Projekt und kein offizielles Produkt von
+hvv oder HOCHBAHN.
 
 ### Zugang beantragen
 
-Der Zugriff ist beschränkt und wird nicht automatisch freigeschaltet. Laut HVV
-besteht kein grundsätzlicher Anspruch auf einen Zugang. Für die Beantragung:
+Der Zugriff ist beschränkt und wird individuell geprüft. Laut hvv besteht kein
+grundsätzlicher Anspruch auf einen Zugang. Der Antrag erfolgt so:
 
 1. Die
-   [HVV-Zugangsseite und Nutzungsbedingungen](https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf)
-   lesen.
-2. Den Zugang über die dort angebotene E-Mail-Adresse beantragen.
-3. Im Antrag einen Ansprechpartner und eine kurze Beschreibung des Vorhabens
-   nennen. Für dieses Projekt passt beispielsweise: private, kostenfreie
-   Abfahrtsanzeige auf einem Raspberry Pi, verwendete Haltestellen und ein Abruf
-   alle 15 Sekunden.
-4. Nach Freigabe werden eine Geofox Application-ID und ein Passwort benötigt.
-5. Repository installieren und beide Werte bei der interaktiven Abfrage von
+   [offizielle hvv-Seite zum Datenabruf](https://www.hvv.de/de/fahrplaene/abruf-fahrplaninfos/datenabruf)
+   öffnen und die dort eingeblendeten Nutzungsbedingungen vollständig lesen.
+2. Prüfen, ob das Vorhaben die aktuellen Bedingungen erfüllt. Die
+   Fahrplanauskunft muss insbesondere für Fahrgäste kostenfrei bereitgestellt
+   werden; auch eine mittelbare oder verdeckte Kostenpflichtigkeit ist nicht
+   zulässig.
+3. Den Zugang über den E-Mail-Kontakt auf dieser hvv-Seite beantragen. Im Antrag
+   einen Ansprechpartner und das Vorhaben kurz beschreiben.
+4. Die individuelle Rückmeldung abwarten. Eine Freigabe ist nicht garantiert und
+   kann mit projektspezifischen Bedingungen oder Abrufgrenzen verbunden sein.
+5. Nach einer Freigabe werden eine Geofox Application-ID und ein Passwort
+   benötigt.
+6. Repository installieren und beide Werte bei der interaktiven Abfrage von
    `./install.sh` eingeben.
+
+Eine mögliche Beschreibung für den Antrag:
+
+```text
+Vorhaben: Private, kostenfreie Abfahrtsanzeige auf einem Raspberry Pi Zero 2 W
+mit einem 2,2-Zoll-Display.
+
+Angezeigt werden die nächsten Busabfahrten ausgewählter Linien und Haltestellen
+einschließlich der verfügbaren Echtzeitprognosen. Die Daten werden gemeinsam
+alle 15 Sekunden über die Geofox-GTI-Schnittstelle abgerufen. Die Anzeige ist
+nicht kostenpflichtig und die Fahrplandaten werden nicht an Dritte weitergegeben.
+
+Ansprechpartner: <Name und erreichbare Kontaktdaten>
+```
+
+Die Beschreibung ist nur eine Vorlage. Maßgeblich bleiben die aktuellen Angaben
+und Nutzungsbedingungen auf der verlinkten hvv-Seite.
 
 Die Zugangsdaten niemals in `config.json`, im Repository, in einem GitHub-Issue
 oder in einem Screenshot speichern. Der Installer legt sie geschützt unter
@@ -94,7 +115,7 @@ oder in einem Screenshot speichern. Der Installer legt sie geschützt unter
 
 ### Nutzungs- und Betriebsgrenzen
 
-- Maßgeblich sind immer die aktuellen Bedingungen von HVV, HOCHBAHN und HBT.
+- Maßgeblich sind immer die aktuellen Bedingungen von hvv und HOCHBAHN.
 - Die Fahrplanauskunft muss für Endnutzer kostenfrei bleiben. Eine freiwillige
   Unterstützung dieses Open-Source-Projekts schaltet keine Funktionen oder
   Fahrplandaten frei.
