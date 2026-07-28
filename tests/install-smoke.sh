@@ -101,6 +101,7 @@ printf 'smoke-application\nsmoke-password\n' | "$SOURCE_DIR/install.sh"
 
 test -x "$APP_DIR/.venv/bin/hvv-anzeiger"
 test -x "$APP_DIR/.venv/bin/hvv-preview"
+test "$(stat -c '%a' "$APP_DIR")" = "755"
 "$APP_DIR/.venv/bin/hvv-preview" "$ROOT/post-install-preview.png"
 test -s "$ROOT/post-install-preview.png"
 "$APP_DIR/.venv/bin/hvv-anzeiger" --help >/dev/null
