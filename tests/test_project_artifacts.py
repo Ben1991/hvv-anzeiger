@@ -69,6 +69,37 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("## Haftungsausschluss", readme)
         self.assertIn("keine Rechtsberatung", readme)
 
+    def test_readme_defines_supported_os_and_raspberry_pi_models(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        installer = (ROOT / "install.sh").read_text(encoding="utf-8")
+
+        for expected in (
+            "Raspberry Pi OS Lite, 64 Bit, Trixie",
+            "Raspberry Pi OS Lite, 32 Bit, Trixie",
+            "Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm",
+            "Raspberry Pi Zero 2 W",
+            "Raspberry Pi 3A+, 3B und 3B+",
+            "Raspberry Pi 4B und Raspberry Pi 400",
+            "Raspberry Pi Zero, Zero W und Raspberry Pi 1",
+            "Raspberry Pi 5, 500, 500+ und Compute Module 5",
+            "kompatibel by design",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, readme)
+
+        self.assertIn(
+            "Raspberry Pi OS (Lite oder Desktop)",
+            installer,
+        )
+        self.assertIn("sys.version_info < (3, 10)", installer)
+        self.assertIn("Python 3.10 oder neuer ist erforderlich", installer)
+        self.assertIn(
+            "sudo -H python3 -c 'import sys; "
+            "raise SystemExit(sys.version_info < (3, 10))'",
+            installer,
+        )
+        self.assertNotIn("Raspberry Pi OS/Debian", installer)
+
     def test_station_adjustment_skill_is_complete(self) -> None:
         skill = ROOT / ".agents" / "skills" / "adjust-hvv-stations"
         instructions = (skill / "SKILL.md").read_text(encoding="utf-8")
