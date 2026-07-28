@@ -209,6 +209,11 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("ReadWritePaths=/opt/hvv-anzeiger/var", service)
         self.assertIn("User=hvv-anzeiger", service)
         self.assertIn("Group=hvv-anzeiger", service)
+        self.assertNotIn("WorkingDirectory=", service)
+        self.assertIn(
+            "--cache /opt/hvv-anzeiger/var/stations.json",
+            service,
+        )
         self.assertNotIn("GEOFOX_PASSWORD=", service)
 
     def test_dependencies_are_locked_with_hashes_and_audited_in_ci(self) -> None:
