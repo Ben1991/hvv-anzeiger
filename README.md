@@ -5,10 +5,12 @@
 [![CI](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml)
 [![Lizenz: GPL-3.0-only](https://img.shields.io/badge/Lizenz-GPL--3.0--only-blue.svg)](LICENSE)
 
-Eine kompakte Abfahrtsanzeige für einen Raspberry Pi Zero 2 W und ein
-2,2-Zoll-ILI9341-SPI-Display. Sie lädt alle 15 Sekunden aktuelle
-Geofox-Prognosen, filtert die gewünschten Busverbindungen und sortiert sie
-haltestellenübergreifend nach der erwarteten Abfahrtszeit.
+Eine kompakte Abfahrtsanzeige für einen Raspberry Pi Zero 2 W oder ein
+kompatibles Raspberry-Pi-Modell mit 40-Pin-GPIO und ein
+2,2-Zoll-ILI9341-SPI-Display. Sie läuft ohne grafische Oberfläche auf
+Raspberry Pi OS Lite, lädt alle 15 Sekunden aktuelle Geofox-Prognosen, filtert
+die gewünschten Busverbindungen und sortiert sie haltestellenübergreifend nach
+der erwarteten Abfahrtszeit.
 
 ![Beispielansicht der HVV-Abfahrtsanzeige](docs/hvv-anzeiger-preview.png)
 
@@ -94,10 +96,12 @@ Haltestelle eine Abfahrt stammt. Alle Verbindungen lassen sich in
 
 ### Hardware-Einkauf
 
-Die folgenden Amazon.de-Suchlinks führen zu passenden Produktkategorien. Vor
-dem Kauf die technischen Angaben des konkreten Angebots prüfen; insbesondere
-Controller, Auflösung, SPI-Anschluss, 3,3-V-Logik und Netzteilleistung müssen
-zum unten dokumentierten Aufbau passen.
+Die folgenden Amazon.de-Suchlinks führen zu passenden Produktkategorien für
+das Referenzsetup mit Raspberry Pi Zero 2 W. Vor dem Kauf die technischen
+Angaben des konkreten Angebots prüfen; insbesondere Controller, Auflösung,
+SPI-Anschluss, 3,3-V-Logik und Netzteilleistung müssen zum unten dokumentierten
+Aufbau passen. Für ein anderes Raspberry-Pi-Modell ist das jeweils dafür
+vorgesehene Netzteil erforderlich.
 
 | Komponente | Amazon.de-Suche | Worauf achten? |
 |---|---|---|
@@ -115,8 +119,50 @@ zum unten dokumentierten Aufbau passen.
 
 ### Unterstütztes Zielsystem
 
-- [Raspberry Pi Zero 2 W (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W&tag=bema19910e-21)
-- Raspberry Pi OS Lite Bookworm, 64 Bit empfohlen
+#### Betriebssysteme
+
+Raspberry Pi OS Lite ist das empfohlene Betriebssystem. Es benötigt keine
+grafische Oberfläche und passt damit besonders gut zum dauerhaft und
+headless betriebenen Anzeiger. Der Installer verwendet nur Werkzeuge, die in
+Raspberry Pi OS vorhanden sind: `apt`, `raspi-config` und `systemd`.
+
+| Betriebssystem | Status | Hinweis |
+|---|---|---|
+| Raspberry Pi OS Lite, 64 Bit, Trixie | empfohlen | aktuelles schlankes Zielsystem für Raspberry Pi Zero 2 W und die unten aufgeführten 64-Bit-Modelle |
+| Raspberry Pi OS Lite, 32 Bit, Trixie | unterstützt | sinnvoll, wenn ein kleinerer Speicherbedarf wichtiger ist; auf den unten aufgeführten Modellen muss `uname -m` den Wert `armv7l` liefern |
+| Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm | unterstützt | weiterhin geeignet, solange Raspberry Pi die jeweilige Ausgabe mit Sicherheitsupdates versorgt |
+| Raspberry Pi OS mit Desktop oder Full, Trixie beziehungsweise Bookworm | unterstützt | technisch derselbe Installationsweg; Desktop und Zusatzprogramme werden für die Anzeige nicht benötigt |
+| Raspberry Pi OS Bullseye oder älter | nicht unterstützt | die mitgelieferte Python-Version erfüllt die Anforderung Python 3.10 oder neuer nicht zuverlässig |
+| Ubuntu, allgemeines Debian und andere Distributionen | nicht unterstützt | der Installer setzt die Raspberry-Pi-spezifischen Werkzeuge, Gruppen und SPI-Konfiguration voraus |
+
+Raspberry Pi stellt
+[Raspberry Pi OS Lite in 64- und 32-Bit-Ausgaben](https://www.raspberrypi.com/software/operating-systems/)
+bereit. Die
+[offizielle Betriebssystemdokumentation](https://www.raspberrypi.com/documentation/computers/os.html)
+erklärt die Unterschiede zwischen Lite, Desktop und Full. Keine
+Desktop-Oberfläche zu installieren spart Speicherplatz und Hintergrundlast;
+die Displayausgabe selbst funktioniert direkt über SPI.
+
+#### Raspberry-Pi-Modelle
+
+| Modell | Status | Hinweis |
+|---|---|---|
+| [Raspberry Pi Zero 2 W (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W&tag=bema19910e-21) | empfohlen und hardwaregetestet | Referenzsetup; 64-Bit Raspberry Pi OS Lite empfohlen |
+| Raspberry Pi 3A+, 3B und 3B+ | kompatibel by design | 40-Pin-GPIO, SPI0, WLAN und unterstützte ARM-Architektur; nicht im Projekt hardwaregetestet |
+| Raspberry Pi 4B und Raspberry Pi 400 | kompatibel by design | 40-Pin-GPIO, SPI0, WLAN und unterstützte ARM-Architektur; eigenes geeignetes Netzteil erforderlich und nicht im Projekt hardwaregetestet |
+| Raspberry Pi 2 | nicht als Komplettsetup unterstützt | kein integriertes WLAN und daher zusätzliche Hardware sowie Konfiguration erforderlich |
+| Raspberry Pi Zero, Zero W und Raspberry Pi 1 | nicht unterstützt | ARMv6 liegt außerhalb der für die Hardwaretreiber festgelegten Architekturen `armv7l` und `aarch64` |
+| Raspberry Pi 5, 500, 500+ und Compute Module 5 | nicht unterstützt | der aktuelle GPIO-Treiberpfad des Projekts ist nicht für die RP1-Hardware freigegeben |
+| Compute Modules und Raspberry Pi Pico | nicht unterstützt | Compute Modules benötigen ein trägerspezifisches GPIO-Setup; Pico-Modelle führen kein Raspberry Pi OS aus |
+
+„Kompatibel by design“ bedeutet: Softwarearchitektur, 40-Pin-Belegung und
+SPI-Anbindung passen zum Projekt, es existiert aber kein Hardwaretest dieses
+Repositories auf dem jeweiligen Modell. Fehlerberichte und bestätigte
+Installationen sind als
+[GitHub-Issue](https://github.com/Ben1991/hvv-anzeiger/issues) willkommen.
+
+#### Weitere Voraussetzungen
+
 - Python 3.10 oder neuer
 - [microSD-Karte (Affiliate-Link)](https://www.amazon.de/s?k=microSD+32GB+High+Endurance&tag=bema19910e-21)
 - [zuverlässiges 5-V-Netzteil mit mindestens 2 A (Affiliate-Link)](https://www.amazon.de/s?k=5V+2A+Micro+USB+Netzteil+Raspberry+Pi+Zero+2+W&tag=bema19910e-21)
@@ -126,11 +172,8 @@ zum unten dokumentierten Aufbau passen.
 - gültige Geofox-GTI-Zugangsdaten
 - Terminal- oder SSH-Zugang zum Raspberry Pi
 
-Andere Raspberry-Pi-Modelle können potenziell ebenfalls funktionieren, gehören
-aber nicht zum dokumentierten und getesteten Zielsetup. Getestet wurde das
-Projekt auf einem Raspberry Pi Zero 2 W. Pinbelegung, Spannungsversorgung,
-Hintergrundbeleuchtung und Farbreihenfolge müssen zum konkreten Display-Modul
-passen.
+Pinbelegung, Spannungsversorgung, Hintergrundbeleuchtung und Farbreihenfolge
+müssen zum konkreten Display-Modul passen.
 
 ## Geofox-Zugang beantragen
 
