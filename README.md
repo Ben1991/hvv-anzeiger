@@ -125,6 +125,8 @@ Raspberry Pi OS Lite ist das empfohlene Betriebssystem. Es benötigt keine
 grafische Oberfläche und passt damit besonders gut zum dauerhaft und
 headless betriebenen Anzeiger. Der Installer verwendet nur Werkzeuge, die in
 Raspberry Pi OS vorhanden sind: `apt`, `raspi-config` und `systemd`.
+Er kommt außerdem ohne ein festes Arbeitsverzeichnis aus und ist deshalb
+nicht auf ein Lite-Image beschränkt.
 
 | Betriebssystem | Status | Hinweis |
 |---|---|---|
