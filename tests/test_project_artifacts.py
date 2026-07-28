@@ -93,6 +93,11 @@ class ProjectArtifactTest(unittest.TestCase):
         )
         self.assertIn("sys.version_info < (3, 10)", installer)
         self.assertIn("Python 3.10 oder neuer ist erforderlich", installer)
+        self.assertIn(
+            "sudo -H python3 -c 'import sys; "
+            "raise SystemExit(sys.version_info < (3, 10))'",
+            installer,
+        )
         self.assertNotIn("Raspberry Pi OS/Debian", installer)
 
     def test_station_adjustment_skill_is_complete(self) -> None:

@@ -108,8 +108,7 @@ command -v sudo >/dev/null 2>&1 || fail "sudo wurde nicht gefunden."
 command -v apt-get >/dev/null 2>&1 ||
   fail "Dieses Skript benötigt Raspberry Pi OS (Lite oder Desktop)."
 command -v raspi-config >/dev/null 2>&1 || fail "raspi-config wurde nicht gefunden."
-command -v python3 >/dev/null 2>&1 || fail "Python 3 wurde nicht gefunden."
-python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' ||
+sudo -H python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' ||
   fail "Python 3.10 oder neuer ist erforderlich."
 
 echo "[1/9] Systempakete installieren"
