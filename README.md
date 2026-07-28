@@ -175,6 +175,8 @@ Installationen sind als
 Pinbelegung, Spannungsversorgung, Hintergrundbeleuchtung und Farbreihenfolge
 müssen zum konkreten Display-Modul passen.
 
+Die Installation wurde dabei auf Raspberry Pi OS Bookworm 64 Bit geprüft.
+
 ## Geofox-Zugang beantragen
 
 ### Datenquelle
