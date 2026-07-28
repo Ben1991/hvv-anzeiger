@@ -193,6 +193,7 @@ else
 fi
 sudo chown -R root:root "$STAGING_DIR"
 sudo chown -R "$APP_USER:$APP_GROUP" "$STAGING_DIR/var"
+sudo chmod 0755 "$STAGING_DIR"
 sudo chmod 0750 "$STAGING_DIR/var"
 sudo chmod 0644 "$STAGING_DIR/config.json"
 
@@ -241,6 +242,7 @@ fi
 SWITCHED=1
 sudo mv "$STAGING_DIR" "$APP_DIR"
 STAGING_DIR=""
+sudo chmod 0755 "$APP_DIR"
 # Console scripts contain the absolute venv path. Reinstalling the local package
 # after the move rewrites their shebangs to the final application directory.
 sudo -H "$APP_DIR/.venv/bin/python" -m pip install \
