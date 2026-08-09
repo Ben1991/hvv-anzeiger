@@ -257,6 +257,8 @@ Dateirechten unter `/etc/hvv-anzeiger.env`.
 
 Die Bezeichnungen unterscheiden sich je nach Modul. `SCK` kann auch `CLK`,
 `MOSI` auch `SDI` oder `DIN` und `CS` auch `CE` heißen.
+Falls das Displaymodul zusätzlich einen `MISO`-Pin nutzt, gehört dieser auf
+den physischen Pin 21 (`GPIO 9, SPI0 MISO`).
 
 ![Raspberry Pi Zero 2 W Pinbelegung](docs/raspberry-pi-zero2w-pinout.png)
 
