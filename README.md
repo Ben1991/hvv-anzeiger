@@ -17,8 +17,18 @@ der erwarteten Abfahrtszeit.
 > Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
 > offizielles Produkt von hvv, HOCHBAHN oder Geofox.
 
+## V1 Release
+
+V1 ist die erste veröffentlichte Version des HVV-Anzeigers. Das Release wurde
+am 10. August 2026 unter dem unveränderlichen Git-Tag `V1` veröffentlicht und
+trägt die Release-Notiz „Initial Release“.
+
+- [V1 auf GitHub ansehen](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V1)
+- [Quellcode von V1 anzeigen](https://github.com/Ben1991/hvv-anzeiger/tree/V1)
+
 ## Inhalt
 
+- [V1 Release](#v1-release)
 - [Funktionen](#funktionen)
 - [Vorkonfigurierte Anzeige](#vorkonfigurierte-anzeige)
 - [Voraussetzungen](#voraussetzungen)
