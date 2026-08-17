@@ -19,7 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 install = [
-  "setuptools>=83,<84",
+  "setuptools>=83,<85",
 ]
 test = [
   "build>=1,<2",
