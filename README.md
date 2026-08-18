@@ -351,6 +351,77 @@ sudo systemctl enable --now hvv-anzeiger
 
 ## Konfigurieren
 
+### Lokale Weboberfläche
+
+Für eine gut erreichbare lokale Ansicht gibt es eine Weboberfläche. Sie zeigt
+die Abfahrten in einer großen, displayähnlichen Ansicht, den Hardwarezustand
+des Raspberry Pi (CPU, RAM und freien SD-Speicher) sowie einen kontrollierten
+Button zum Neustart des Systems:
+
+```bash
+.venv/bin/hvv-web --config config.json --cache var/stations.json
+```
+
+Danach ist sie standardmäßig nur auf dem Raspberry Pi unter
+`http://127.0.0.1:8080` erreichbar. Mit `--host 0.0.0.0` kann sie im lokalen
+Netz freigegeben werden; das sollte nur in einem vertrauenswürdigen Netz und
+mit zusätzlichem Zugriffsschutz erfolgen, weil die Oberfläche Einstellungen
+ändert.
+
+Beispielansicht der lokalen Oberfläche:
+
+![Lokale Abfahrtsanzeige mit Hardwarestatus](docs/web-dashboard.png)
+
+Die Einstellungsseite zeigt die editierbare Konfiguration und erklärt die
+Bedeutung der einzelnen Konfigurationsbereiche:
+
+![Lokale Einstellungen mit Konfigurationseditor](docs/web-settings.png)
+
+Haltestellen und Linien werden als eigene Karten gepflegt. Dadurch müssen
+Nutzer kein verschachteltes JSON bearbeiten:
+
+![Lokale Stations- und Routenkonfiguration](docs/web-stations.png)
+
+Die Einstellungsseite enthält alle Werte aus `config.json` und macht sie als
+verständliche Eingabefelder editierbar; jeder Wert hat einen eigenen
+„Reset to default“-Button. Sie erklärt die Bereiche `api` (Geofox-Verbindung und
+Abfrageverhalten), `display` (SPI, GPIO, Drehung und Farben),
+`night_shutdown` (Nachtzeitraum) und `stations` (Haltestellen, Kürzel, Linien
+und Ziele). Vor dem Speichern wird die gesamte Konfiguration mit denselben
+Regeln wie beim Displaystart geprüft. Zugangsdaten werden nicht in
+`config.json` geschrieben und niemals in der Abfahrtsansicht ausgegeben.
+
+Für einen dauerhaften Start kann die mitgelieferte Unit verwendet werden:
+
+```bash
+sudo install -m 0644 systemd/hvv-anzeiger-web.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hvv-anzeiger-web
+```
+
+Die Weboberfläche speichert geänderte Geofox-Zugangsdaten in
+`/opt/hvv-anzeiger/var/credentials.env` mit den Dateirechten `0600`. Der
+Displaydienst lädt diese Datei beim Start zusätzlich zu
+`/etc/hvv-anzeiger.env`; nach einer Änderung genügt ein Neustart des
+Displaydienstes:
+
+```bash
+sudo systemctl restart hvv-anzeiger
+```
+
+Der Neustart-Button benötigt eine gezielte sudoers-Regel, weil der Dienst als
+unprivilegierter Benutzer läuft. Optional kann ein Administrator
+`/etc/sudoers.d/hvv-anzeiger-web` mit folgendem Inhalt anlegen und danach
+`visudo -c` ausführen:
+
+```text
+hvv-anzeiger ALL=(root) NOPASSWD: /usr/bin/systemctl reboot
+```
+
+Anschließend muss die Web-Unit `ExecStart` für den Button auf einen Wrapper
+mit `sudo -n systemctl reboot` erweitert werden. Ohne diese Regel bleibt der
+Button sicher wirkungslos und zeigt einen Berechtigungsfehler.
+
 Die aktive Konfiguration liegt unter:
 
 ```text

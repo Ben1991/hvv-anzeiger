@@ -1,24 +1,21 @@
 [Unit]
-Description=HVV Abfahrtsanzeige
+Description=Lokale Weboberfläche für die HVV-Abfahrtsanzeige
 After=network-online.target time-sync.target
 Wants=network-online.target time-sync.target
 
 [Service]
-Type=notify
-NotifyAccess=main
-WatchdogSec=90s
+Type=simple
 User=hvv-anzeiger
 Group=hvv-anzeiger
-SupplementaryGroups=spi gpio
-EnvironmentFile=/etc/hvv-anzeiger.env
-EnvironmentFile=-/opt/hvv-anzeiger/var/credentials.env
+EnvironmentFile=-/etc/hvv-anzeiger.env
 Environment=PYTHONUNBUFFERED=1
 Environment=HVV_WIFI_INTERFACE=wlan0
-ExecStart=/opt/hvv-anzeiger/.venv/bin/python -m hvv_display --config /opt/hvv-anzeiger/config.json --cache /opt/hvv-anzeiger/var/stations.json
-Restart=always
-RestartSec=10
+ExecStart=/opt/hvv-anzeiger/.venv/bin/hvv-web --host 127.0.0.1 --port 8080 --config /opt/hvv-anzeiger/config.json --cache /opt/hvv-anzeiger/var/stations.json --credentials /opt/hvv-anzeiger/var/credentials.env
+Restart=on-failure
+RestartSec=5
 UMask=0077
-NoNewPrivileges=true
+# The restart button uses the single sudoers command documented in README.md.
+NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
@@ -31,7 +28,7 @@ RestrictSUIDSGID=true
 RestrictRealtime=true
 LockPersonality=true
 SystemCallArchitectures=native
-ReadWritePaths=/opt/hvv-anzeiger/var
+ReadWritePaths=/opt/hvv-anzeiger
 
 [Install]
 WantedBy=multi-user.target

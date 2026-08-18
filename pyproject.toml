@@ -31,6 +31,7 @@ test = [
 [project.scripts]
 hvv-anzeiger = "hvv_display.main:main"
 hvv-preview = "hvv_display.preview:main"
+hvv-web = "hvv_display.web:main"
 
 [tool.setuptools.packages.find]
 include = ["hvv_display*"]
