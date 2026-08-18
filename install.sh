@@ -12,6 +12,7 @@ WEB_SERVICE="hvv-anzeiger-web.service"
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APP_USER="hvv-anzeiger"
 APP_GROUP="hvv-anzeiger"
+WEB_ENV_FILE="${APP_DIR}/var/web.env"
 BACKUP_DIR="${APP_DIR}.previous"
 STAGING_DIR=""
 UNIT_BACKUP_DIR=""
@@ -259,6 +260,14 @@ sudo -H "$APP_DIR/.venv/bin/python" -m pip install \
 sudo "$APP_DIR/.venv/bin/python" -m hvv_display.preview \
   "$APP_DIR/var/install-preview.png"
 sudo rm -f "$APP_DIR/var/install-preview.png"
+
+if [[ ! -s "$WEB_ENV_FILE" ]]; then
+  echo "Erzeuge ein zufälliges Web-Token für den LAN-Zugriff"
+  WEB_TOKEN="$(sudo python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+  printf 'HVV_WEB_TOKEN=%s\n' "$WEB_TOKEN" | sudo tee "$WEB_ENV_FILE" >/dev/null
+  sudo chown "$APP_USER:$APP_GROUP" "$WEB_ENV_FILE"
+  sudo chmod 0600 "$WEB_ENV_FILE"
+fi
 
 echo "[9/9] Autostart aktivieren und Ergebnis prüfen"
 sudo systemctl daemon-reload

@@ -406,11 +406,17 @@ und dauerhaft aktiviert werden:
 sudo systemctl enable --now hvv-anzeiger-web
 ```
 
-Anschließend im Browser auf dem Raspberry Pi öffnen:
+Für den Zugriff von einem Rechner im selben lokalen Netzwerk die IP-Adresse des
+Raspberry Pi verwenden:
 
 ```text
-http://127.0.0.1:8080
+http://<raspberry-pi-ip>:8080
 ```
+
+Der mitgelieferte Webdienst ist dafür bereits auf das lokale Netzwerk gebunden
+und wird durch ein zufälliges Token geschützt. Beim ersten Aufruf fragt der
+Browser nach den Zugangsdaten. Als Benutzername `hvv-anzeiger` und als Passwort
+den Inhalt von `/opt/hvv-anzeiger/var/web.env` hinter `HVV_WEB_TOKEN=` eingeben.
 
 Soll die Oberfläche von einem anderen Rechner aus sicher geöffnet werden, ist
 ein SSH-Tunnel die einfachste Variante:
@@ -419,9 +425,9 @@ ein SSH-Tunnel die einfachste Variante:
 ssh -L 8080:127.0.0.1:8080 <benutzer>@<raspberry-pi-ip>
 ```
 
-Danach auf dem eigenen Rechner ebenfalls `http://127.0.0.1:8080` öffnen. Für
-direkten Zugriff im LAN siehe die Hinweise zu `--host 0.0.0.0` und
-`HVV_WEB_TOKEN` weiter unten.
+Danach auf dem eigenen Rechner ebenfalls `http://127.0.0.1:8080` öffnen. Das
+ist nur die lokale Tunnel-Adresse; für den direkten Zugriff im LAN die
+Raspberry-Pi-IP wie oben verwenden.
 
 Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
 
@@ -429,16 +435,16 @@ Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
 .venv/bin/hvv-web --config config.json --cache var/stations.json
 ```
 
-Danach ist sie standardmäßig nur auf dem Raspberry Pi unter
-`http://127.0.0.1:8080` erreichbar. Mit `--host 0.0.0.0` kann sie im lokalen
-Netz freigegeben werden. Dafür muss zusätzlich ein Bearer-Token gesetzt werden,
+Ohne weitere Optionen ist sie nur lokal auf dem Raspberry Pi erreichbar. Mit
+`--host 0.0.0.0` kann sie im lokalen Netz unter
+`http://<raspberry-pi-ip>:8080` freigegeben werden. Dafür muss zusätzlich ein Bearer-Token gesetzt werden,
 zum Beispiel über `HVV_WEB_TOKEN` in `/opt/hvv-anzeiger/var/web.env`:
 
 ```text
 HVV_WEB_TOKEN=ein-langes-zufälliges-geheimnis
 ```
 
-Die Oberfläche erwartet dieses Token dann im HTTP-Header
+Die Oberfläche akzeptiert das Token als Browser-Anmeldung oder im HTTP-Header
 `Authorization: Bearer <Token>`. Ohne Token startet sie bei einer nicht-lokalen
 Bind-Adresse nicht. Auch lokal sind alle schreibenden Formulare gegen
 Cross-Site-Requests geschützt.
@@ -826,9 +832,9 @@ Ein normales Anwendungsupdate benötigt keinen Neustart des Raspberry Pi. Die
 laufenden Dienste werden vom Installer aktualisiert und neu gestartet.
 Vorhandene `config.json`, Zugangsdaten und die Webkonfiguration bleiben
 erhalten; neue Defaults überschreiben eine bestehende Konfiguration nicht.
-Öffne danach die Weboberfläche unter `http://127.0.0.1:8080` oder – falls sie
-über einen SSH-Tunnel geöffnet wird – unter derselben Adresse auf dem eigenen
-Rechner.
+Öffne danach die Weboberfläche im lokalen Netzwerk unter
+`http://<raspberry-pi-ip>:8080`. Falls du stattdessen einen SSH-Tunnel
+verwendest, ist `http://127.0.0.1:8080` die Adresse auf dem eigenen Rechner.
 
 Schlägt `git pull` wegen eigener lokaler Änderungen fehl, diese Änderungen nicht
 ungeprüft überschreiben. Zuerst sichern oder in Git committen. Der Installer

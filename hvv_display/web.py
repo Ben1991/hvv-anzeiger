@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import html
 import json
 import logging
@@ -171,8 +173,18 @@ class WebApplication:
     def authorize(self, headers: Any) -> bool:
         if self.access_token is None:
             return True
-        return secrets.compare_digest(
-            headers.get("Authorization", ""), f"Bearer {self.access_token}"
+        authorization = headers.get("Authorization", "")
+        if secrets.compare_digest(authorization, f"Bearer {self.access_token}"):
+            return True
+        if not authorization.startswith("Basic "):
+            return False
+        try:
+            decoded = base64.b64decode(authorization[6:], validate=True).decode("utf-8")
+        except (binascii.Error, UnicodeDecodeError):
+            return False
+        username, separator, password = decoded.partition(":")
+        return separator == ":" and username == "hvv-anzeiger" and secrets.compare_digest(
+            password, self.access_token
         )
 
     def validate_csrf(self, token: str) -> None:
@@ -395,9 +407,15 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(payload)
 
+        def _unauthorized(self) -> None:
+            self.send_response(HTTPStatus.UNAUTHORIZED)
+            self.send_header("WWW-Authenticate", 'Basic realm="hvv-anzeiger"')
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+
         def do_GET(self) -> None:  # noqa: N802
             if not application.authorize(self.headers):
-                self.send_error(HTTPStatus.UNAUTHORIZED)
+                self._unauthorized()
                 return
             path = urlsplit(self.path).path
             if path == "/":
@@ -449,7 +467,7 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
 
         def do_POST(self) -> None:  # noqa: N802
             if not application.authorize(self.headers):
-                self.send_error(HTTPStatus.UNAUTHORIZED)
+                self._unauthorized()
                 return
             path = urlsplit(self.path).path
             if path == "/system/restart":

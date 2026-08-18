@@ -1,3 +1,4 @@
+import base64
 import os
 import stat
 import tempfile
@@ -63,6 +64,21 @@ class WebApplicationTest(unittest.TestCase):
                 config=str(self.config),
                 credentials=str(self.credentials),
             )
+
+    def test_remote_access_accepts_browser_basic_auth_with_web_token(self) -> None:
+        from hvv_display.web import WebApplication
+
+        application = WebApplication(
+            self.config,
+            self.credentials,
+            Path(self.directory.name),
+            access_token="secret",
+        )
+        header = "Basic " + base64.b64encode(b"hvv-anzeiger:secret").decode()
+        self.assertTrue(application.authorize({"Authorization": header}))
+        self.assertFalse(
+            application.authorize({"Authorization": "Basic aHZ2LWFuemVpZ2VyOndyb25n"})
+        )
 
     def test_settings_contains_every_config_section_and_explanations(self) -> None:
         settings = self.app.settings().decode("utf-8")
