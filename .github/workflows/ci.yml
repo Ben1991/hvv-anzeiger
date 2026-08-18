@@ -13,10 +13,10 @@ concurrency:
 
 jobs:
   tests:
-    name: Python ${{ matrix.python-version }}
+    name: Python ${{ matrix.python-version }} tests and quality
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         python-version:
           - "3.10"
@@ -41,40 +41,31 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q hvv_display tests
 
-      - name: Run unit tests
+      - name: Run unit tests on compatibility versions
+        if: matrix.python-version != '3.11'
         run: python -m unittest discover -s tests -v
 
-      - name: Render display preview
-        run: hvv-preview /tmp/hvv-anzeiger-preview.png
-
-  quality:
-    name: Ruff and coverage
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install project and quality tools
-        run: |
-          python -m pip install --require-hashes --requirement requirements-dev.txt
-          python -m pip install --no-build-isolation --no-deps --editable .
-
-      - name: Run Ruff
-        run: ruff check .
-
-      - name: Measure test coverage
+      - name: Run tests with coverage
+        if: matrix.python-version == '3.11'
         run: |
           coverage run -m unittest discover -s tests -v
           coverage report
 
+      - name: Run Ruff
+        if: matrix.python-version == '3.11'
+        run: ruff check .
+
       - name: Audit runtime dependencies
+        if: matrix.python-version == '3.11'
         run: pip-audit --requirement requirements.txt --disable-pip
+
+      - name: Build package
+        if: matrix.python-version == '3.11'
+        run: python -m build --no-isolation
+
+      - name: Render display preview on primary version
+        if: matrix.python-version == '3.11'
+        run: hvv-preview /tmp/hvv-anzeiger-preview.png
 
   shell:
     name: Shell installer
@@ -98,24 +89,6 @@ jobs:
           sudo ln -s /usr/bin/python3 /opt/hvv-anzeiger/.venv/bin/python
           systemd-analyze verify \
             systemd/hvv-anzeiger.service \
+            systemd/hvv-anzeiger-web.service \
             systemd/hvv-anzeiger-log-cleanup.service \
             systemd/hvv-anzeiger-log-cleanup.timer
-
-  package:
-    name: Build package
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install locked build tools
-        run: python -m pip install --require-hashes --requirement requirements-dev.txt
-
-      - name: Build wheel and source archive
-        run: python -m build --no-isolation

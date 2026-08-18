@@ -215,6 +215,24 @@ class GeofoxClient:
         return result
 
     def find_station(self, name: str, city: str = "Hamburg") -> dict[str, str]:
+        matches = self.find_stations(name, city)
+        if not matches:
+            raise GeofoxError(f"Haltestelle {city}, {name} wurde nicht gefunden")
+        if len(matches) > 1:
+            names = ", ".join(str(item.get("combinedName")) for item in matches[:3])
+            raise GeofoxError(
+                f"Haltestelle {name} ist nicht eindeutig ({names}); "
+                "ID in config.json setzen"
+            )
+        station = matches[0]
+        return {
+            "name": str(station.get("name") or name),
+            "city": str(station.get("city") or city),
+            "id": str(station["id"]),
+            "type": "STATION",
+        }
+
+    def find_stations(self, name: str, city: str = "Hamburg") -> list[dict[str, str]]:
         result = self._post(
             "checkName",
             {
@@ -246,21 +264,17 @@ class GeofoxClient:
             for candidate in candidates
             if target_name in normalize(str(candidate.get("combinedName", "")))
         ]
-        if not matches:
-            raise GeofoxError(f"Haltestelle {city}, {name} wurde nicht gefunden")
-        if len(matches) > 1:
-            names = ", ".join(str(item.get("combinedName")) for item in matches[:3])
-            raise GeofoxError(
-                f"Haltestelle {name} ist nicht eindeutig ({names}); "
-                "ID in config.json setzen"
-            )
-        station = matches[0]
-        return {
-            "name": str(station.get("name") or name),
-            "city": str(station.get("city") or city),
-            "id": str(station["id"]),
-            "type": "STATION",
-        }
+        return [
+            {
+                "name": str(station.get("name") or name),
+                "city": str(station.get("city") or city),
+                "id": str(station["id"]),
+                "combinedName": str(
+                    station.get("combinedName") or station.get("name") or name
+                ),
+            }
+            for station in matches
+        ]
 
     def departure_list(
         self,

@@ -303,6 +303,26 @@ class MainTest(unittest.TestCase):
         self.assertEqual(same_state, state)
         display.show.assert_called_once()
 
+    def test_display_transfer_failure_resets_state_for_reconnect(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        departure = Departure("21", "Ziel", now + timedelta(minutes=3))
+        display = Mock()
+        display.show.side_effect = OSError("SPI-Verbindung getrennt")
+        with self.assertRaises(OSError):
+            update_board(
+                [departure],
+                now=now,
+                last_updated=now,
+                stale=False,
+                error_message=None,
+                wifi_is_connected=True,
+                max_rows=5,
+                previous_state=None,
+                output=None,
+                display=display,
+            )
+        display.show.assert_called_once()
+
     def test_update_board_writes_output_and_requires_a_destination(self) -> None:
         now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
         with TemporaryDirectory() as directory:
@@ -455,6 +475,300 @@ class MainTest(unittest.TestCase):
 
         self.assertEqual(client.departure_list.call_count, 2)
         resolved.assert_called_once()
+
+    def test_continuous_mode_applies_changed_configuration_immediately(self) -> None:
+        handlers = []
+        clients = []
+        client_credentials = []
+        departures_calls = 0
+        configuration_changes = 0
+
+        def create_client(*args, **_kwargs):
+            client = Mock()
+            client.departure_list.side_effect = departures
+            clients.append(client)
+            client_credentials.append(args[1:3])
+            return client
+
+        def departures(*_args, **_kwargs):
+            nonlocal departures_calls
+            departures_calls += 1
+            if departures_calls == 4:
+                handlers[0](15, None)
+            return []
+
+        with TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_raw = json.loads(
+                Path("config.example.json").read_text(encoding="utf-8")
+            )
+            config_path.write_text(json.dumps(config_raw), encoding="utf-8")
+            credentials_path = Path(directory) / "credentials.env"
+            credentials_path.write_text(
+                "GEOFOX_USER=old-user\nGEOFOX_PASSWORD=old-password\n",
+                encoding="utf-8",
+            )
+            arguments = Namespace(
+                config=str(config_path),
+                credentials=str(credentials_path),
+                cache=str(Path(directory) / "stations.json"),
+                once=False,
+                output=None,
+            )
+
+            def save_changed_configuration(_seconds):
+                nonlocal configuration_changes
+                configuration_changes += 1
+                if configuration_changes == 1:
+                    config_raw["display"]["rotate"] = 1
+                    config_path.write_text(json.dumps(config_raw), encoding="utf-8")
+                elif configuration_changes == 2:
+                    credentials_path.write_text(
+                        "GEOFOX_USER=new-user\nGEOFOX_PASSWORD=new-password\n",
+                        encoding="utf-8",
+                    )
+                else:
+                    config_raw["display"]["rotate"] = 2
+                    config_path.write_text(json.dumps(config_raw), encoding="utf-8")
+
+            monotonic_calls = 0
+
+            def monotonic_after_first_call():
+                nonlocal monotonic_calls
+                monotonic_calls += 1
+                if monotonic_calls == 1:
+                    return 0
+                if monotonic_calls == 2:
+                    return 20
+                return 40
+
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient", side_effect=create_client),
+                patch(
+                    "hvv_display.main.resolve_stations",
+                    side_effect=lambda _client, stations, _cache: stations,
+                ),
+                patch(
+                    "hvv_display.main.Ili9341Display",
+                    side_effect=[Mock(), Mock(), OSError("display disconnected")],
+                ),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch("hvv_display.main.wifi_connected", return_value=True),
+                patch(
+                    "hvv_display.main.signal.signal",
+                    side_effect=lambda _signal, handler: handlers.append(handler),
+                ),
+                patch(
+                    "hvv_display.main.time.monotonic",
+                    side_effect=monotonic_after_first_call,
+                ),
+                patch(
+                    "hvv_display.main.time.sleep",
+                    side_effect=save_changed_configuration,
+                ),
+            ):
+                self.assertEqual(run(), 0)
+
+        self.assertEqual(len(clients), 4)
+        self.assertEqual(client_credentials[0], ("old-user", "old-password"))
+        self.assertEqual(client_credentials[1], ("old-user", "old-password"))
+        self.assertEqual(client_credentials[2], ("new-user", "new-password"))
+        self.assertEqual(client_credentials[3], ("new-user", "new-password"))
+
+    def test_display_transfer_failure_is_recovered_for_next_cycle(self) -> None:
+        config = load_config("config.example.json")
+        display = Mock()
+        display.show.side_effect = OSError("SPI disconnected")
+        client = Mock()
+        client.departure_list.return_value = []
+        with TemporaryDirectory() as directory:
+            arguments = Namespace(
+                config="config.example.json",
+                credentials=str(Path(directory) / "missing.env"),
+                cache=str(Path(directory) / "stations.json"),
+                once=True,
+                output=None,
+            )
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient", return_value=client),
+                patch("hvv_display.main.Ili9341Display", return_value=display),
+                patch(
+                    "hvv_display.main.resolve_stations",
+                    return_value=config.stations,
+                ),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch("hvv_display.main.signal.signal"),
+            ):
+                self.assertEqual(run(), 0)
+        display.show.assert_called_once()
+
+    def test_invalid_changed_configuration_keeps_previous_values(self) -> None:
+        handlers = []
+        departures_calls = 0
+
+        def departures(*_args, **_kwargs):
+            nonlocal departures_calls
+            departures_calls += 1
+            if departures_calls == 2:
+                handlers[0](15, None)
+            return []
+
+        with TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(
+                Path("config.example.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            output = Path(directory) / "board.png"
+            arguments = Namespace(
+                config=str(config_path),
+                credentials=str(Path(directory) / "missing.env"),
+                cache=str(Path(directory) / "stations.json"),
+                once=False,
+                output=str(output),
+            )
+
+            def save_invalid_configuration(_seconds):
+                config_path.write_text("{invalid", encoding="utf-8")
+
+            monotonic_calls = 0
+
+            def monotonic_after_first_call():
+                nonlocal monotonic_calls
+                monotonic_calls += 1
+                if monotonic_calls == 1:
+                    return 0
+                if monotonic_calls == 2:
+                    return 20
+                return 40
+
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient") as client_class,
+                patch(
+                    "hvv_display.main.resolve_stations",
+                    side_effect=lambda _client, stations, _cache: stations,
+                ),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch("hvv_display.main.wifi_connected", return_value=True),
+                patch(
+                    "hvv_display.main.signal.signal",
+                    side_effect=lambda _signal, handler: handlers.append(handler),
+                ),
+                patch(
+                    "hvv_display.main.time.monotonic",
+                    side_effect=monotonic_after_first_call,
+                ),
+                patch(
+                    "hvv_display.main.time.sleep",
+                    side_effect=save_invalid_configuration,
+                ),
+            ):
+                client_class.return_value.departure_list.side_effect = departures
+                self.assertEqual(run(), 0)
+
+        self.assertEqual(client_class.call_count, 1)
+
+    def test_configuration_stat_error_keeps_previous_values(self) -> None:
+        handlers = []
+        config = load_config("config.example.json")
+        with TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(
+                Path("config.example.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            arguments = Namespace(
+                config=str(config_path),
+                cache=str(Path(directory) / "stations.json"),
+                once=False,
+                output=str(Path(directory) / "board.png"),
+            )
+            original_stat = Path.stat
+            stat_calls = 0
+
+            def stat_with_one_failure(path, *args, **kwargs):
+                nonlocal stat_calls
+                if path == config_path:
+                    stat_calls += 1
+                    if stat_calls == 2:
+                        raise OSError("temporarily unavailable")
+                return original_stat(path, *args, **kwargs)
+
+            def stop_after_departure(*_args, **_kwargs):
+                handlers[0](15, None)
+                return []
+
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient") as client_class,
+                patch(
+                    "hvv_display.main.resolve_stations", return_value=config.stations
+                ),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch(
+                    "hvv_display.main.signal.signal",
+                    side_effect=lambda _signal, handler: handlers.append(handler),
+                ),
+                patch("hvv_display.main.Path.stat", new=stat_with_one_failure),
+            ):
+                client_class.return_value.departure_list.side_effect = (
+                    stop_after_departure
+                )
+                self.assertEqual(run(), 0)
+
+            self.assertEqual(stat_calls, 2)
+
+    def test_sleep_stat_error_does_not_stop_the_refresh_loop(self) -> None:
+        handlers = []
+        config = load_config("config.example.json")
+        with TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(
+                Path("config.example.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            arguments = Namespace(
+                config=str(config_path),
+                cache=str(Path(directory) / "stations.json"),
+                once=False,
+                output=str(Path(directory) / "board.png"),
+            )
+            original_stat = Path.stat
+            stat_calls = 0
+
+            def stat_with_one_failure(path, *args, **kwargs):
+                nonlocal stat_calls
+                if path == config_path:
+                    stat_calls += 1
+                    if stat_calls == 3:
+                        raise OSError("temporarily unavailable")
+                return original_stat(path, *args, **kwargs)
+
+            def stop_during_sleep(_seconds):
+                handlers[0](15, None)
+
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient") as client_class,
+                patch(
+                    "hvv_display.main.resolve_stations", return_value=config.stations
+                ),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch(
+                    "hvv_display.main.signal.signal",
+                    side_effect=lambda _signal, handler: handlers.append(handler),
+                ),
+                patch("hvv_display.main.Path.stat", new=stat_with_one_failure),
+                patch("hvv_display.main.time.monotonic", return_value=0),
+                patch("hvv_display.main.time.sleep", side_effect=stop_during_sleep),
+            ):
+                client_class.return_value.departure_list.return_value = []
+                self.assertEqual(run(), 0)
+
+            self.assertEqual(stat_calls, 3)
 
     def test_main_exits_with_run_result(self) -> None:
         with (

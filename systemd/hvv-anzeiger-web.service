@@ -1,0 +1,35 @@
+[Unit]
+Description=Lokale Weboberfläche für die HVV-Abfahrtsanzeige
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+
+[Service]
+Type=simple
+User=hvv-anzeiger
+Group=hvv-anzeiger
+EnvironmentFile=-/etc/hvv-anzeiger.env
+EnvironmentFile=-/opt/hvv-anzeiger/var/web.env
+Environment=PYTHONUNBUFFERED=1
+Environment=HVV_WIFI_INTERFACE=wlan0
+ExecStart=/opt/hvv-anzeiger/.venv/bin/python -m hvv_display.web --host 127.0.0.1 --port 8080 --config /opt/hvv-anzeiger/config.json --cache /opt/hvv-anzeiger/var/stations.json --credentials /opt/hvv-anzeiger/var/credentials.env
+Restart=on-failure
+RestartSec=5
+UMask=0077
+# The restart button uses the single sudoers command documented in README.md.
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+ReadWritePaths=/opt/hvv-anzeiger/config.json /opt/hvv-anzeiger/var
+
+[Install]
+WantedBy=multi-user.target

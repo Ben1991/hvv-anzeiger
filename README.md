@@ -17,8 +17,30 @@ der erwarteten Abfahrtszeit.
 > Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
 > offizielles Produkt von hvv, HOCHBAHN oder Geofox.
 
+## Release Notes
+
+### Version 0.2.0 / V2
+
+- lokale Weboberfläche mit Abfahrtsanzeige im Display-Stil
+- Bearbeitung und Speicherung aller konfigurierbaren Werte einschließlich
+  Geofox-Zugangsdaten
+- Haltestellen-Autovervollständigung über die Geofox-API mit verständlichem
+  Hinweis zu Vollständigkeit und Korrektheit der Vorschläge
+- „Auf Standard zurücksetzen“-Schaltflächen für einzelne Konfigurationswerte
+- direkte Übernahme gespeicherter Einstellungen ohne Neustart, wenn möglich
+- automatische Wiederherstellung der Anzeige nach einem kurzzeitigen
+  Display-/SPI-Verbindungsfehler
+- Hardware-Übersicht für CPU, RAM und SD-Speicher sowie System-Neustartaktion
+- Schutz der Weboberfläche durch CSRF-Prüfung und Token-Authentifizierung bei
+  Zugriff außerhalb des lokalen Rechners
+- einfaches `update.sh` für sichere Updates aus einem sauberen `main`-Checkout
+
+Die vollständige Installations-, Konfigurations- und Update-Anleitung steht in
+den folgenden Abschnitten dieses README.
+
 ## Inhalt
 
+- [Release Notes](#release-notes)
 - [Funktionen](#funktionen)
 - [Vorkonfigurierte Anzeige](#vorkonfigurierte-anzeige)
 - [Voraussetzungen](#voraussetzungen)
@@ -351,13 +373,166 @@ sudo systemctl enable --now hvv-anzeiger
 
 ## Konfigurieren
 
+### Lokale Weboberfläche
+
+Für eine gut erreichbare lokale Ansicht gibt es eine Weboberfläche. Sie zeigt
+die Abfahrten in einer großen, displayähnlichen Ansicht, den Hardwarezustand
+des Raspberry Pi (CPU, RAM und freien SD-Speicher) sowie einen kontrollierten
+Button zum Neustart des Systems:
+
+Wenn der Installer verwendet wurde, kann die Weboberfläche als Dienst gestartet
+und dauerhaft aktiviert werden:
+
+```bash
+sudo systemctl enable --now hvv-anzeiger-web
+```
+
+Anschließend im Browser auf dem Raspberry Pi öffnen:
+
+```text
+http://127.0.0.1:8080
+```
+
+Soll die Oberfläche von einem anderen Rechner aus sicher geöffnet werden, ist
+ein SSH-Tunnel die einfachste Variante:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 <benutzer>@<raspberry-pi-ip>
+```
+
+Danach auf dem eigenen Rechner ebenfalls `http://127.0.0.1:8080` öffnen. Für
+direkten Zugriff im LAN siehe die Hinweise zu `--host 0.0.0.0` und
+`HVV_WEB_TOKEN` weiter unten.
+
+Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
+
+```bash
+.venv/bin/hvv-web --config config.json --cache var/stations.json
+```
+
+Danach ist sie standardmäßig nur auf dem Raspberry Pi unter
+`http://127.0.0.1:8080` erreichbar. Mit `--host 0.0.0.0` kann sie im lokalen
+Netz freigegeben werden. Dafür muss zusätzlich ein Bearer-Token gesetzt werden,
+zum Beispiel über `HVV_WEB_TOKEN` in `/opt/hvv-anzeiger/var/web.env`:
+
+```text
+HVV_WEB_TOKEN=ein-langes-zufälliges-geheimnis
+```
+
+Die Oberfläche erwartet dieses Token dann im HTTP-Header
+`Authorization: Bearer <Token>`. Ohne Token startet sie bei einer nicht-lokalen
+Bind-Adresse nicht. Auch lokal sind alle schreibenden Formulare gegen
+Cross-Site-Requests geschützt.
+
+Der Installer gibt `config.json` dem Dienstbenutzer `hvv-anzeiger` mit den
+Rechten `0640`, damit die Weboberfläche die validierte Datei atomar speichern
+kann, ohne Schreibrechte auf den Anwendungscode zu erhalten.
+
+Beispielansicht der lokalen Oberfläche:
+
+![Lokale Abfahrtsanzeige mit Hardwarestatus](docs/web-dashboard.png)
+
+Die Einstellungsseite zeigt die editierbare Konfiguration und erklärt die
+Bedeutung der einzelnen Konfigurationsbereiche:
+
+![Lokale Einstellungen mit Konfigurationseditor](docs/web-settings.png)
+
+Haltestellen und Linien werden als eigene Karten gepflegt. Dadurch müssen
+Nutzer kein verschachteltes JSON bearbeiten:
+
+![Lokale Stations- und Routenkonfiguration](docs/web-stations.png)
+
+Die Schaltfläche „Geofox-Suche“ fragt passende Haltestellen-Vorschläge ab und
+übernimmt Name, Stadt und Geofox-ID nach der Auswahl. Die Vorschläge sind nicht
+vollständig oder garantiert korrekt. Im Zweifel gilt die
+[offizielle Geofox-GTI-Dokumentation](https://gti.geofox.de/).
+
+Die Einstellungsseite enthält alle Werte aus `config.json` und macht sie als
+verständliche Eingabefelder editierbar; jeder Wert hat einen eigenen
+„Auf Standard zurücksetzen“-Button. Sie erklärt die Bereiche `api` (Geofox-Verbindung und
+Abfrageverhalten), `display` (SPI, GPIO, Drehung und Farben),
+`night_shutdown` (Nachtzeitraum) und `stations` (Haltestellen, Kürzel, Linien
+und Ziele). Vor dem Speichern wird die gesamte Konfiguration mit denselben
+Regeln wie beim Displaystart geprüft. Zugangsdaten werden nicht in
+`config.json` geschrieben und niemals in der Abfahrtsansicht ausgegeben.
+
+#### Werte in der Weboberfläche
+
+Die Einstellungsseite bildet die vollständige Konfiguration ab:
+
+- `api`: Geofox-Adresse und API-Version, Aktualisierungsabstand, Timeout,
+  Anzahl der sichtbaren Abfahrten sowie Zeitfenster für neue und veraltete
+  Daten.
+- `display`: SPI-Port und Gerät, GPIO-Pins, Drehung, SPI-Takt und
+  Rot-/Blau-Farbkanäle.
+- `night_shutdown`: Aktivierung sowie Beginn und Ende des Nachtfensters.
+- `stations`: Haltestellenkarten mit Name, Stadt, optionaler Geofox-ID,
+  Anzeige-Kürzel und beliebig vielen Linien-Ziel-Kombinationen.
+
+Jeder Wert hat eine kurze Erklärung und einen Button „Auf Standard
+zurücksetzen“. Änderungen werden erst gespeichert, nachdem die vollständige
+Konfiguration mit denselben Regeln wie beim Programmstart validiert wurde.
+
+Für Haltestellen empfiehlt sich dieser Ablauf:
+
+1. „Haltestelle hinzufügen“ wählen oder eine vorhandene Karte öffnen.
+2. Name und Stadt eingeben und „Geofox-Suche“ ausführen.
+3. Einen passenden Treffer auswählen; Name, Stadt und Geofox-ID werden
+   übernommen.
+4. Mit „Route hinzufügen“ die gewünschten Linien und Ziele ergänzen.
+5. Ein eindeutiges Kürzel mit 1 bis 3 Zeichen vergeben und speichern.
+
+Die Geofox-Suche liefert nur Vorschläge. Sie garantiert weder Vollständigkeit
+noch Korrektheit; bei Zweifeln ist die [offizielle GTI-Dokumentation](https://gti.geofox.de/)
+maßgeblich. Eine manuelle Eingabe bleibt jederzeit möglich.
+
+Für einen dauerhaften Start kann die mitgelieferte Unit verwendet werden:
+
+```bash
+sudo install -m 0644 systemd/hvv-anzeiger-web.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hvv-anzeiger-web
+```
+
+Die Weboberfläche speichert geänderte Geofox-Zugangsdaten in
+`/opt/hvv-anzeiger/var/credentials.env` mit den Dateirechten `0600`. Der
+Displaydienst prüft Konfiguration und Zugangsdaten vor jeder Aktualisierung
+auf Änderungen und übernimmt gültige gespeicherte Werte direkt. Nach dem
+Speichern erscheint eine kurze Bestätigung in der Oberfläche; ein Neustart ist
+für diese Werte normalerweise nicht erforderlich. Geänderte Displayparameter
+werden automatisch durch eine erneute Displayinitialisierung übernommen.
+
+Falls künftig eine Änderung einen Neustart voraussetzt, zeigt die Oberfläche
+nach dem Speichern ausdrücklich eine Abfrage mit einer Schaltfläche zum
+Neustart. Ein manueller Neustart bleibt möglich:
+
+```bash
+sudo systemctl restart hvv-anzeiger
+```
+
+Der Neustart-Button benötigt eine gezielte sudoers-Regel, weil der Dienst als
+unprivilegierter Benutzer läuft. Optional kann ein Administrator
+`/etc/sudoers.d/hvv-anzeiger-web` mit folgendem Inhalt anlegen und danach
+`visudo -c` ausführen:
+
+```text
+hvv-anzeiger ALL=(root) NOPASSWD: /usr/bin/systemctl reboot
+```
+
+Die mitgelieferte Web-Unit verwendet bereits `sudo -n systemctl reboot`. Ohne
+diese Regel bleibt der Button sicher wirkungslos und zeigt einen
+Berechtigungsfehler.
+
 Die aktive Konfiguration liegt unter:
 
 ```text
 /opt/hvv-anzeiger/config.json
 ```
 
-Nach einer Änderung muss der Dienst neu gestartet werden:
+Eine manuelle Änderung außerhalb der Weboberfläche wird ebenfalls bei der
+nächsten Aktualisierung erkannt. Ein Neustart kann weiterhin ausdrücklich
+erforderlich sein, wenn die Datei während eines laufenden Vorgangs geändert
+wird oder die systemd-Unit selbst angepasst wurde:
 
 ```bash
 sudo nano /opt/hvv-anzeiger/config.json
@@ -523,6 +698,23 @@ Ein harter Stromausfall kann unabhängig von dieser Anwendung eine beschriebene
 microSD-Karte beschädigen. Für häufige Unterbrechungen sind ein zuverlässiges
 Netzteil und gegebenenfalls eine kleine USV sinnvoll.
 
+### Display nach einem Wackelkontakt
+
+Wenn die SPI-Verbindung zum ILI9341 kurz unterbrochen war, fängt die Anwendung
+den Übertragungsfehler ab und beendet den Dienst nicht. Sie verwirft den
+unterbrochenen Displaytreiber, initialisiert ihn beim nächsten Aktualisierungs-
+zyklus neu und schreibt anschließend den vollständigen aktuellen Frame erneut.
+Der Renderzustand wird dabei bewusst zurückgesetzt, damit auch ein unveränderter
+Abfahrtsstand erneut auf das Display übertragen wird.
+
+Das funktioniert, sofern der physische Kontakt wieder stabil ist. Bleibt der
+Wackelkontakt bestehen, versucht der Dienst die Wiederherstellung bei jedem
+weiteren Zyklus und protokolliert die Fehler im Journal:
+
+```bash
+journalctl -u hvv-anzeiger -f
+```
+
 ### Dienst steuern
 
 ```bash
@@ -561,28 +753,69 @@ haben die Dateirechte `0600`.
 
 ### Anwendung aktualisieren
 
-Im ursprünglich geklonten Repository:
+Eine neue Version wird auf dem Raspberry Pi aus dem ursprünglichen Checkout
+installiert. Die laufenden Dienste müssen vorher nicht manuell gestoppt werden;
+der Installer bereitet die neue Version getrennt vor und aktiviert sie erst nach
+erfolgreicher Prüfung.
+
+Im ursprünglich geklonten Repository auf die aktuelle `main`-Version wechseln.
+Dafür kann das mitgelieferte Update-Skript verwendet werden:
 
 ```bash
 cd ~/hvv-anzeiger
+./update.sh
+```
+
+Das Skript prüft, dass es als normaler Benutzer in einem sauberen `main`-
+Checkout ausgeführt wird, lädt die aktuelle Version per Fast-Forward und
+startet anschließend `install.sh`. Dadurch werden lokale Änderungen nicht
+überschrieben. Das Skript führt bewusst kein `sudo` selbst aus; der Installer
+fragt die benötigten Rechte bei Bedarf über `sudo` ab.
+
+Die einzelnen Schritte sind weiterhin auch manuell möglich:
+
+```bash
+cd ~/hvv-anzeiger
+git status --short
+git fetch origin --tags
 git pull --ff-only origin main
 ./install.sh
 ```
+
+Für eine bestimmte veröffentlichte Version stattdessen den gewünschten Tag
+auschecken und anschließend den Installer starten:
+
+```bash
+git fetch origin --tags
+git checkout <versions-tag>
+./install.sh
+```
+
+Beispiel: `git checkout v1.2.0`. Ein Versions-Tag sollte nur verwendet werden,
+wenn er im Repository tatsächlich vorhanden ist.
 
 Anschließend:
 
 ```bash
 systemctl status hvv-anzeiger --no-pager
+systemctl status hvv-anzeiger-web --no-pager
 cd /opt/hvv-anzeiger
 ./diagnose.sh
 ```
 
-Ein normaler Anwendungsupdate benötigt keinen Neustart des Raspberry Pi.
-Vorhandene `config.json` und vollständige Geofox-Zugangsdaten bleiben erhalten;
-neue Defaults überschreiben eine bestehende Konfiguration nicht.
+Ein normales Anwendungsupdate benötigt keinen Neustart des Raspberry Pi. Die
+laufenden Dienste werden vom Installer aktualisiert und neu gestartet.
+Vorhandene `config.json`, Zugangsdaten und die Webkonfiguration bleiben
+erhalten; neue Defaults überschreiben eine bestehende Konfiguration nicht.
+Öffne danach die Weboberfläche unter `http://127.0.0.1:8080` oder – falls sie
+über einen SSH-Tunnel geöffnet wird – unter derselben Adresse auf dem eigenen
+Rechner.
 
 Schlägt `git pull` wegen eigener lokaler Änderungen fehl, diese Änderungen nicht
-ungeprüft überschreiben. Zuerst sichern oder in Git committen.
+ungeprüft überschreiben. Zuerst sichern oder in Git committen. Der Installer
+legt während des Updates außerdem eine vorherige Installation an und stellt sie
+automatisch wieder her, wenn Prüfung oder Dienststart der neuen Version
+fehlschlagen.
 
 Falls das ursprüngliche Repository nicht mehr existiert:
 
