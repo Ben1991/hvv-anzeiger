@@ -262,9 +262,8 @@ sudo "$APP_DIR/.venv/bin/python" -m hvv_display.preview \
 sudo rm -f "$APP_DIR/var/install-preview.png"
 
 if [[ ! -s "$WEB_ENV_FILE" ]]; then
-  echo "Erzeuge ein zufälliges Web-Token für den LAN-Zugriff"
-  WEB_TOKEN="$(sudo python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-  printf 'HVV_WEB_TOKEN=%s\n' "$WEB_TOKEN" | sudo tee "$WEB_ENV_FILE" >/dev/null
+  echo "Richte den Standard-Webzugang für den LAN-Zugriff ein"
+  printf 'HVV_WEB_TOKEN="hvv-anzeiger"\n' | sudo tee "$WEB_ENV_FILE" >/dev/null
   sudo chown "$APP_USER:$APP_GROUP" "$WEB_ENV_FILE"
   sudo chmod 0600 "$WEB_ENV_FILE"
 fi

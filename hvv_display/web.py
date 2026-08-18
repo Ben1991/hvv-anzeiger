@@ -163,11 +163,15 @@ class WebApplication:
         cache_path: Path,
         *,
         access_token: str | None = None,
+        web_env_path: Path | None = None,
     ) -> None:
         self.config_path = config_path
         self.credentials_path = credentials_path
         self.cache_path = cache_path
         self.access_token = access_token
+        self.web_env_path = web_env_path or Path(
+            os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")
+        )
         self.csrf_token = secrets.token_urlsafe(32)
 
     def authorize(self, headers: Any) -> bool:
@@ -190,6 +194,20 @@ class WebApplication:
     def validate_csrf(self, token: str) -> None:
         if not secrets.compare_digest(token, self.csrf_token):
             raise PermissionError("Ungültige Sitzungsbestätigung")
+
+    def save_web_password(self, password: str) -> None:
+        if not password or any(
+            character in password for character in ("\r", "\n", "\x00", '"', "\\")
+        ):
+            raise ValueError(
+                "Das Webpasswort darf nicht leer sein oder Sonderzeichen für die Env-Datei enthalten"
+            )
+        self.web_env_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.web_env_path.with_name(f".{self.web_env_path.name}.tmp")
+        temporary.write_text(f'HVV_WEB_TOKEN="{password}"\n', encoding="utf-8")
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, self.web_env_path)
+        self.access_token = password
 
     def raw_config(self) -> dict[str, Any]:
         raw = json.loads(self.config_path.read_text(encoding="utf-8"))
@@ -363,7 +381,9 @@ class WebApplication:
             stations = station_card({"city": "Hamburg", "routes": []}, 0)
         raw = html.escape(json.dumps(raw_config, ensure_ascii=False))
         content = f"""<div class="toolbar"><div><h1>Einstellungen</h1><div class="subtle">Bedienbare Felder · jede Änderung wird validiert</div></div><a href="/">← Abfahrten</a></div>{notice}
-<form method="post" action="/settings" accept-charset="UTF-8" onsubmit="return prepareConfig()"><section class="card"><h2>Geofox-Zugang</h2><p class="subtle">Das Passwort wird nicht angezeigt. Ein leeres Passwort lässt den bisherigen Wert unverändert.</p>
+<form method="post" action="/settings" accept-charset="UTF-8" onsubmit="return prepareConfig()"><section class="card"><h2>Weboberfläche</h2><p class="subtle">Benutzername: <code>hvv-anzeiger</code>. Das Webpasswort wird nicht angezeigt. Ein leeres Feld lässt den bisherigen Wert unverändert. Ändere das Standardpasswort vor der Nutzung im LAN.</p>
+<label for="web_password">Neues Webpasswort</label><input id="web_password" name="web_password" type="password" autocomplete="new-password" placeholder="unverändert lassen"></section>
+<section class="card"><h2>Geofox-Zugang</h2><p class="subtle">Das Passwort wird nicht angezeigt. Ein leeres Passwort lässt den bisherigen Wert unverändert.</p>
 <label for="user">Anwendungs-ID</label><input id="user" name="user" value="{html.escape(credentials.get("GEOFOX_USER", ""), quote=True)}" autocomplete="username">
 <label for="password">Passwort</label><input id="password" name="password" type="password" autocomplete="new-password" placeholder="unverändert lassen"></section>
 <section class="card"><h2>Geofox-API</h2><div class="grid">{scalar("api.base_url")}{scalar("api.version", "number")}{scalar("api.refresh_seconds", "number")}{scalar("api.request_timeout_seconds", "number")}{scalar("api.max_departures", "number")}{scalar("api.max_time_offset_minutes", "number")}{scalar("api.max_stale_age_minutes", "number")}</div></section>
@@ -500,7 +520,10 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                     temporary.unlink(missing_ok=True)
                 user = values.get("user", [""])[0].strip()
                 password = values.get("password", [""])[0]
+                web_password = values.get("web_password", [""])[0]
                 current = load_credentials(application.credentials_path)
+                if web_password:
+                    application.save_web_password(web_password)
                 save_config(candidate, raw_config)
                 if password:
                     save_credentials(application.credentials_path, user, password)
@@ -523,7 +546,13 @@ def run(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, config: str = "co
         raise ValueError("Für einen nicht-lokalen Webhost muss HVV_WEB_TOKEN gesetzt sein")
     config_path = Path(config)
     credentials_path = Path(credentials or os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env"))
-    application = WebApplication(config_path, credentials_path, Path(cache), access_token=access_token)
+    application = WebApplication(
+        config_path,
+        credentials_path,
+        Path(cache),
+        access_token=access_token,
+        web_env_path=Path(os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")),
+    )
     server = ThreadingHTTPServer((host, port), make_handler(application))
     server.application = application  # type: ignore[attr-defined]
     LOG.info("Lokale Weboberfläche erreichbar unter http://%s:%d", host, port)

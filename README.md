@@ -414,9 +414,16 @@ http://<raspberry-pi-ip>:8080
 ```
 
 Der mitgelieferte Webdienst ist dafür bereits auf das lokale Netzwerk gebunden
-und wird durch ein zufälliges Token geschützt. Beim ersten Aufruf fragt der
-Browser nach den Zugangsdaten. Als Benutzername `hvv-anzeiger` und als Passwort
-den Inhalt von `/opt/hvv-anzeiger/var/web.env` hinter `HVV_WEB_TOKEN=` eingeben.
+und wird durch eine Anmeldung geschützt. Die Standarddaten sind:
+
+```text
+Benutzername: hvv-anzeiger
+Passwort:    hvv-anzeiger
+```
+
+Beim ersten Aufruf fragt der Browser nach den Zugangsdaten. Ändere das
+Standardpasswort anschließend in der Einstellungsseite unter „Weboberfläche“.
+Das Passwort wird mit restriktiven Dateirechten gespeichert.
 
 Soll die Oberfläche von einem anderen Rechner aus sicher geöffnet werden, ist
 ein SSH-Tunnel die einfachste Variante:
@@ -444,10 +451,16 @@ zum Beispiel über `HVV_WEB_TOKEN` in `/opt/hvv-anzeiger/var/web.env`:
 HVV_WEB_TOKEN=ein-langes-zufälliges-geheimnis
 ```
 
-Die Oberfläche akzeptiert das Token als Browser-Anmeldung oder im HTTP-Header
-`Authorization: Bearer <Token>`. Ohne Token startet sie bei einer nicht-lokalen
-Bind-Adresse nicht. Auch lokal sind alle schreibenden Formulare gegen
+Die Oberfläche akzeptiert das Passwort als Browser-Anmeldung oder das Token im
+HTTP-Header `Authorization: Bearer <Token>`. Ohne Token startet sie bei einer
+nicht-lokalen Bind-Adresse nicht. Auch lokal sind alle schreibenden Formulare gegen
 Cross-Site-Requests geschützt.
+
+Das Standardpasswort ist nur für die erste Einrichtung gedacht. Wer es nicht
+ändert, kann die Oberfläche im lokalen Netzwerk mit den bekannten Standarddaten
+öffnen und damit auch Konfiguration, Geofox-Zugangsdaten und den Systemneustart
+auslösen. Für ein vertrauenswürdiges Heimnetz ist das eine bewusste, aber
+reduzierte Sicherheitsstufe.
 
 Der Installer gibt `config.json` dem Dienstbenutzer `hvv-anzeiger` mit den
 Rechten `0640`, damit die Weboberfläche die validierte Datei atomar speichern

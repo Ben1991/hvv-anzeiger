@@ -189,7 +189,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn('sudo install -m 0755 \\', installer_text)
         self.assertIn('"$SOURCE_DIR/configure-credentials.sh"', installer_text)
         self.assertIn('WEB_ENV_FILE="${APP_DIR}/var/web.env"', installer_text)
-        self.assertIn("secrets.token_urlsafe(32)", installer_text)
+        self.assertIn("HVV_WEB_TOKEN=\"hvv-anzeiger\"", installer_text)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
             encoding="utf-8"
         )
@@ -224,6 +224,7 @@ class ProjectArtifactTest(unittest.TestCase):
         )
         self.assertIn("--host 0.0.0.0", web_service)
         self.assertIn("EnvironmentFile=-/opt/hvv-anzeiger/var/web.env", web_service)
+        self.assertIn("Environment=HVV_WEB_ENV_FILE=/opt/hvv-anzeiger/var/web.env", web_service)
 
     def test_dependencies_are_locked_with_hashes_and_audited_in_ci(self) -> None:
         for filename in ("requirements.txt", "requirements-dev.txt"):

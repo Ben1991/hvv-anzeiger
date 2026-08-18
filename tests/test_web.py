@@ -54,6 +54,22 @@ class WebApplicationTest(unittest.TestCase):
         dashboard = self.app.dashboard().decode("utf-8")
         self.assertIn(f'name="csrf_token" value="{self.app.csrf_token}"', settings)
         self.assertIn(f'name="csrf_token" value="{self.app.csrf_token}"', dashboard)
+        self.assertIn('name="web_password"', settings)
+
+    def test_web_password_is_saved_with_restricted_permissions_and_used_immediately(self) -> None:
+        web_env = Path(self.directory.name) / "var" / "web.env"
+        application = WebApplication(
+            self.config,
+            self.credentials,
+            Path(self.directory.name),
+            access_token="hvv-anzeiger",
+            web_env_path=web_env,
+        )
+        application.save_web_password("new-password")
+        self.assertEqual(application.access_token, "new-password")
+        self.assertIn('HVV_WEB_TOKEN="new-password"', web_env.read_text())
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(web_env.stat().st_mode), 0o600)
 
     def test_remote_access_requires_a_bearer_token(self) -> None:
         with self.assertRaisesRegex(ValueError, "HVV_WEB_TOKEN"):
