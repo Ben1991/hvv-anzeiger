@@ -358,6 +358,32 @@ die Abfahrten in einer großen, displayähnlichen Ansicht, den Hardwarezustand
 des Raspberry Pi (CPU, RAM und freien SD-Speicher) sowie einen kontrollierten
 Button zum Neustart des Systems:
 
+Wenn der Installer verwendet wurde, kann die Weboberfläche als Dienst gestartet
+und dauerhaft aktiviert werden:
+
+```bash
+sudo systemctl enable --now hvv-anzeiger-web
+```
+
+Anschließend im Browser auf dem Raspberry Pi öffnen:
+
+```text
+http://127.0.0.1:8080
+```
+
+Soll die Oberfläche von einem anderen Rechner aus sicher geöffnet werden, ist
+ein SSH-Tunnel die einfachste Variante:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 <benutzer>@<raspberry-pi-ip>
+```
+
+Danach auf dem eigenen Rechner ebenfalls `http://127.0.0.1:8080` öffnen. Für
+direkten Zugriff im LAN siehe die Hinweise zu `--host 0.0.0.0` und
+`HVV_WEB_TOKEN` weiter unten.
+
+Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
+
 ```bash
 .venv/bin/hvv-web --config config.json --cache var/stations.json
 ```
