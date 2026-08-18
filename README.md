@@ -396,6 +396,36 @@ und Ziele). Vor dem Speichern wird die gesamte Konfiguration mit denselben
 Regeln wie beim Displaystart geprüft. Zugangsdaten werden nicht in
 `config.json` geschrieben und niemals in der Abfahrtsansicht ausgegeben.
 
+#### Werte in der Weboberfläche
+
+Die Einstellungsseite bildet die vollständige Konfiguration ab:
+
+- `api`: Geofox-Adresse und API-Version, Aktualisierungsabstand, Timeout,
+  Anzahl der sichtbaren Abfahrten sowie Zeitfenster für neue und veraltete
+  Daten.
+- `display`: SPI-Port und Gerät, GPIO-Pins, Drehung, SPI-Takt und
+  Rot-/Blau-Farbkanäle.
+- `night_shutdown`: Aktivierung sowie Beginn und Ende des Nachtfensters.
+- `stations`: Haltestellenkarten mit Name, Stadt, optionaler Geofox-ID,
+  Anzeige-Kürzel und beliebig vielen Linien-Ziel-Kombinationen.
+
+Jeder Wert hat eine kurze Erklärung und einen Button „Auf Standard
+zurücksetzen“. Änderungen werden erst gespeichert, nachdem die vollständige
+Konfiguration mit denselben Regeln wie beim Programmstart validiert wurde.
+
+Für Haltestellen empfiehlt sich dieser Ablauf:
+
+1. „Haltestelle hinzufügen“ wählen oder eine vorhandene Karte öffnen.
+2. Name und Stadt eingeben und „Geofox-Suche“ ausführen.
+3. Einen passenden Treffer auswählen; Name, Stadt und Geofox-ID werden
+   übernommen.
+4. Mit „Route hinzufügen“ die gewünschten Linien und Ziele ergänzen.
+5. Ein eindeutiges Kürzel mit 1 bis 3 Zeichen vergeben und speichern.
+
+Die Geofox-Suche liefert nur Vorschläge. Sie garantiert weder Vollständigkeit
+noch Korrektheit; bei Zweifeln ist die [offizielle GTI-Dokumentation](https://gti.geofox.de/)
+maßgeblich. Eine manuelle Eingabe bleibt jederzeit möglich.
+
 Für einen dauerhaften Start kann die mitgelieferte Unit verwendet werden:
 
 ```bash
@@ -598,6 +628,23 @@ Installation und Aktualisierung.
 Ein harter Stromausfall kann unabhängig von dieser Anwendung eine beschriebene
 microSD-Karte beschädigen. Für häufige Unterbrechungen sind ein zuverlässiges
 Netzteil und gegebenenfalls eine kleine USV sinnvoll.
+
+### Display nach einem Wackelkontakt
+
+Wenn die SPI-Verbindung zum ILI9341 kurz unterbrochen war, fängt die Anwendung
+den Übertragungsfehler ab und beendet den Dienst nicht. Sie verwirft den
+unterbrochenen Displaytreiber, initialisiert ihn beim nächsten Aktualisierungs-
+zyklus neu und schreibt anschließend den vollständigen aktuellen Frame erneut.
+Der Renderzustand wird dabei bewusst zurückgesetzt, damit auch ein unveränderter
+Abfahrtsstand erneut auf das Display übertragen wird.
+
+Das funktioniert, sofern der physische Kontakt wieder stabil ist. Bleibt der
+Wackelkontakt bestehen, versucht der Dienst die Wiederherstellung bei jedem
+weiteren Zyklus und protokolliert die Fehler im Journal:
+
+```bash
+journalctl -u hvv-anzeiger -f
+```
 
 ### Dienst steuern
 
