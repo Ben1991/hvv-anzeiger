@@ -147,6 +147,7 @@ a {{ color:#8bd3ff; }} h1 {{ margin:0 0 8px; font-size:clamp(2rem,6vw,4rem); }}
 .status {{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:16px 0; }} .status div {{ background:#121c2d; border:1px solid #324057; border-radius:12px; padding:14px; }} .status strong {{ display:block; font-size:1.15rem; margin-top:4px; }}
 .setting {{ min-width:0; }} .control-row {{ display:flex; gap:8px; align-items:center; }} .control-row input, .control-row select {{ flex:1; min-width:0; }} .reset {{ background:#26344a; border-color:#53627a; font-size:.85rem; }}
 .station-card {{ border:1px solid #53627a; border-radius:12px; padding:16px; margin:14px 0; }} .station-heading {{ display:flex; justify-content:space-between; align-items:center; gap:12px; }} .station-heading h2, .station-heading h3 {{ margin-top:0; }} .route-row {{ display:grid; grid-template-columns:1fr 2fr auto; gap:8px; margin:8px 0; }}
+.station-search {{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:14px; }} .station-search select {{ min-width:280px; flex:1; }}
 button, input, textarea {{ font:inherit; border-radius:9px; border:1px solid #53627a; padding:10px 12px; background:#101a2b; color:inherit; }}
 button {{ cursor:pointer; background:#207bb3; border-color:#65c6ff; font-weight:700; }} textarea {{ width:100%; min-height:420px; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:.9rem; }}
 label {{ display:block; margin:14px 0 6px; font-weight:700; }} .card {{ background:#121c2d; border:1px solid #324057; border-radius:14px; padding:20px; margin-top:18px; }}
@@ -197,6 +198,21 @@ class WebApplication:
             max_time_offset=config.api.max_time_offset_minutes,
         )
         return _departure_payload(departures[: config.api.max_departures], now), None
+
+    def station_suggestions(self, query: str, city: str) -> list[dict[str, str]]:
+        query = query.strip()
+        if len(query) < 2:
+            raise ValueError("Bitte mindestens zwei Zeichen eingeben")
+        config = load_config(self.config_path)
+        credentials = load_credentials(self.credentials_path)
+        client = GeofoxClient(
+            config.api.base_url,
+            credentials.get("GEOFOX_USER", ""),
+            credentials.get("GEOFOX_PASSWORD", ""),
+            version=config.api.version,
+            timeout=config.api.request_timeout_seconds,
+        )
+        return client.find_stations(query, city.strip() or "Hamburg")
 
     def dashboard(self) -> bytes:
         try:
@@ -304,6 +320,7 @@ class WebApplication:
 <div><label>Stadt</label><input data-station-field="city" value="{html.escape(str(station.get("city", "Hamburg")), quote=True)}" required><div class="subtle help">Stadt für die Geofox-Suche.</div></div>
 <div><label>Geofox-ID (optional)</label><input data-station-field="id" value="{html.escape(str(station.get("id") or ""), quote=True)}"><div class="subtle help">Nur eintragen, wenn sicher bekannt; sonst leer lassen.</div></div>
 <div><label>Kürzel</label><input data-station-field="label" maxlength="3" value="{html.escape(str(station.get("label", "")), quote=True)}" required><div class="subtle help">1–3 Zeichen für die Anzeige.</div></div></div>
+<div class="station-search"><button type="button" onclick="searchStation(this)">Geofox-Suche</button><select data-station-results onchange="applyStation(this)"><option value="">Treffer auswählen …</option></select><span class="subtle" data-search-message></span></div>
 <h4>Linien und Ziele</h4><div data-routes>{routes}</div><button type="button" onclick="addRoute(this)">Route hinzufügen</button></article>'''
 
         stations = "".join(
@@ -320,12 +337,14 @@ class WebApplication:
 <section class="card"><h2>Geofox-API</h2><div class="grid">{scalar("api.base_url")}{scalar("api.version", "number")}{scalar("api.refresh_seconds", "number")}{scalar("api.request_timeout_seconds", "number")}{scalar("api.max_departures", "number")}{scalar("api.max_time_offset_minutes", "number")}{scalar("api.max_stale_age_minutes", "number")}</div></section>
 <section class="card"><h2>Display</h2><div class="grid">{scalar("display.spi_port", "number")}{scalar("display.spi_device", "number")}{scalar("display.gpio_dc", "number")}{scalar("display.gpio_reset", "number")}{scalar("display.rotate", "number")}{scalar("display.bus_speed_hz", "number")}{scalar("display.bgr")}</div></section>
 <section class="card"><h2>Nachtabschaltung</h2><div class="grid">{scalar("night_shutdown.enabled")}{scalar("night_shutdown.start", "time")}{scalar("night_shutdown.end", "time")}</div></section>
-<section class="card"><div class="station-heading"><div><h2>Haltestellen und Linien</h2><p class="subtle">Karten statt JSON: Namen, Kürzel und Ziele sind direkt verständlich editierbar.</p></div><button type="button" onclick="addStation()">Haltestelle hinzufügen</button></div><div id="stations">{stations}</div></section>
+<section class="card"><div class="station-heading"><div><h2>Haltestellen und Linien</h2><p class="subtle">Karten statt JSON: Namen, Kürzel und Ziele sind direkt verständlich editierbar.</p><p class="notice">Die Geofox-Treffer sind nur Vorschläge. Es gibt keine Garantie auf Vollständigkeit oder Korrektheit. Im Zweifel bitte die <a href="https://gti.geofox.de/" target="_blank" rel="noreferrer">offizielle Geofox-API-Dokumentation</a> prüfen.</p></div><button type="button" onclick="addStation()">Haltestelle hinzufügen</button></div><div id="stations">{stations}</div></section>
 <textarea id="config_json" name="config_json" hidden>{raw}</textarea><p><button type="submit">Speichern und prüfen</button></p></form>
 <script>
 function resetField(button) {{ const control = button.parentElement.querySelector('[data-path]'); control.value = control.dataset.default; }}
 function addRoute(button) {{ const row = document.createElement('div'); row.className = 'route-row'; row.innerHTML = '<input data-route="line" placeholder="Linie" aria-label="Linie"><input data-route="destination" placeholder="Ziel" aria-label="Ziel"><button type="button" class="reset" onclick="this.parentElement.remove()">Route entfernen</button>'; button.previousElementSibling.appendChild(row); }}
 function addStation() {{ const first = document.querySelector('[data-station]'); const clone = first.cloneNode(true); clone.querySelectorAll('input').forEach(input => input.value = input.dataset.stationField === 'city' ? 'Hamburg' : ''); clone.querySelector('[data-routes]').innerHTML = ''; document.getElementById('stations').appendChild(clone); }}
+async function searchStation(button) {{ const card = button.closest('[data-station]'); const query = card.querySelector('[data-station-field="name"]').value; const city = card.querySelector('[data-station-field="city"]').value; const select = card.querySelector('[data-station-results]'); const message = card.querySelector('[data-search-message]'); message.textContent = 'Suche …'; try {{ const response = await fetch('/api/stations?q=' + encodeURIComponent(query) + '&city=' + encodeURIComponent(city)); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Suche fehlgeschlagen'); select.innerHTML = '<option value="">Treffer auswählen …</option>'; data.stations.forEach(station => {{ const option = document.createElement('option'); option.value = JSON.stringify(station); option.textContent = station.combinedName; select.appendChild(option); }}); message.textContent = data.stations.length ? 'Bitte passenden Treffer auswählen.' : 'Keine Treffer.'; }} catch (error) {{ message.textContent = error.message; }} }}
+function applyStation(select) {{ if (!select.value) return; const station = JSON.parse(select.value); const card = select.closest('[data-station]'); card.querySelector('[data-station-field="name"]').value = station.name; card.querySelector('[data-station-field="city"]').value = station.city; card.querySelector('[data-station-field="id"]').value = station.id; }}
 function prepareConfig() {{ const config = JSON.parse(document.getElementById('config_json').value); document.querySelectorAll('[data-path]').forEach(control => {{ const [section, key] = control.dataset.path.split('.'); config[section][key] = control.dataset.type === 'bool' ? control.value === 'true' : (control.type === 'number' ? Number(control.value) : control.value); }}); config.stations = [...document.querySelectorAll('[data-station]')].map(card => ({{ name: card.querySelector('[data-station-field="name"]').value, city: card.querySelector('[data-station-field="city"]').value, id: card.querySelector('[data-station-field="id"]').value || undefined, label: card.querySelector('[data-station-field="label"]').value, routes: [...card.querySelectorAll('[data-route="line"]')].map((line, index) => ({{ line: line.value, destination: card.querySelectorAll('[data-route="destination"]')[index].value }})) }})); document.getElementById('config_json').value = JSON.stringify(config); return true; }}
 </script>"""
         return _page("Einstellungen", content)
@@ -361,6 +380,26 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                     self.wfile.write(payload)
                 except (ConfigError, GeofoxError, OSError):
                     self._send(application.dashboard())
+            elif path == "/api/stations":
+                query = parse_qs(urlsplit(self.path).query)
+                try:
+                    stations = application.station_suggestions(
+                        query.get("q", [""])[0], query.get("city", ["Hamburg"])[0]
+                    )
+                    payload = json.dumps(
+                        {"stations": stations}, ensure_ascii=False
+                    ).encode()
+                    self.send_response(HTTPStatus.OK)
+                except (ConfigError, GeofoxError, OSError, ValueError) as exc:
+                    payload = json.dumps(
+                        {"stations": [], "error": str(exc)}, ensure_ascii=False
+                    ).encode()
+                    self.send_response(HTTPStatus.BAD_REQUEST)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(payload)
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
 

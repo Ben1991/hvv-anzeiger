@@ -89,6 +89,26 @@ class WebApplicationTest(unittest.TestCase):
     def test_hardware_status_has_expected_keys(self) -> None:
         self.assertEqual(set(hardware_status()), {"cpu", "ram", "storage"})
 
+    def test_station_suggestions_use_geofox_candidates_without_exposing_credentials(
+        self,
+    ) -> None:
+        candidates = [{
+            "name": "Markt",
+            "city": "Hamburg",
+            "id": "Master:1",
+            "combinedName": "Hamburg, Markt",
+        }]
+        with patch("hvv_display.web.GeofoxClient") as client_class:
+            client_class.return_value.find_stations.return_value = candidates
+            self.assertEqual(
+                self.app.station_suggestions("Markt", "Hamburg"), candidates
+            )
+            client_class.return_value.find_stations.assert_called_once_with(
+                "Markt", "Hamburg"
+            )
+        with self.assertRaisesRegex(ValueError, "mindestens zwei"):
+            self.app.station_suggestions("M", "Hamburg")
+
 
 if __name__ == "__main__":
     unittest.main()

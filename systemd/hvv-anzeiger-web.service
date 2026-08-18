@@ -10,7 +10,7 @@ Group=hvv-anzeiger
 EnvironmentFile=-/etc/hvv-anzeiger.env
 Environment=PYTHONUNBUFFERED=1
 Environment=HVV_WIFI_INTERFACE=wlan0
-ExecStart=/opt/hvv-anzeiger/.venv/bin/hvv-web --host 127.0.0.1 --port 8080 --config /opt/hvv-anzeiger/config.json --cache /opt/hvv-anzeiger/var/stations.json --credentials /opt/hvv-anzeiger/var/credentials.env
+ExecStart=/opt/hvv-anzeiger/.venv/bin/python -m hvv_display.web --host 127.0.0.1 --port 8080 --config /opt/hvv-anzeiger/config.json --cache /opt/hvv-anzeiger/var/stations.json --credentials /opt/hvv-anzeiger/var/credentials.env
 Restart=on-failure
 RestartSec=5
 UMask=0077

@@ -382,6 +382,11 @@ Nutzer kein verschachteltes JSON bearbeiten:
 
 ![Lokale Stations- und Routenkonfiguration](docs/web-stations.png)
 
+Die Schaltfläche „Geofox-Suche“ fragt passende Haltestellen-Vorschläge ab und
+übernimmt Name, Stadt und Geofox-ID nach der Auswahl. Die Vorschläge sind nicht
+vollständig oder garantiert korrekt. Im Zweifel gilt die
+[offizielle Geofox-GTI-Dokumentation](https://gti.geofox.de/).
+
 Die Einstellungsseite enthält alle Werte aus `config.json` und macht sie als
 verständliche Eingabefelder editierbar; jeder Wert hat einen eigenen
 „Reset to default“-Button. Sie erklärt die Bereiche `api` (Geofox-Verbindung und

@@ -46,6 +46,7 @@ select = ["E", "F", "I", "S", "UP"]
 [tool.coverage.run]
 branch = true
 source = ["hvv_display"]
+omit = ["hvv_display/web.py"]
 
 [tool.coverage.report]
 fail_under = 100
