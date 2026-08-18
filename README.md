@@ -21,7 +21,7 @@ Die fertige Anzeige im Einsatz auf einem Raspberry Pi mit 2,2-Zoll-Display:
 ![Praxisbeispiel der fertigen HVV-Abfahrtsanzeige](docs/practice-example.png)
 
 Die Hülle für den Raspberry Pi und das Display ist 3D-gedruckt und kann bei
-[3DprintsByBen auf Etsy](https://3dprintsbyben.etsy.com) bestellt werden.
+[3DprintsByBen auf Etsy](https://3dprintsbybenstudio.etsy.com) bestellt werden.
 Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
 
 > Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
