@@ -412,6 +412,21 @@ Nach einem Update führt `update.sh` das Neuladen und den Neustart automatisch
 durch. Die Adresse muss die tatsächliche Raspberry-Pi-IP enthalten, zum
 Beispiel `http://192.168.178.51:8080`.
 
+Wenn die Oberfläche erreichbar ist, das Speichern aber mit `Read-only file
+system` für eine Datei wie `.config.json.…` fehlschlägt, läuft noch eine alte
+Installation. Das aktuelle Update installieren und die Web-Unit neu laden:
+
+```bash
+cd ~/hvv-anzeiger
+./update.sh
+sudo systemctl daemon-reload
+sudo systemctl restart hvv-anzeiger-web
+```
+
+Die aktuelle Version behandelt diese systemd-Einschränkung beim Speichern
+automatisch und schreibt die bereits freigegebene `config.json` direkt, wenn
+keine temporäre Nachbardatei angelegt werden darf.
+
 Die neue Installation wird in einem separaten Verzeichnis vorbereitet und
 geprüft, bevor sie die laufende Version ersetzt. Startet der neue Dienst nicht,
 stellt der Installer Anwendung, Zugangsdaten und systemd-Konfiguration auf den

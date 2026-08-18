@@ -1,4 +1,6 @@
 import base64
+import errno
+import json
 import os
 import stat
 import tempfile
@@ -14,6 +16,7 @@ from hvv_display.web import (
     hardware_status,
     hash_web_password,
     load_credentials,
+    save_config,
     save_credentials,
     verify_web_password,
 )
@@ -50,6 +53,22 @@ class WebApplicationTest(unittest.TestCase):
     def test_credentials_reject_environment_file_record_injection(self) -> None:
         with self.assertRaisesRegex(ValueError, "keine Zeilenumbrüche"):
             save_credentials(self.credentials, "application-id", "secret\nHTTPS_PROXY=http://attacker")
+
+    def test_config_save_falls_back_when_systemd_blocks_temporary_sibling(self) -> None:
+        raw_config = {
+            "api": {"base_url": "https://gti.geofox.de/gti/public/v1", "version": 63},
+            "display": {"rotate": 2},
+            "stations": [],
+        }
+        with patch(
+            "hvv_display.web.tempfile.NamedTemporaryFile",
+            side_effect=OSError(errno.EROFS, "Read-only file system"),
+        ):
+            save_config(self.config, raw_config)
+        self.assertEqual(
+            self.config.read_text(encoding="utf-8"),
+            json.dumps(raw_config, ensure_ascii=False, indent=2) + "\n",
+        )
 
     def test_settings_and_dashboard_include_csrf_tokens(self) -> None:
         settings = self.app.settings().decode("utf-8")
