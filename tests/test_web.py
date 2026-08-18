@@ -1,3 +1,4 @@
+import base64
 import os
 import stat
 import tempfile
@@ -11,8 +12,10 @@ from hvv_display.models import Departure
 from hvv_display.web import (
     WebApplication,
     hardware_status,
+    hash_web_password,
     load_credentials,
     save_credentials,
+    verify_web_password,
 )
 
 
@@ -53,9 +56,28 @@ class WebApplicationTest(unittest.TestCase):
         dashboard = self.app.dashboard().decode("utf-8")
         self.assertIn(f'name="csrf_token" value="{self.app.csrf_token}"', settings)
         self.assertIn(f'name="csrf_token" value="{self.app.csrf_token}"', dashboard)
+        self.assertIn('name="web_password"', settings)
+
+    def test_web_password_is_saved_with_restricted_permissions_and_used_immediately(
+        self,
+    ) -> None:
+        web_env = Path(self.directory.name) / "var" / "web.env"
+        application = WebApplication(
+            self.config,
+            self.credentials,
+            Path(self.directory.name),
+            access_token=hash_web_password("hvv-anzeiger"),
+            web_env_path=web_env,
+        )
+        application.save_web_password("new-password")
+        self.assertTrue(verify_web_password("new-password", application.access_token))
+        self.assertIn("HVV_WEB_PASSWORD_HASH=", web_env.read_text())
+        self.assertTrue(verify_web_password("new-password", application.access_token))
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(web_env.stat().st_mode), 0o600)
 
     def test_remote_access_requires_a_bearer_token(self) -> None:
-        with self.assertRaisesRegex(ValueError, "HVV_WEB_TOKEN"):
+        with self.assertRaisesRegex(ValueError, "HVV_WEB_PASSWORD_HASH"):
             from hvv_display.web import run
 
             run(  # noqa: S104
@@ -63,6 +85,24 @@ class WebApplicationTest(unittest.TestCase):
                 config=str(self.config),
                 credentials=str(self.credentials),
             )
+
+    def test_remote_access_accepts_browser_basic_auth_with_web_token(self) -> None:
+        from hvv_display.web import WebApplication
+
+        test_password = "test-web-password"  # noqa: S105
+        application = WebApplication(
+            self.config,
+            self.credentials,
+            Path(self.directory.name),
+            access_token=hash_web_password(test_password),
+        )
+        header = "Basic " + base64.b64encode(
+            f"hvv-anzeiger:{test_password}".encode()
+        ).decode()
+        self.assertTrue(application.authorize({"Authorization": header}))
+        self.assertFalse(
+            application.authorize({"Authorization": "Basic aHZ2LWFuemVpZ2VyOndyb25n"})
+        )
 
     def test_settings_contains_every_config_section_and_explanations(self) -> None:
         settings = self.app.settings().decode("utf-8")

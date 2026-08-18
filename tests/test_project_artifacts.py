@@ -175,6 +175,7 @@ class ProjectArtifactTest(unittest.TestCase):
         installer_text = installer.read_text(encoding="utf-8")
         self.assertIn('systemctl stop "$SERVICE_NAME"', installer_text)
         self.assertIn('enable --now "$LOG_CLEANUP_TIMER"', installer_text)
+        self.assertIn('enable --now "$WEB_SERVICE"', installer_text)
         self.assertIn('APP_USER="hvv-anzeiger"', installer_text)
         self.assertIn('systemctl enable "$SERVICE_NAME"', installer_text)
         self.assertIn("--require-hashes", installer_text)
@@ -188,6 +189,8 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("INSTALL_SUCCEEDED", installer_text)
         self.assertIn('sudo install -m 0755 \\', installer_text)
         self.assertIn('"$SOURCE_DIR/configure-credentials.sh"', installer_text)
+        self.assertIn('WEB_ENV_FILE="${APP_DIR}/var/web.env"', installer_text)
+        self.assertIn("hash_web_password(\"hvv-anzeiger\")", installer_text)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
             encoding="utf-8"
         )
@@ -216,6 +219,16 @@ class ProjectArtifactTest(unittest.TestCase):
             service,
         )
         self.assertNotIn("GEOFOX_PASSWORD=", service)
+
+        web_service = (ROOT / "systemd" / "hvv-anzeiger-web.service").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("--host 0.0.0.0", web_service)
+        self.assertIn("EnvironmentFile=-/opt/hvv-anzeiger/var/web.env", web_service)
+        self.assertIn(
+            "Environment=HVV_WEB_ENV_FILE=/opt/hvv-anzeiger/var/web.env",
+            web_service,
+        )
 
     def test_dependencies_are_locked_with_hashes_and_audited_in_ci(self) -> None:
         for filename in ("requirements.txt", "requirements-dev.txt"):
