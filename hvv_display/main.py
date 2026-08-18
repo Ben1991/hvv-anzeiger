@@ -14,6 +14,7 @@ from PIL import Image
 from .clock import in_night_shutdown
 from .clock import time_is_synchronized as clock_is_synchronized
 from .config import ConfigError, load_config
+from .credentials import load_credentials
 from .geofox import HAMBURG_TZ, GeofoxClient, GeofoxError
 from .hardware import Ili9341Display
 from .models import Departure
@@ -90,6 +91,11 @@ def _arguments() -> argparse.Namespace:
         default=os.environ.get("HVV_STATION_CACHE", "var/stations.json"),
         help="Pfad für automatisch gefundene Haltestellen-IDs",
     )
+    parser.add_argument(
+        "--credentials",
+        default=os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env"),
+        help="Pfad zur Geofox-EnvironmentFile",
+    )
     parser.add_argument("--once", action="store_true", help="Nur einmal aktualisieren")
     parser.add_argument(
         "--output",
@@ -159,15 +165,28 @@ def run() -> int:
     args = _arguments()
     notifier = SystemdNotifier()
     try:
-        config = load_config(args.config)
+        config_path = Path(args.config)
+        credentials_path = Path(
+            getattr(
+                args,
+                "credentials",
+                os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env"),
+            )
+        )
+        config = load_config(config_path)
+        credentials = load_credentials(credentials_path)
         client = GeofoxClient(
             config.api.base_url,
-            os.environ.get("GEOFOX_USER", ""),
-            os.environ.get("GEOFOX_PASSWORD", ""),
+            credentials.get("GEOFOX_USER", ""),
+            credentials.get("GEOFOX_PASSWORD", ""),
             version=config.api.version,
             timeout=config.api.request_timeout_seconds,
         )
         display = None if args.output else Ili9341Display(config.display)
+        config_mtime_ns = config_path.stat().st_mtime_ns
+        credentials_mtime_ns = (
+            credentials_path.stat().st_mtime_ns if credentials_path.exists() else None
+        )
     except (ConfigError, GeofoxError, RuntimeError) as exc:
         LOG.error("%s", exc)
         return 2
@@ -196,6 +215,53 @@ def run() -> int:
         now = datetime.now(HAMBURG_TZ)
         current_monotonic = time.monotonic()
         notifier.ping_if_due(current_monotonic)
+        try:
+            current_config_mtime_ns = config_path.stat().st_mtime_ns
+            current_credentials_mtime_ns = (
+                credentials_path.stat().st_mtime_ns
+                if credentials_path.exists()
+                else None
+            )
+        except OSError:
+            current_config_mtime_ns = config_mtime_ns
+            current_credentials_mtime_ns = credentials_mtime_ns
+        if (
+            current_config_mtime_ns != config_mtime_ns
+            or current_credentials_mtime_ns != credentials_mtime_ns
+        ):
+            try:
+                new_config = load_config(config_path)
+                new_credentials = load_credentials(credentials_path)
+                display_changed = new_config.display != config.display
+                config = new_config
+                client = GeofoxClient(
+                    config.api.base_url,
+                    new_credentials.get("GEOFOX_USER", ""),
+                    new_credentials.get("GEOFOX_PASSWORD", ""),
+                    version=config.api.version,
+                    timeout=config.api.request_timeout_seconds,
+                )
+                credentials_mtime_ns = current_credentials_mtime_ns
+                config_mtime_ns = current_config_mtime_ns
+                stations = None
+                latest = []
+                last_updated = None
+                last_error = None
+                consecutive_failures = 0
+                next_api_attempt_at = 0.0
+                last_board_state = None
+                if display_changed and not args.output:
+                    display = None
+                LOG.info(
+                    "Gespeicherte Konfiguration direkt übernommen%s",
+                    "; Display wird neu initialisiert" if display_changed else "",
+                )
+            except (ConfigError, OSError) as exc:
+                LOG.warning(
+                    "Neue Konfiguration konnte nicht übernommen werden; "
+                    "bisherige Werte bleiben aktiv: %s",
+                    exc,
+                )
         if not args.output and display is None:
             try:
                 display = Ili9341Display(config.display)
@@ -304,6 +370,14 @@ def run() -> int:
             if sleep_now >= deadline:
                 break
             notifier.ping_if_due(sleep_now)
+            try:
+                if config_path.stat().st_mtime_ns != config_mtime_ns or (
+                    credentials_path.exists()
+                    and credentials_path.stat().st_mtime_ns != credentials_mtime_ns
+                ):
+                    break
+            except OSError:
+                pass
             time.sleep(min(1.0, deadline - sleep_now))
     return 0
 

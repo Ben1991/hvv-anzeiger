@@ -364,9 +364,21 @@ Button zum Neustart des Systems:
 
 Danach ist sie standardmäßig nur auf dem Raspberry Pi unter
 `http://127.0.0.1:8080` erreichbar. Mit `--host 0.0.0.0` kann sie im lokalen
-Netz freigegeben werden; das sollte nur in einem vertrauenswürdigen Netz und
-mit zusätzlichem Zugriffsschutz erfolgen, weil die Oberfläche Einstellungen
-ändert.
+Netz freigegeben werden. Dafür muss zusätzlich ein Bearer-Token gesetzt werden,
+zum Beispiel über `HVV_WEB_TOKEN` in `/opt/hvv-anzeiger/var/web.env`:
+
+```text
+HVV_WEB_TOKEN=ein-langes-zufälliges-geheimnis
+```
+
+Die Oberfläche erwartet dieses Token dann im HTTP-Header
+`Authorization: Bearer <Token>`. Ohne Token startet sie bei einer nicht-lokalen
+Bind-Adresse nicht. Auch lokal sind alle schreibenden Formulare gegen
+Cross-Site-Requests geschützt.
+
+Der Installer gibt `config.json` dem Dienstbenutzer `hvv-anzeiger` mit den
+Rechten `0640`, damit die Weboberfläche die validierte Datei atomar speichern
+kann, ohne Schreibrechte auf den Anwendungscode zu erhalten.
 
 Beispielansicht der lokalen Oberfläche:
 
@@ -436,9 +448,15 @@ sudo systemctl enable --now hvv-anzeiger-web
 
 Die Weboberfläche speichert geänderte Geofox-Zugangsdaten in
 `/opt/hvv-anzeiger/var/credentials.env` mit den Dateirechten `0600`. Der
-Displaydienst lädt diese Datei beim Start zusätzlich zu
-`/etc/hvv-anzeiger.env`; nach einer Änderung genügt ein Neustart des
-Displaydienstes:
+Displaydienst prüft Konfiguration und Zugangsdaten vor jeder Aktualisierung
+auf Änderungen und übernimmt gültige gespeicherte Werte direkt. Nach dem
+Speichern erscheint eine kurze Bestätigung in der Oberfläche; ein Neustart ist
+für diese Werte normalerweise nicht erforderlich. Geänderte Displayparameter
+werden automatisch durch eine erneute Displayinitialisierung übernommen.
+
+Falls künftig eine Änderung einen Neustart voraussetzt, zeigt die Oberfläche
+nach dem Speichern ausdrücklich eine Abfrage mit einer Schaltfläche zum
+Neustart. Ein manueller Neustart bleibt möglich:
 
 ```bash
 sudo systemctl restart hvv-anzeiger
@@ -453,9 +471,9 @@ unprivilegierter Benutzer läuft. Optional kann ein Administrator
 hvv-anzeiger ALL=(root) NOPASSWD: /usr/bin/systemctl reboot
 ```
 
-Anschließend muss die Web-Unit `ExecStart` für den Button auf einen Wrapper
-mit `sudo -n systemctl reboot` erweitert werden. Ohne diese Regel bleibt der
-Button sicher wirkungslos und zeigt einen Berechtigungsfehler.
+Die mitgelieferte Web-Unit verwendet bereits `sudo -n systemctl reboot`. Ohne
+diese Regel bleibt der Button sicher wirkungslos und zeigt einen
+Berechtigungsfehler.
 
 Die aktive Konfiguration liegt unter:
 
@@ -463,7 +481,10 @@ Die aktive Konfiguration liegt unter:
 /opt/hvv-anzeiger/config.json
 ```
 
-Nach einer Änderung muss der Dienst neu gestartet werden:
+Eine manuelle Änderung außerhalb der Weboberfläche wird ebenfalls bei der
+nächsten Aktualisierung erkannt. Ein Neustart kann weiterhin ausdrücklich
+erforderlich sein, wenn die Datei während eines laufenden Vorgangs geändert
+wird oder die systemd-Unit selbst angepasst wurde:
 
 ```bash
 sudo nano /opt/hvv-anzeiger/config.json

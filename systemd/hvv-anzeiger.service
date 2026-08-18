@@ -14,7 +14,7 @@ EnvironmentFile=/etc/hvv-anzeiger.env
 EnvironmentFile=-/opt/hvv-anzeiger/var/credentials.env
 Environment=PYTHONUNBUFFERED=1
 Environment=HVV_WIFI_INTERFACE=wlan0
-ExecStart=/opt/hvv-anzeiger/.venv/bin/python -m hvv_display --config /opt/hvv-anzeiger/config.json --cache /opt/hvv-anzeiger/var/stations.json
+ExecStart=/opt/hvv-anzeiger/.venv/bin/python -m hvv_display --config /opt/hvv-anzeiger/config.json --cache /opt/hvv-anzeiger/var/stations.json --credentials /opt/hvv-anzeiger/var/credentials.env
 Restart=always
 RestartSec=10
 UMask=0077

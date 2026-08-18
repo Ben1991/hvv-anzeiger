@@ -7,6 +7,7 @@ import html
 import json
 import logging
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -18,6 +19,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from .config import ConfigError, load_config
+from .credentials import load_credentials
 from .geofox import HAMBURG_TZ, GeofoxClient, GeofoxError
 from .stations import resolve_stations
 
@@ -26,30 +28,11 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
 
 
-def _env_value(value: str) -> str:
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
-    return value
-
-
-def load_credentials(path: Path) -> dict[str, str]:
-    """Read only the two Geofox variables from a shell-style env file."""
-    credentials = {}
-    if path.is_file():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            key, separator, value = line.partition("=")
-            if separator and key.strip() in {"GEOFOX_USER", "GEOFOX_PASSWORD"}:
-                credentials[key.strip()] = _env_value(value)
-    for key in ("GEOFOX_USER", "GEOFOX_PASSWORD"):
-        if os.environ.get(key) and key not in credentials:
-            credentials[key] = os.environ[key]
-    return credentials
-
-
 def save_credentials(path: Path, user: str, password: str) -> None:
     if not user.strip() or not password:
         raise ValueError("Geofox-Anwendungs-ID und Passwort müssen ausgefüllt sein")
+    if any(character in user or character in password for character in ("\r", "\n", "\x00")):
+        raise ValueError("Geofox-Zugangsdaten dürfen keine Zeilenumbrüche enthalten")
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = f"GEOFOX_USER={user.strip()}\nGEOFOX_PASSWORD={password}\n"
     with tempfile.NamedTemporaryFile(
@@ -69,17 +52,31 @@ def save_credentials(path: Path, user: str, password: str) -> None:
 def save_config(path: Path, raw_config: dict[str, Any]) -> None:
     payload = json.dumps(raw_config, ensure_ascii=False, indent=2) + "\n"
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", delete=False
-    ) as handle:
-        handle.write(payload)
-        temporary = Path(handle.name)
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
     try:
-        temporary.chmod(path.stat().st_mode & 0o777 if path.exists() else 0o600)
-        temporary.replace(path)
-    except Exception:
-        temporary.unlink(missing_ok=True)
-        raise
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
+        ) as handle:
+            handle.write(payload)
+            temporary = Path(handle.name)
+        try:
+            temporary.chmod(mode)
+            temporary.replace(path)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
+    except PermissionError:
+        # The installed service owns config.json but not its root-owned parent
+        # directory, so an atomic sibling replacement is not possible there.
+        with path.open("w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        path.chmod(mode)
 
 
 def _minutes_until(departure: Any, now: datetime) -> int:
@@ -157,10 +154,30 @@ label {{ display:block; margin:14px 0 6px; font-weight:700; }} .card {{ backgrou
 
 
 class WebApplication:
-    def __init__(self, config_path: Path, credentials_path: Path, cache_path: Path) -> None:
+    def __init__(
+        self,
+        config_path: Path,
+        credentials_path: Path,
+        cache_path: Path,
+        *,
+        access_token: str | None = None,
+    ) -> None:
         self.config_path = config_path
         self.credentials_path = credentials_path
         self.cache_path = cache_path
+        self.access_token = access_token
+        self.csrf_token = secrets.token_urlsafe(32)
+
+    def authorize(self, headers: Any) -> bool:
+        if self.access_token is None:
+            return True
+        return secrets.compare_digest(
+            headers.get("Authorization", ""), f"Bearer {self.access_token}"
+        )
+
+    def validate_csrf(self, token: str) -> None:
+        if not secrets.compare_digest(token, self.csrf_token):
+            raise PermissionError("Ungültige Sitzungsbestätigung")
 
     def raw_config(self) -> dict[str, Any]:
         raw = json.loads(self.config_path.read_text(encoding="utf-8"))
@@ -234,13 +251,16 @@ class WebApplication:
         content = f"""<div class="toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lokale HVV-Anzeige · aktualisiert beim Öffnen</div></div>
 <div><a href="/settings">Einstellungen</a> · <a href="/">Aktualisieren</a></div></div>{message}<section class="board" aria-label="Abfahrtsanzeige">{rows}</section>
 <section class="status" aria-label="Hardware-Status"><div>CPU<strong>{html.escape(status["cpu"])}</strong></div><div>RAM<strong>{html.escape(status["ram"])}</strong></div><div>SD-Speicher<strong>{html.escape(status["storage"])}</strong></div></section>
-<form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><button class="danger" type="submit">System neu starten</button></form>"""
+<form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">System neu starten</button></form>"""
         return _page("Abfahrten", content)
 
-    def settings(self, message: str = "") -> bytes:
+    def settings(self, message: str = "", restart_required: bool = False) -> bytes:
         raw_config = self.raw_config()
         credentials = load_credentials(self.credentials_path)
         notice = f'<div class="notice">{html.escape(message)}</div>' if message else ""
+        restart_notice = ""
+        if restart_required:
+            restart_notice = f'''<div class="notice">Diese Änderung wird erst nach einem Neustart vollständig aktiv. Jetzt neu starten?<form method="post" action="/system/restart"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">Jetzt neu starten</button></form></div>'''
         defaults = {
             "api.base_url": "https://gti.geofox.de/gti/public",
             "api.version": 63,
@@ -331,14 +351,14 @@ class WebApplication:
             stations = station_card({"city": "Hamburg", "routes": []}, 0)
         raw = html.escape(json.dumps(raw_config, ensure_ascii=False))
         content = f"""<div class="toolbar"><div><h1>Einstellungen</h1><div class="subtle">Bedienbare Felder · jede Änderung wird validiert</div></div><a href="/">← Abfahrten</a></div>{notice}
-<form method="post" action="/settings" onsubmit="return prepareConfig()"><section class="card"><h2>Geofox-Zugang</h2><p class="subtle">Das Passwort wird nicht angezeigt. Ein leeres Passwort lässt den bisherigen Wert unverändert.</p>
+<form method="post" action="/settings" accept-charset="UTF-8" onsubmit="return prepareConfig()"><section class="card"><h2>Geofox-Zugang</h2><p class="subtle">Das Passwort wird nicht angezeigt. Ein leeres Passwort lässt den bisherigen Wert unverändert.</p>
 <label for="user">Anwendungs-ID</label><input id="user" name="user" value="{html.escape(credentials.get("GEOFOX_USER", ""), quote=True)}" autocomplete="username">
 <label for="password">Passwort</label><input id="password" name="password" type="password" autocomplete="new-password" placeholder="unverändert lassen"></section>
 <section class="card"><h2>Geofox-API</h2><div class="grid">{scalar("api.base_url")}{scalar("api.version", "number")}{scalar("api.refresh_seconds", "number")}{scalar("api.request_timeout_seconds", "number")}{scalar("api.max_departures", "number")}{scalar("api.max_time_offset_minutes", "number")}{scalar("api.max_stale_age_minutes", "number")}</div></section>
 <section class="card"><h2>Display</h2><div class="grid">{scalar("display.spi_port", "number")}{scalar("display.spi_device", "number")}{scalar("display.gpio_dc", "number")}{scalar("display.gpio_reset", "number")}{scalar("display.rotate", "number")}{scalar("display.bus_speed_hz", "number")}{scalar("display.bgr")}</div></section>
 <section class="card"><h2>Nachtabschaltung</h2><div class="grid">{scalar("night_shutdown.enabled")}{scalar("night_shutdown.start", "time")}{scalar("night_shutdown.end", "time")}</div></section>
 <section class="card"><div class="station-heading"><div><h2>Haltestellen und Linien</h2><p class="subtle">Karten statt JSON: Namen, Kürzel und Ziele sind direkt verständlich editierbar.</p><p class="notice">Die Geofox-Treffer sind nur Vorschläge. Es gibt keine Garantie auf Vollständigkeit oder Korrektheit. Im Zweifel bitte die <a href="https://gti.geofox.de/" target="_blank" rel="noreferrer">offizielle Geofox-API-Dokumentation</a> prüfen.</p></div><button type="button" onclick="addStation()">Haltestelle hinzufügen</button></div><div id="stations">{stations}</div></section>
-<textarea id="config_json" name="config_json" hidden>{raw}</textarea><p><button type="submit">Speichern und prüfen</button></p></form>
+<textarea id="config_json" name="config_json" hidden>{raw}</textarea><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><p><button type="submit">Speichern und prüfen</button></p></form>{restart_notice}
 <script>
 function resetField(button) {{ const control = button.parentElement.querySelector('[data-path]'); control.value = control.dataset.default; }}
 function addRoute(button) {{ const row = document.createElement('div'); row.className = 'route-row'; row.innerHTML = '<input data-route="line" placeholder="Linie" aria-label="Linie"><input data-route="destination" placeholder="Ziel" aria-label="Ziel"><button type="button" class="reset" onclick="this.parentElement.remove()">Route entfernen</button>'; button.previousElementSibling.appendChild(row); }}
@@ -352,6 +372,21 @@ function prepareConfig() {{ const config = JSON.parse(document.getElementById('c
 
 def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
+        def _form_values(self, max_length: int) -> dict[str, list[str]]:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError as exc:
+                raise ValueError("Ungültige Anfragegröße") from exc
+            if length < 0:
+                raise ValueError("Ungültige Anfragegröße")
+            payload = self.rfile.read(min(length, max_length))
+            try:
+                form_text = payload.decode("utf-8")
+            except UnicodeDecodeError:
+                # Some embedded browsers still submit form bodies as Latin-1.
+                form_text = payload.decode("latin-1")
+            return parse_qs(form_text, keep_blank_values=True)
+
         def _send(self, payload: bytes, status: HTTPStatus = HTTPStatus.OK) -> None:
             self.send_response(status)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -361,12 +396,21 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(payload)
 
         def do_GET(self) -> None:  # noqa: N802
+            if not application.authorize(self.headers):
+                self.send_error(HTTPStatus.UNAUTHORIZED)
+                return
             path = urlsplit(self.path).path
             if path == "/":
                 self._send(application.dashboard())
             elif path == "/settings":
                 try:
-                    self._send(application.settings())
+                    query = parse_qs(urlsplit(self.path).query)
+                    saved = query.get("saved", [""])[0] == "1"
+                    self._send(application.settings(
+                        "Gespeichert. Die laufende Anwendung übernimmt die Änderung bei der nächsten Aktualisierung; ein Neustart ist nicht nötig."
+                        if saved else "",
+                        restart_required=False,
+                    ))
                 except (ConfigError, OSError) as exc:
                     self._send(application.settings(str(exc)), HTTPStatus.INTERNAL_SERVER_ERROR)
             elif path == "/api/departures":
@@ -404,25 +448,32 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:  # noqa: N802
+            if not application.authorize(self.headers):
+                self.send_error(HTTPStatus.UNAUTHORIZED)
+                return
             path = urlsplit(self.path).path
             if path == "/system/restart":
                 try:
+                    values = self._form_values(4096)
+                    application.validate_csrf(values.get("csrf_token", [""])[0])
                     application.restart_system()
                     self._send(_page("Neustart", "<h1>Neustart ausgelöst</h1>"))
-                except OSError as exc:
+                except (OSError, PermissionError, ValueError, UnicodeDecodeError) as exc:
                     self._send(application.dashboard() + f"<!-- {html.escape(str(exc))} -->".encode(), HTTPStatus.FORBIDDEN)
                 return
             if path != "/settings":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
-            length = min(int(self.headers.get("Content-Length", "0")), 1_000_000)
-            values = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=True)
             try:
+                values = self._form_values(1_000_000)
+                application.validate_csrf(values.get("csrf_token", [""])[0])
                 raw_config = json.loads(values.get("config_json", [""])[0])
                 if not isinstance(raw_config, dict):
                     raise ValueError("Konfiguration muss ein JSON-Objekt sein")
                 candidate = self.server.application.config_path  # type: ignore[attr-defined]
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as handle:
+                with tempfile.NamedTemporaryFile(
+                    mode="w", encoding="utf-8", suffix=".json", delete=False
+                ) as handle:
                     handle.write(json.dumps(raw_config, ensure_ascii=False))
                     temporary = Path(handle.name)
                 try:
@@ -440,7 +491,7 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 self.send_response(HTTPStatus.SEE_OTHER)
                 self.send_header("Location", "/settings?saved=1")
                 self.end_headers()
-            except (ValueError, ConfigError, OSError) as exc:
+            except (ValueError, ConfigError, OSError, PermissionError) as exc:
                 self._send(application.settings(f"Nicht gespeichert: {exc}"), HTTPStatus.BAD_REQUEST)
 
         def log_message(self, format: str, *args: object) -> None:
@@ -449,10 +500,12 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-def run(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, config: str = "config.json", credentials: str | None = None, cache: str = "var/stations.json") -> None:
+def run(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, config: str = "config.json", credentials: str | None = None, cache: str = "var/stations.json", access_token: str | None = None) -> None:
+    if host not in {"127.0.0.1", "localhost", "::1"} and not access_token:
+        raise ValueError("Für einen nicht-lokalen Webhost muss HVV_WEB_TOKEN gesetzt sein")
     config_path = Path(config)
     credentials_path = Path(credentials or os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env"))
-    application = WebApplication(config_path, credentials_path, Path(cache))
+    application = WebApplication(config_path, credentials_path, Path(cache), access_token=access_token)
     server = ThreadingHTTPServer((host, port), make_handler(application))
     server.application = application  # type: ignore[attr-defined]
     LOG.info("Lokale Weboberfläche erreichbar unter http://%s:%d", host, port)
@@ -471,9 +524,10 @@ def main() -> None:
     parser.add_argument("--config", default=os.environ.get("HVV_CONFIG", "config.json"))
     parser.add_argument("--credentials", default=os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env"))
     parser.add_argument("--cache", default=os.environ.get("HVV_STATION_CACHE", "var/stations.json"))
+    parser.add_argument("--access-token", default=os.environ.get("HVV_WEB_TOKEN"), help="Bearer-Token für nicht-lokale Zugriffe")
     args = parser.parse_args()
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
-    run(args.host, args.port, config=args.config, credentials=args.credentials, cache=args.cache)
+    run(args.host, args.port, config=args.config, credentials=args.credentials, cache=args.cache, access_token=args.access_token)
 
 
 if __name__ == "__main__":

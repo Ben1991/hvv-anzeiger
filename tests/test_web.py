@@ -44,6 +44,26 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn("application-id", settings)
         self.assertNotIn("secret-value", settings)
 
+    def test_credentials_reject_environment_file_record_injection(self) -> None:
+        with self.assertRaisesRegex(ValueError, "keine Zeilenumbrüche"):
+            save_credentials(self.credentials, "application-id", "secret\nHTTPS_PROXY=http://attacker")
+
+    def test_settings_and_dashboard_include_csrf_tokens(self) -> None:
+        settings = self.app.settings().decode("utf-8")
+        dashboard = self.app.dashboard().decode("utf-8")
+        self.assertIn(f'name="csrf_token" value="{self.app.csrf_token}"', settings)
+        self.assertIn(f'name="csrf_token" value="{self.app.csrf_token}"', dashboard)
+
+    def test_remote_access_requires_a_bearer_token(self) -> None:
+        with self.assertRaisesRegex(ValueError, "HVV_WEB_TOKEN"):
+            from hvv_display.web import run
+
+            run(  # noqa: S104
+                host="0.0.0.0",  # noqa: S104
+                config=str(self.config),
+                credentials=str(self.credentials),
+            )
+
     def test_settings_contains_every_config_section_and_explanations(self) -> None:
         settings = self.app.settings().decode("utf-8")
         for section in ("api", "display", "night_shutdown", "stations"):
