@@ -8,6 +8,7 @@ SYSTEMD_DIR="${HVV_SYSTEMD_DIR:-/etc/systemd/system}"
 SERVICE_NAME="hvv-anzeiger"
 LOG_CLEANUP_SERVICE="hvv-anzeiger-log-cleanup.service"
 LOG_CLEANUP_TIMER="hvv-anzeiger-log-cleanup.timer"
+WEB_SERVICE="hvv-anzeiger-web.service"
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APP_USER="hvv-anzeiger"
 APP_GROUP="hvv-anzeiger"
@@ -42,7 +43,7 @@ backup_unit() {
 
 restore_units() {
   local unit
-  for unit in "$SERVICE_NAME.service" "$LOG_CLEANUP_SERVICE" "$LOG_CLEANUP_TIMER"; do
+  for unit in "$SERVICE_NAME.service" "$WEB_SERVICE" "$LOG_CLEANUP_SERVICE" "$LOG_CLEANUP_TIMER"; do
     if [[ -e "${UNIT_BACKUP_DIR}/${unit}.missing" ]]; then
       sudo rm -f -- "${SYSTEMD_DIR}/${unit}"
     elif [[ -e "${UNIT_BACKUP_DIR}/${unit}" ]]; then
@@ -222,11 +223,15 @@ HVV_ENV_FILE="$ENV_FILE" "$SOURCE_DIR/configure-credentials.sh"
 echo "[8/9] Neue Version transaktional aktivieren"
 UNIT_BACKUP_DIR="$(sudo mktemp -d "${TMPDIR:-/tmp}/hvv-units.XXXXXX")"
 backup_unit "$SERVICE_NAME.service"
+backup_unit "$WEB_SERVICE"
 backup_unit "$LOG_CLEANUP_SERVICE"
 backup_unit "$LOG_CLEANUP_TIMER"
 sudo install -m 0644 \
   "$STAGING_DIR/systemd/hvv-anzeiger.service" \
   "${SYSTEMD_DIR}/${SERVICE_NAME}.service"
+sudo install -m 0644 \
+  "$STAGING_DIR/systemd/$WEB_SERVICE" \
+  "${SYSTEMD_DIR}/${WEB_SERVICE}"
 sudo install -m 0644 \
   "$STAGING_DIR/systemd/$LOG_CLEANUP_SERVICE" \
   "$STAGING_DIR/systemd/$LOG_CLEANUP_TIMER" \
@@ -257,6 +262,7 @@ sudo rm -f "$APP_DIR/var/install-preview.png"
 echo "[9/9] Autostart aktivieren und Ergebnis prüfen"
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
+sudo systemctl enable --now "$WEB_SERVICE"
 sudo systemctl enable --now "$LOG_CLEANUP_TIMER"
 sudo systemctl restart "$SERVICE_NAME" ||
   fail "Der neue Dienst konnte nicht gestartet werden."

@@ -31,6 +31,7 @@ test = [
 [project.scripts]
 hvv-anzeiger = "hvv_display.main:main"
 hvv-preview = "hvv_display.preview:main"
+hvv-web = "hvv_display.web:main"
 
 [tool.setuptools.packages.find]
 include = ["hvv_display*"]
@@ -45,6 +46,7 @@ select = ["E", "F", "I", "S", "UP"]
 [tool.coverage.run]
 branch = true
 source = ["hvv_display"]
+omit = ["hvv_display/web.py"]
 
 [tool.coverage.report]
 fail_under = 100

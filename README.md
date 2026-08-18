@@ -351,6 +351,112 @@ sudo systemctl enable --now hvv-anzeiger
 
 ## Konfigurieren
 
+### Lokale Weboberfläche
+
+Für eine gut erreichbare lokale Ansicht gibt es eine Weboberfläche. Sie zeigt
+die Abfahrten in einer großen, displayähnlichen Ansicht, den Hardwarezustand
+des Raspberry Pi (CPU, RAM und freien SD-Speicher) sowie einen kontrollierten
+Button zum Neustart des Systems:
+
+```bash
+.venv/bin/hvv-web --config config.json --cache var/stations.json
+```
+
+Danach ist sie standardmäßig nur auf dem Raspberry Pi unter
+`http://127.0.0.1:8080` erreichbar. Mit `--host 0.0.0.0` kann sie im lokalen
+Netz freigegeben werden; das sollte nur in einem vertrauenswürdigen Netz und
+mit zusätzlichem Zugriffsschutz erfolgen, weil die Oberfläche Einstellungen
+ändert.
+
+Beispielansicht der lokalen Oberfläche:
+
+![Lokale Abfahrtsanzeige mit Hardwarestatus](docs/web-dashboard.png)
+
+Die Einstellungsseite zeigt die editierbare Konfiguration und erklärt die
+Bedeutung der einzelnen Konfigurationsbereiche:
+
+![Lokale Einstellungen mit Konfigurationseditor](docs/web-settings.png)
+
+Haltestellen und Linien werden als eigene Karten gepflegt. Dadurch müssen
+Nutzer kein verschachteltes JSON bearbeiten:
+
+![Lokale Stations- und Routenkonfiguration](docs/web-stations.png)
+
+Die Schaltfläche „Geofox-Suche“ fragt passende Haltestellen-Vorschläge ab und
+übernimmt Name, Stadt und Geofox-ID nach der Auswahl. Die Vorschläge sind nicht
+vollständig oder garantiert korrekt. Im Zweifel gilt die
+[offizielle Geofox-GTI-Dokumentation](https://gti.geofox.de/).
+
+Die Einstellungsseite enthält alle Werte aus `config.json` und macht sie als
+verständliche Eingabefelder editierbar; jeder Wert hat einen eigenen
+„Auf Standard zurücksetzen“-Button. Sie erklärt die Bereiche `api` (Geofox-Verbindung und
+Abfrageverhalten), `display` (SPI, GPIO, Drehung und Farben),
+`night_shutdown` (Nachtzeitraum) und `stations` (Haltestellen, Kürzel, Linien
+und Ziele). Vor dem Speichern wird die gesamte Konfiguration mit denselben
+Regeln wie beim Displaystart geprüft. Zugangsdaten werden nicht in
+`config.json` geschrieben und niemals in der Abfahrtsansicht ausgegeben.
+
+#### Werte in der Weboberfläche
+
+Die Einstellungsseite bildet die vollständige Konfiguration ab:
+
+- `api`: Geofox-Adresse und API-Version, Aktualisierungsabstand, Timeout,
+  Anzahl der sichtbaren Abfahrten sowie Zeitfenster für neue und veraltete
+  Daten.
+- `display`: SPI-Port und Gerät, GPIO-Pins, Drehung, SPI-Takt und
+  Rot-/Blau-Farbkanäle.
+- `night_shutdown`: Aktivierung sowie Beginn und Ende des Nachtfensters.
+- `stations`: Haltestellenkarten mit Name, Stadt, optionaler Geofox-ID,
+  Anzeige-Kürzel und beliebig vielen Linien-Ziel-Kombinationen.
+
+Jeder Wert hat eine kurze Erklärung und einen Button „Auf Standard
+zurücksetzen“. Änderungen werden erst gespeichert, nachdem die vollständige
+Konfiguration mit denselben Regeln wie beim Programmstart validiert wurde.
+
+Für Haltestellen empfiehlt sich dieser Ablauf:
+
+1. „Haltestelle hinzufügen“ wählen oder eine vorhandene Karte öffnen.
+2. Name und Stadt eingeben und „Geofox-Suche“ ausführen.
+3. Einen passenden Treffer auswählen; Name, Stadt und Geofox-ID werden
+   übernommen.
+4. Mit „Route hinzufügen“ die gewünschten Linien und Ziele ergänzen.
+5. Ein eindeutiges Kürzel mit 1 bis 3 Zeichen vergeben und speichern.
+
+Die Geofox-Suche liefert nur Vorschläge. Sie garantiert weder Vollständigkeit
+noch Korrektheit; bei Zweifeln ist die [offizielle GTI-Dokumentation](https://gti.geofox.de/)
+maßgeblich. Eine manuelle Eingabe bleibt jederzeit möglich.
+
+Für einen dauerhaften Start kann die mitgelieferte Unit verwendet werden:
+
+```bash
+sudo install -m 0644 systemd/hvv-anzeiger-web.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hvv-anzeiger-web
+```
+
+Die Weboberfläche speichert geänderte Geofox-Zugangsdaten in
+`/opt/hvv-anzeiger/var/credentials.env` mit den Dateirechten `0600`. Der
+Displaydienst lädt diese Datei beim Start zusätzlich zu
+`/etc/hvv-anzeiger.env`; nach einer Änderung genügt ein Neustart des
+Displaydienstes:
+
+```bash
+sudo systemctl restart hvv-anzeiger
+```
+
+Der Neustart-Button benötigt eine gezielte sudoers-Regel, weil der Dienst als
+unprivilegierter Benutzer läuft. Optional kann ein Administrator
+`/etc/sudoers.d/hvv-anzeiger-web` mit folgendem Inhalt anlegen und danach
+`visudo -c` ausführen:
+
+```text
+hvv-anzeiger ALL=(root) NOPASSWD: /usr/bin/systemctl reboot
+```
+
+Anschließend muss die Web-Unit `ExecStart` für den Button auf einen Wrapper
+mit `sudo -n systemctl reboot` erweitert werden. Ohne diese Regel bleibt der
+Button sicher wirkungslos und zeigt einen Berechtigungsfehler.
+
 Die aktive Konfiguration liegt unter:
 
 ```text
@@ -522,6 +628,23 @@ Installation und Aktualisierung.
 Ein harter Stromausfall kann unabhängig von dieser Anwendung eine beschriebene
 microSD-Karte beschädigen. Für häufige Unterbrechungen sind ein zuverlässiges
 Netzteil und gegebenenfalls eine kleine USV sinnvoll.
+
+### Display nach einem Wackelkontakt
+
+Wenn die SPI-Verbindung zum ILI9341 kurz unterbrochen war, fängt die Anwendung
+den Übertragungsfehler ab und beendet den Dienst nicht. Sie verwirft den
+unterbrochenen Displaytreiber, initialisiert ihn beim nächsten Aktualisierungs-
+zyklus neu und schreibt anschließend den vollständigen aktuellen Frame erneut.
+Der Renderzustand wird dabei bewusst zurückgesetzt, damit auch ein unveränderter
+Abfahrtsstand erneut auf das Display übertragen wird.
+
+Das funktioniert, sofern der physische Kontakt wieder stabil ist. Bleibt der
+Wackelkontakt bestehen, versucht der Dienst die Wiederherstellung bei jedem
+weiteren Zyklus und protokolliert die Fehler im Journal:
+
+```bash
+journalctl -u hvv-anzeiger -f
+```
 
 ### Dienst steuern
 

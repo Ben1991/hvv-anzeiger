@@ -235,6 +235,17 @@ class GeofoxErrorTest(unittest.TestCase):
         result = client.find_station("Recknitzstraße", "Hamburg")
         self.assertEqual(result["id"], "Master:82015")
 
+    def test_station_search_returns_candidates_for_web_autocomplete(self) -> None:
+        client = self.client_for(
+            b'{"returnCode":"OK","results":['
+            b'{"type":"STATION","id":"Master:1","name":"Markt",'
+            b'"city":"Hamburg","combinedName":"Hamburg, Markt"},'
+            b'{"type":"STATION","id":"Master:2","name":"Markt",'
+            b'"city":"Hamburg","combinedName":"Hamburg, Markt (Nord)"}]}'
+        )
+        results = client.find_stations("Markt", "Hamburg")
+        self.assertEqual([result["id"] for result in results], ["Master:1", "Master:2"])
+
     def test_station_search_rejects_missing_station(self) -> None:
         client = self.client_for(
             b'{"returnCode":"OK","results":['

@@ -303,6 +303,26 @@ class MainTest(unittest.TestCase):
         self.assertEqual(same_state, state)
         display.show.assert_called_once()
 
+    def test_display_transfer_failure_resets_state_for_reconnect(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        departure = Departure("21", "Ziel", now + timedelta(minutes=3))
+        display = Mock()
+        display.show.side_effect = OSError("SPI-Verbindung getrennt")
+        with self.assertRaises(OSError):
+            update_board(
+                [departure],
+                now=now,
+                last_updated=now,
+                stale=False,
+                error_message=None,
+                wifi_is_connected=True,
+                max_rows=5,
+                previous_state=None,
+                output=None,
+                display=display,
+            )
+        display.show.assert_called_once()
+
     def test_update_board_writes_output_and_requires_a_destination(self) -> None:
         now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
         with TemporaryDirectory() as directory:
