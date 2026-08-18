@@ -19,6 +19,16 @@ der erwarteten Abfahrtszeit.
 
 ## Release Notes
 
+### Version 0.2.1 / V2.1
+
+- Weboberfläche im lokalen Netzwerk unter `http://<raspberry-pi-ip>:8080`
+- automatischer Start der Weboberfläche bei Installation und nach jedem Reboot
+- Standard-Anmeldung `hvv-anzeiger` / `hvv-anzeiger` für die Ersteinrichtung
+- Webpasswort in der Einstellungsseite änderbar; gespeichert wird nur ein
+  gesalzener Hash
+- README mit Hinweisen zum Deaktivieren und späteren Reaktivieren des
+  Webdienst-Autostarts
+
 ### Version 0.2.0 / V2
 
 - lokale Weboberfläche mit Abfahrtsanzeige im Display-Stil
