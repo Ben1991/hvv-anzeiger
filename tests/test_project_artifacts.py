@@ -175,6 +175,7 @@ class ProjectArtifactTest(unittest.TestCase):
         installer_text = installer.read_text(encoding="utf-8")
         self.assertIn('systemctl stop "$SERVICE_NAME"', installer_text)
         self.assertIn('enable --now "$LOG_CLEANUP_TIMER"', installer_text)
+        self.assertIn('enable --now "$WEB_SERVICE"', installer_text)
         self.assertIn('APP_USER="hvv-anzeiger"', installer_text)
         self.assertIn('systemctl enable "$SERVICE_NAME"', installer_text)
         self.assertIn("--require-hashes", installer_text)
@@ -224,7 +225,10 @@ class ProjectArtifactTest(unittest.TestCase):
         )
         self.assertIn("--host 0.0.0.0", web_service)
         self.assertIn("EnvironmentFile=-/opt/hvv-anzeiger/var/web.env", web_service)
-        self.assertIn("Environment=HVV_WEB_ENV_FILE=/opt/hvv-anzeiger/var/web.env", web_service)
+        self.assertIn(
+            "Environment=HVV_WEB_ENV_FILE=/opt/hvv-anzeiger/var/web.env",
+            web_service,
+        )
 
     def test_dependencies_are_locked_with_hashes_and_audited_in_ci(self) -> None:
         for filename in ("requirements.txt", "requirements-dev.txt"):

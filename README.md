@@ -350,6 +350,21 @@ das Passwort ab. Das Passwort bleibt während der Eingabe unsichtbar.
 - Zugangsdaten unter `/etc/hvv-anzeiger.env`
 - Autostart, Watchdog, automatischen Neustart und Log-Bereinigung
 
+Der Installer startet den Backend-Dienst und die Weboberfläche automatisch und
+aktiviert beide für den Start nach jedem Neustart des Raspberry Pi.
+
+Falls die Weboberfläche nicht automatisch laufen soll:
+
+```bash
+sudo systemctl disable --now hvv-anzeiger-web
+```
+
+Später lässt sie sich wieder aktivieren:
+
+```bash
+sudo systemctl enable --now hvv-anzeiger-web
+```
+
 Die neue Installation wird in einem separaten Verzeichnis vorbereitet und
 geprüft, bevor sie die laufende Version ersetzt. Startet der neue Dienst nicht,
 stellt der Installer Anwendung, Zugangsdaten und systemd-Konfiguration auf den

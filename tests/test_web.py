@@ -56,13 +56,15 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn(f'name="csrf_token" value="{self.app.csrf_token}"', dashboard)
         self.assertIn('name="web_password"', settings)
 
-    def test_web_password_is_saved_with_restricted_permissions_and_used_immediately(self) -> None:
+    def test_web_password_is_saved_with_restricted_permissions_and_used_immediately(
+        self,
+    ) -> None:
         web_env = Path(self.directory.name) / "var" / "web.env"
         application = WebApplication(
             self.config,
             self.credentials,
             Path(self.directory.name),
-            access_token="hvv-anzeiger",
+            access_token="hvv-anzeiger",  # noqa: S106
             web_env_path=web_env,
         )
         application.save_web_password("new-password")
