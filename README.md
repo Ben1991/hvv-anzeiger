@@ -736,7 +736,21 @@ installiert. Die laufenden Dienste müssen vorher nicht manuell gestoppt werden;
 der Installer bereitet die neue Version getrennt vor und aktiviert sie erst nach
 erfolgreicher Prüfung.
 
-Im ursprünglich geklonten Repository auf die aktuelle `main`-Version wechseln:
+Im ursprünglich geklonten Repository auf die aktuelle `main`-Version wechseln.
+Dafür kann das mitgelieferte Update-Skript verwendet werden:
+
+```bash
+cd ~/hvv-anzeiger
+./update.sh
+```
+
+Das Skript prüft, dass es als normaler Benutzer in einem sauberen `main`-
+Checkout ausgeführt wird, lädt die aktuelle Version per Fast-Forward und
+startet anschließend `install.sh`. Dadurch werden lokale Änderungen nicht
+überschrieben. Das Skript führt bewusst kein `sudo` selbst aus; der Installer
+fragt die benötigten Rechte bei Bedarf über `sudo` ab.
+
+Die einzelnen Schritte sind weiterhin auch manuell möglich:
 
 ```bash
 cd ~/hvv-anzeiger

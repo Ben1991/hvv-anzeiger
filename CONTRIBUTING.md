@@ -64,7 +64,7 @@ Vor dem Pull Request mindestens ausführen:
 .venv/bin/ruff check .
 .venv/bin/coverage run -m unittest discover -s tests -v
 .venv/bin/coverage report
-bash -n install.sh configure-credentials.sh diagnose.sh tests/install-smoke.sh
+bash -n install.sh update.sh configure-credentials.sh diagnose.sh tests/install-smoke.sh
 .venv/bin/python -m build --no-isolation
 ```
 
