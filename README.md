@@ -320,6 +320,17 @@ Vor dem Verdrahten:
 
 ### Schnellinstallation
 
+Bei einer frisch aufgesetzten Raspberry-Pi-OS-Installation zuerst die
+Paketlisten und installierten Pakete aktualisieren und Git installieren:
+
+```bash
+sudo apt-get update
+sudo apt-get upgrade -y
+sudo apt install git -y
+```
+
+Anschließend das Repository klonen und die Installation starten:
+
 ```bash
 git clone https://github.com/Ben1991/hvv-anzeiger.git
 cd hvv-anzeiger
