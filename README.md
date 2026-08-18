@@ -14,6 +14,12 @@ der erwarteten Abfahrtszeit.
 
 ![Beispielansicht der HVV-Abfahrtsanzeige](docs/hvv-anzeiger-preview.png)
 
+## Praxisbeispiel
+
+Die fertige Anzeige im Einsatz auf einem Raspberry Pi mit 2,2-Zoll-Display:
+
+![Praxisbeispiel der fertigen HVV-Abfahrtsanzeige](docs/practice-example.png)
+
 > Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
 > offizielles Produkt von hvv, HOCHBAHN oder Geofox.
 
