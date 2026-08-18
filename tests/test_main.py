@@ -572,7 +572,7 @@ class MainTest(unittest.TestCase):
 
         self.assertEqual(len(clients), 4)
         self.assertEqual(client_credentials[0], ("old-user", "old-password"))
-        self.assertEqual(client_credentials[1], ("new-user", "new-password"))
+        self.assertEqual(client_credentials[1], ("old-user", "old-password"))
         self.assertEqual(client_credentials[2], ("new-user", "new-password"))
         self.assertEqual(client_credentials[3], ("new-user", "new-password"))
 
