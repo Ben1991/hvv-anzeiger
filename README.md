@@ -38,6 +38,14 @@ der erwarteten Abfahrtszeit.
 Die vollständige Installations-, Konfigurations- und Update-Anleitung steht in
 den folgenden Abschnitten dieses README.
 
+### Version 0.1.0 / V1
+
+V1 war die erste veröffentlichte Version des HVV-Anzeigers. Sie wurde am
+10. August 2026 unter dem unveränderlichen Git-Tag `V1` veröffentlicht.
+
+- [V1 auf GitHub ansehen](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V1)
+- [Quellcode von V1 anzeigen](https://github.com/Ben1991/hvv-anzeiger/tree/V1)
+
 ## Inhalt
 
 - [Release Notes](#release-notes)
