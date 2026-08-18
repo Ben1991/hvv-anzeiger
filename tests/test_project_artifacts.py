@@ -20,6 +20,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertEqual(
             headings,
             [
+                "## Release Notes",
                 "## Inhalt",
                 "## Funktionen",
                 "## Vorkonfigurierte Anzeige",
