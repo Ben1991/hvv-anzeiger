@@ -2,8 +2,17 @@
 
 ## Unterstützte Version
 
-Dieses Projekt veröffentlicht derzeit keine stabilen Versionsreihen. Nur der
-aktuelle Stand des Branches `main` wird mit Sicherheitskorrekturen versorgt.
+| Version | Unterstützt |
+|---|---|
+| `V1` (veröffentlicht am 10. August 2026) | Ja |
+| `V2` (veröffentlicht am 18. August 2026) | Ja |
+| `main` (Entwicklungsstand) | Ja, sofern nicht anders angegeben |
+
+V2 ist die aktuelle veröffentlichte Version und entspricht dem unveränderlichen
+Git-Tag [`V2`](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2).
+V1 bleibt als vorherige Veröffentlichung dokumentiert. Sicherheitskorrekturen
+werden für V2 und den aktuellen Stand des Branches `main` bereitgestellt,
+soweit die Korrektur auf diese Versionen anwendbar ist.
 Ältere Commits, Forks und lokal veränderte Installationen werden nicht separat
 unterstützt.
 
