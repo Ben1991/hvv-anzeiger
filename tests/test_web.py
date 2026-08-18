@@ -89,15 +89,15 @@ class WebApplicationTest(unittest.TestCase):
     def test_remote_access_accepts_browser_basic_auth_with_web_token(self) -> None:
         from hvv_display.web import WebApplication
 
-        test_token = "test-web-token"  # noqa: S105
+        test_password = "test-web-password"  # noqa: S105
         application = WebApplication(
             self.config,
             self.credentials,
             Path(self.directory.name),
-            access_token=test_token,
+            access_token=hash_web_password(test_password),
         )
         header = "Basic " + base64.b64encode(
-            f"hvv-anzeiger:{test_token}".encode()
+            f"hvv-anzeiger:{test_password}".encode()
         ).decode()
         self.assertTrue(application.authorize({"Authorization": header}))
         self.assertFalse(

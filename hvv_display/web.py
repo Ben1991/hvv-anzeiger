@@ -240,7 +240,7 @@ class WebApplication:
         )
         os.chmod(temporary, 0o600)
         os.replace(temporary, self.web_env_path)
-        self.access_token = password
+        self.access_token = hash_web_password(password)
 
     def raw_config(self) -> dict[str, Any]:
         raw = json.loads(self.config_path.read_text(encoding="utf-8"))

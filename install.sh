@@ -263,7 +263,7 @@ sudo rm -f "$APP_DIR/var/install-preview.png"
 
 if [[ ! -s "$WEB_ENV_FILE" ]]; then
   echo "Richte den Standard-Webzugang für den LAN-Zugriff ein"
-  WEB_PASSWORD_HASH="$($APP_DIR/.venv/bin/python -c 'from hvv_display.web import hash_web_password; print(hash_web_password("hvv-anzeiger"))')"
+  WEB_PASSWORD_HASH="$("$APP_DIR"/.venv/bin/python -c 'from hvv_display.web import hash_web_password; print(hash_web_password("hvv-anzeiger"))')"
   printf 'HVV_WEB_PASSWORD_HASH="%s"\n' "$WEB_PASSWORD_HASH" |
     sudo tee "$WEB_ENV_FILE" >/dev/null
   sudo chown "$APP_USER:$APP_GROUP" "$WEB_ENV_FILE"
