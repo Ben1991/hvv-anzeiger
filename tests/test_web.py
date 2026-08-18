@@ -12,8 +12,10 @@ from hvv_display.models import Departure
 from hvv_display.web import (
     WebApplication,
     hardware_status,
+    hash_web_password,
     load_credentials,
     save_credentials,
+    verify_web_password,
 )
 
 
@@ -64,17 +66,18 @@ class WebApplicationTest(unittest.TestCase):
             self.config,
             self.credentials,
             Path(self.directory.name),
-            access_token="hvv-anzeiger",  # noqa: S106
+            access_token=hash_web_password("hvv-anzeiger"),
             web_env_path=web_env,
         )
         application.save_web_password("new-password")
         self.assertEqual(application.access_token, "new-password")
-        self.assertIn('HVV_WEB_TOKEN="new-password"', web_env.read_text())
+        self.assertIn("HVV_WEB_PASSWORD_HASH=", web_env.read_text())
+        self.assertTrue(verify_web_password("new-password", application.access_token))
         if os.name != "nt":
             self.assertEqual(stat.S_IMODE(web_env.stat().st_mode), 0o600)
 
     def test_remote_access_requires_a_bearer_token(self) -> None:
-        with self.assertRaisesRegex(ValueError, "HVV_WEB_TOKEN"):
+        with self.assertRaisesRegex(ValueError, "HVV_WEB_PASSWORD_HASH"):
             from hvv_display.web import run
 
             run(  # noqa: S104

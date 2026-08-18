@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import hashlib
 import html
 import json
 import logging
@@ -28,6 +29,37 @@ from .stations import resolve_stations
 LOG = logging.getLogger(__name__)
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
+PASSWORD_HASH_ITERATIONS = 600_000
+
+
+def hash_web_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt, PASSWORD_HASH_ITERATIONS
+    )
+    return "$".join(
+        (
+            "pbkdf2-sha256",
+            str(PASSWORD_HASH_ITERATIONS),
+            base64.urlsafe_b64encode(salt).decode("ascii"),
+            base64.urlsafe_b64encode(digest).decode("ascii"),
+        )
+    )
+
+
+def verify_web_password(password: str, encoded: str) -> bool:
+    try:
+        algorithm, iterations, encoded_salt, encoded_digest = encoded.split("$")
+        if algorithm != "pbkdf2-sha256":
+            return False
+        salt = base64.urlsafe_b64decode(encoded_salt.encode("ascii"))
+        expected = base64.urlsafe_b64decode(encoded_digest.encode("ascii"))
+        actual = hashlib.pbkdf2_hmac(
+            "sha256", password.encode("utf-8"), salt, int(iterations)
+        )
+    except (ValueError, TypeError, binascii.Error):
+        return False
+    return secrets.compare_digest(actual, expected)
 
 
 def save_credentials(path: Path, user: str, password: str) -> None:
@@ -178,8 +210,6 @@ class WebApplication:
         if self.access_token is None:
             return True
         authorization = headers.get("Authorization", "")
-        if secrets.compare_digest(authorization, f"Bearer {self.access_token}"):
-            return True
         if not authorization.startswith("Basic "):
             return False
         try:
@@ -187,7 +217,7 @@ class WebApplication:
         except (binascii.Error, UnicodeDecodeError):
             return False
         username, separator, password = decoded.partition(":")
-        return separator == ":" and username == "hvv-anzeiger" and secrets.compare_digest(
+        return separator == ":" and username == "hvv-anzeiger" and verify_web_password(
             password, self.access_token
         )
 
@@ -204,7 +234,10 @@ class WebApplication:
             )
         self.web_env_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.web_env_path.with_name(f".{self.web_env_path.name}.tmp")
-        temporary.write_text(f'HVV_WEB_TOKEN="{password}"\n', encoding="utf-8")
+        temporary.write_text(
+            f'HVV_WEB_PASSWORD_HASH="{hash_web_password(password)}"\n',
+            encoding="utf-8",
+        )
         os.chmod(temporary, 0o600)
         os.replace(temporary, self.web_env_path)
         self.access_token = password
@@ -543,7 +576,7 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
 
 def run(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, config: str = "config.json", credentials: str | None = None, cache: str = "var/stations.json", access_token: str | None = None) -> None:
     if host not in {"127.0.0.1", "localhost", "::1"} and not access_token:
-        raise ValueError("Für einen nicht-lokalen Webhost muss HVV_WEB_TOKEN gesetzt sein")
+        raise ValueError("Für einen nicht-lokalen Webhost muss HVV_WEB_PASSWORD_HASH gesetzt sein")
     config_path = Path(config)
     credentials_path = Path(credentials or os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env"))
     application = WebApplication(
@@ -571,7 +604,11 @@ def main() -> None:
     parser.add_argument("--config", default=os.environ.get("HVV_CONFIG", "config.json"))
     parser.add_argument("--credentials", default=os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env"))
     parser.add_argument("--cache", default=os.environ.get("HVV_STATION_CACHE", "var/stations.json"))
-    parser.add_argument("--access-token", default=os.environ.get("HVV_WEB_TOKEN"), help="Bearer-Token für nicht-lokale Zugriffe")
+    parser.add_argument(
+        "--access-token",
+        default=os.environ.get("HVV_WEB_PASSWORD_HASH"),
+        help="Gesalzener Passwort-Hash für nicht-lokale Zugriffe",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
     run(args.host, args.port, config=args.config, credentials=args.credentials, cache=args.cache, access_token=args.access_token)

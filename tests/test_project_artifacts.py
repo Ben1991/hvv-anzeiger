@@ -190,7 +190,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn('sudo install -m 0755 \\', installer_text)
         self.assertIn('"$SOURCE_DIR/configure-credentials.sh"', installer_text)
         self.assertIn('WEB_ENV_FILE="${APP_DIR}/var/web.env"', installer_text)
-        self.assertIn("HVV_WEB_TOKEN=\"hvv-anzeiger\"", installer_text)
+        self.assertIn("hash_web_password(\"hvv-anzeiger\")", installer_text)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
             encoding="utf-8"
         )

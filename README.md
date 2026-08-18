@@ -438,7 +438,7 @@ Passwort:    hvv-anzeiger
 
 Beim ersten Aufruf fragt der Browser nach den Zugangsdaten. Ändere das
 Standardpasswort anschließend in der Einstellungsseite unter „Weboberfläche“.
-Das Passwort wird mit restriktiven Dateirechten gespeichert.
+Gespeichert wird nur ein gesalzener Passwort-Hash mit restriktiven Dateirechten.
 
 Soll die Oberfläche von einem anderen Rechner aus sicher geöffnet werden, ist
 ein SSH-Tunnel die einfachste Variante:
@@ -459,15 +459,15 @@ Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
 
 Ohne weitere Optionen ist sie nur lokal auf dem Raspberry Pi erreichbar. Mit
 `--host 0.0.0.0` kann sie im lokalen Netz unter
-`http://<raspberry-pi-ip>:8080` freigegeben werden. Dafür muss zusätzlich ein Bearer-Token gesetzt werden,
-zum Beispiel über `HVV_WEB_TOKEN` in `/opt/hvv-anzeiger/var/web.env`:
+`http://<raspberry-pi-ip>:8080` freigegeben werden. Dafür muss zusätzlich ein
+Passwort-Hash über `HVV_WEB_PASSWORD_HASH` in `/opt/hvv-anzeiger/var/web.env`
+gesetzt werden. Der Installer erzeugt ihn automatisch:
 
 ```text
-HVV_WEB_TOKEN=ein-langes-zufälliges-geheimnis
+HVV_WEB_PASSWORD_HASH=...
 ```
 
-Die Oberfläche akzeptiert das Passwort als Browser-Anmeldung oder das Token im
-HTTP-Header `Authorization: Bearer <Token>`. Ohne Token startet sie bei einer
+Die Oberfläche akzeptiert das Passwort als Browser-Anmeldung. Ohne Passwort-Hash startet sie bei einer
 nicht-lokalen Bind-Adresse nicht. Auch lokal sind alle schreibenden Formulare gegen
 Cross-Site-Requests geschützt.
 
