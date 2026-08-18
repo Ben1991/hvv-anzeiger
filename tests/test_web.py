@@ -70,7 +70,7 @@ class WebApplicationTest(unittest.TestCase):
             web_env_path=web_env,
         )
         application.save_web_password("new-password")
-        self.assertEqual(application.access_token, "new-password")
+        self.assertTrue(verify_web_password("new-password", application.access_token))
         self.assertIn("HVV_WEB_PASSWORD_HASH=", web_env.read_text())
         self.assertTrue(verify_web_password("new-password", application.access_token))
         if os.name != "nt":
