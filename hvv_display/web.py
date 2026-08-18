@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import errno
 import hashlib
 import html
 import json
@@ -103,7 +104,9 @@ def save_config(path: Path, raw_config: dict[str, Any]) -> None:
         except Exception:
             temporary.unlink(missing_ok=True)
             raise
-    except PermissionError:
+    except OSError as exc:
+        if exc.errno not in (errno.EACCES, errno.EROFS):
+            raise
         # The installed service owns config.json but not its root-owned parent
         # directory, so an atomic sibling replacement is not possible there.
         with path.open("w", encoding="utf-8") as handle:
