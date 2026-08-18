@@ -731,28 +731,55 @@ haben die Dateirechte `0600`.
 
 ### Anwendung aktualisieren
 
-Im ursprünglich geklonten Repository:
+Eine neue Version wird auf dem Raspberry Pi aus dem ursprünglichen Checkout
+installiert. Die laufenden Dienste müssen vorher nicht manuell gestoppt werden;
+der Installer bereitet die neue Version getrennt vor und aktiviert sie erst nach
+erfolgreicher Prüfung.
+
+Im ursprünglich geklonten Repository auf die aktuelle `main`-Version wechseln:
 
 ```bash
 cd ~/hvv-anzeiger
+git status --short
+git fetch origin --tags
 git pull --ff-only origin main
 ./install.sh
 ```
+
+Für eine bestimmte veröffentlichte Version stattdessen den gewünschten Tag
+auschecken und anschließend den Installer starten:
+
+```bash
+git fetch origin --tags
+git checkout <versions-tag>
+./install.sh
+```
+
+Beispiel: `git checkout v1.2.0`. Ein Versions-Tag sollte nur verwendet werden,
+wenn er im Repository tatsächlich vorhanden ist.
 
 Anschließend:
 
 ```bash
 systemctl status hvv-anzeiger --no-pager
+systemctl status hvv-anzeiger-web --no-pager
 cd /opt/hvv-anzeiger
 ./diagnose.sh
 ```
 
-Ein normaler Anwendungsupdate benötigt keinen Neustart des Raspberry Pi.
-Vorhandene `config.json` und vollständige Geofox-Zugangsdaten bleiben erhalten;
-neue Defaults überschreiben eine bestehende Konfiguration nicht.
+Ein normales Anwendungsupdate benötigt keinen Neustart des Raspberry Pi. Die
+laufenden Dienste werden vom Installer aktualisiert und neu gestartet.
+Vorhandene `config.json`, Zugangsdaten und die Webkonfiguration bleiben
+erhalten; neue Defaults überschreiben eine bestehende Konfiguration nicht.
+Öffne danach die Weboberfläche unter `http://127.0.0.1:8080` oder – falls sie
+über einen SSH-Tunnel geöffnet wird – unter derselben Adresse auf dem eigenen
+Rechner.
 
 Schlägt `git pull` wegen eigener lokaler Änderungen fehl, diese Änderungen nicht
-ungeprüft überschreiben. Zuerst sichern oder in Git committen.
+ungeprüft überschreiben. Zuerst sichern oder in Git committen. Der Installer
+legt während des Updates außerdem eine vorherige Installation an und stellt sie
+automatisch wieder her, wenn Prüfung oder Dienststart der neuen Version
+fehlschlagen.
 
 Falls das ursprüngliche Repository nicht mehr existiert:
 
