@@ -385,6 +385,33 @@ Später lässt sie sich wieder aktivieren:
 sudo systemctl enable --now hvv-anzeiger-web
 ```
 
+### Weboberfläche: Verbindung abgelehnt
+
+Wenn `http://<raspberry-pi-ip>:8080` mit „Verbindung abgelehnt“ antwortet,
+läuft der Webdienst meist noch nicht oder eine aktualisierte systemd-Unit ist
+noch nicht geladen. Die folgenden Befehle laden die Unit neu, aktivieren den
+Autostart und starten den Dienst mit der aktuellen Konfiguration:
+
+```bash
+sudo systemctl status hvv-anzeiger-web --no-pager
+sudo ss -ltnp | grep 8080
+sudo systemctl enable --now hvv-anzeiger-web
+sudo systemctl daemon-reload
+sudo systemctl restart hvv-anzeiger-web
+sudo systemctl status hvv-anzeiger-web --no-pager
+```
+
+Die Ausgabe von `ss` sollte eine Bindung an `0.0.0.0:8080` zeigen. Fehlt sie
+oder bleibt der Dienst in `failed`, zeigt das Journal die Ursache:
+
+```bash
+sudo journalctl -u hvv-anzeiger-web -n 80 --no-pager
+```
+
+Nach einem Update führt `update.sh` das Neuladen und den Neustart automatisch
+durch. Die Adresse muss die tatsächliche Raspberry-Pi-IP enthalten, zum
+Beispiel `http://192.168.178.51:8080`.
+
 Die neue Installation wird in einem separaten Verzeichnis vorbereitet und
 geprüft, bevor sie die laufende Version ersetzt. Startet der neue Dienst nicht,
 stellt der Installer Anwendung, Zugangsdaten und systemd-Konfiguration auf den

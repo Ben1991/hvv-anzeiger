@@ -273,13 +273,17 @@ fi
 echo "[9/9] Autostart aktivieren und Ergebnis prüfen"
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
-sudo systemctl enable --now "$WEB_SERVICE"
+sudo systemctl enable "$WEB_SERVICE"
 sudo systemctl enable --now "$LOG_CLEANUP_TIMER"
 sudo systemctl restart "$SERVICE_NAME" ||
   fail "Der neue Dienst konnte nicht gestartet werden."
+sudo systemctl restart "$WEB_SERVICE" ||
+  fail "Die Weboberfläche konnte nicht gestartet werden."
 sleep 2
 sudo systemctl is-active --quiet "$SERVICE_NAME" ||
   fail "Der neue Dienst ist nach dem Start nicht aktiv."
+sudo systemctl is-active --quiet "$WEB_SERVICE" ||
+  fail "Die Weboberfläche ist nach dem Start nicht aktiv."
 
 INSTALL_SUCCEEDED=1
 if [[ -e "$BACKUP_DIR" ]]; then
@@ -300,6 +304,8 @@ printf "  %-24s %s\n" "Anwendung" "$APP_DIR"
 printf "  %-24s %s\n" "Geofox-Zugangsdaten" "$ENV_FILE (root:root, 0600)"
 printf "  %-24s %s\n" "Dienst" "$(systemctl is-active "$SERVICE_NAME")"
 printf "  %-24s %s\n" "Autostart" "$(systemctl is-enabled "$SERVICE_NAME")"
+printf "  %-24s %s\n" "Weboberfläche" "$(systemctl is-active "$WEB_SERVICE")"
+printf "  %-24s %s\n" "Web-Autostart" "$(systemctl is-enabled "$WEB_SERVICE")"
 printf "  %-24s %s\n" "Log-Bereinigung" "$(systemctl is-active "$LOG_CLEANUP_TIMER")"
 if [[ -e /dev/spidev0.0 ]]; then
   printf "  %-24s %s\n" "SPI" "/dev/spidev0.0 verfügbar"

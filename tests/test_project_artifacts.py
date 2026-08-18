@@ -176,7 +176,9 @@ class ProjectArtifactTest(unittest.TestCase):
         installer_text = installer.read_text(encoding="utf-8")
         self.assertIn('systemctl stop "$SERVICE_NAME"', installer_text)
         self.assertIn('enable --now "$LOG_CLEANUP_TIMER"', installer_text)
-        self.assertIn('enable --now "$WEB_SERVICE"', installer_text)
+        self.assertIn('enable "$WEB_SERVICE"', installer_text)
+        self.assertIn('restart "$WEB_SERVICE"', installer_text)
+        self.assertIn('is-active --quiet "$WEB_SERVICE"', installer_text)
         self.assertIn('APP_USER="hvv-anzeiger"', installer_text)
         self.assertIn('systemctl enable "$SERVICE_NAME"', installer_text)
         self.assertIn("--require-hashes", installer_text)
@@ -196,6 +198,10 @@ class ProjectArtifactTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("tests/install-smoke.sh", workflow)
+        update_script = (ROOT / "update.sh").read_text(encoding="utf-8")
+        self.assertIn('systemctl daemon-reload', update_script)
+        self.assertIn('systemctl restart "$WEB_SERVICE"', update_script)
+        self.assertIn('systemctl is-active --quiet "$WEB_SERVICE"', update_script)
 
     def test_systemd_service_uses_protected_environment_file(self) -> None:
         service = (ROOT / "systemd" / "hvv-anzeiger.service").read_text(
