@@ -196,6 +196,14 @@ def run() -> int:
         now = datetime.now(HAMBURG_TZ)
         current_monotonic = time.monotonic()
         notifier.ping_if_due(current_monotonic)
+        if not args.output and display is None:
+            try:
+                display = Ili9341Display(config.display)
+                LOG.info(
+                    "Displaytreiber nach einem Verbindungsfehler neu initialisiert"
+                )
+            except (OSError, RuntimeError) as exc:
+                LOG.warning("Display ist nicht erreichbar: %s", exc)
         sync_probe = True if clock_confirmed else clock_is_synchronized()
         if sync_probe is True:
             clock_confirmed = True
@@ -264,20 +272,29 @@ def run() -> int:
             stale=visible_error is not None,
             max_stale_age_minutes=config.api.max_stale_age_minutes,
         )
-        last_board_state = update_board(
-            visible_departures,
-            now=now,
-            last_updated=last_updated,
-            stale=visible_error is not None,
-            error_message=visible_error,
-            wifi_is_connected=wifi_state,
-            max_rows=config.api.max_departures,
-            previous_state=last_board_state,
-            output=args.output,
-            display=display,
-            time_is_synchronized=clock_ready,
-            night_shutdown=night_active,
-        )
+        if args.output or display is not None:
+            try:
+                last_board_state = update_board(
+                    visible_departures,
+                    now=now,
+                    last_updated=last_updated,
+                    stale=visible_error is not None,
+                    error_message=visible_error,
+                    wifi_is_connected=wifi_state,
+                    max_rows=config.api.max_departures,
+                    previous_state=last_board_state,
+                    output=args.output,
+                    display=display,
+                    time_is_synchronized=clock_ready,
+                    night_shutdown=night_active,
+                )
+            except (OSError, RuntimeError) as exc:
+                LOG.warning(
+                    "Displayübertragung fehlgeschlagen; erneuter Versuch folgt: %s",
+                    exc,
+                )
+                display = None
+                last_board_state = None
 
         if args.once:
             return 0 if clock_ready and last_error is None else 1
