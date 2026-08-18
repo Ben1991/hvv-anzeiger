@@ -17,8 +17,30 @@ der erwarteten Abfahrtszeit.
 > Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
 > offizielles Produkt von hvv, HOCHBAHN oder Geofox.
 
+## Release Notes
+
+### Version 0.2.0 / V2
+
+- lokale Weboberfläche mit Abfahrtsanzeige im Display-Stil
+- Bearbeitung und Speicherung aller konfigurierbaren Werte einschließlich
+  Geofox-Zugangsdaten
+- Haltestellen-Autovervollständigung über die Geofox-API mit verständlichem
+  Hinweis zu Vollständigkeit und Korrektheit der Vorschläge
+- „Auf Standard zurücksetzen“-Schaltflächen für einzelne Konfigurationswerte
+- direkte Übernahme gespeicherter Einstellungen ohne Neustart, wenn möglich
+- automatische Wiederherstellung der Anzeige nach einem kurzzeitigen
+  Display-/SPI-Verbindungsfehler
+- Hardware-Übersicht für CPU, RAM und SD-Speicher sowie System-Neustartaktion
+- Schutz der Weboberfläche durch CSRF-Prüfung und Token-Authentifizierung bei
+  Zugriff außerhalb des lokalen Rechners
+- einfaches `update.sh` für sichere Updates aus einem sauberen `main`-Checkout
+
+Die vollständige Installations-, Konfigurations- und Update-Anleitung steht in
+den folgenden Abschnitten dieses README.
+
 ## Inhalt
 
+- [Release Notes](#release-notes)
 - [Funktionen](#funktionen)
 - [Vorkonfigurierte Anzeige](#vorkonfigurierte-anzeige)
 - [Voraussetzungen](#voraussetzungen)
