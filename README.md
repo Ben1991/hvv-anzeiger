@@ -389,7 +389,7 @@ vollständig oder garantiert korrekt. Im Zweifel gilt die
 
 Die Einstellungsseite enthält alle Werte aus `config.json` und macht sie als
 verständliche Eingabefelder editierbar; jeder Wert hat einen eigenen
-„Reset to default“-Button. Sie erklärt die Bereiche `api` (Geofox-Verbindung und
+„Auf Standard zurücksetzen“-Button. Sie erklärt die Bereiche `api` (Geofox-Verbindung und
 Abfrageverhalten), `display` (SPI, GPIO, Drehung und Farben),
 `night_shutdown` (Nachtzeitraum) und `stations` (Haltestellen, Kürzel, Linien
 und Ziele). Vor dem Speichern wird die gesamte Konfiguration mit denselben

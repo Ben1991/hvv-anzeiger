@@ -303,7 +303,7 @@ class WebApplication:
             return (
                 f'<div class="setting"><label for="{path}">{path}</label>'
                 f'<div class="control-row">{control}'
-                f'<button type="button" class="reset" onclick="resetField(this)">Reset to default</button></div>'
+                f'<button type="button" class="reset" onclick="resetField(this)">Auf Standard zurücksetzen</button></div>'
                 f'<div class="subtle help">{descriptions[path]}</div></div>'
             )
 
