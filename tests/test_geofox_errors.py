@@ -103,6 +103,24 @@ class GeofoxErrorTest(unittest.TestCase):
                 with self.assertRaisesRegex(GeofoxError, message):
                     client._post("departureList", {})
 
+    def test_unexpected_http_status_has_a_safe_message(self) -> None:
+        error = urllib.error.HTTPError(
+            "https://example.test/departureList",
+            400,
+            "Bad Request",
+            {},
+            io.BytesIO(b"backend details"),
+        )
+        client = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",
+            min_request_interval=0,
+            urlopen=lambda *_args, **_kwargs: (_ for _ in ()).throw(error),
+        )
+        with self.assertRaisesRegex(GeofoxError, "HTTP 400"):
+            client._post("departureList", {})
+
     def test_rate_limit_exposes_bounded_retry_after(self) -> None:
         error = urllib.error.HTTPError(
             "https://example.test/departureList",
@@ -259,6 +277,11 @@ class GeofoxErrorTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(GeofoxError, "nicht gefunden"):
             client.find_station("Markt", "Hamburg")
+
+    def test_station_search_rejects_invalid_result_collection(self) -> None:
+        client = self.client_for(b'{"returnCode":"OK","results":"invalid"}')
+        with self.assertRaisesRegex(GeofoxError, "gültige Haltestellenliste"):
+            client.find_stations("Markt", "Hamburg")
 
     def test_station_search_uses_combined_name_and_fallback_values(self) -> None:
         client = self.client_for(
