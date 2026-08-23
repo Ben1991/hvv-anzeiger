@@ -197,6 +197,15 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(route.filter_mode, "destination")
         self.assertEqual(route.filter_station_ids, ("Master:2",))
 
+        empty_filter = json.loads(json.dumps(raw))
+        empty_filter["stations"][0]["routes"][0]["filter_mode"] = ""
+        empty_filter["stations"][0]["routes"][0]["filter_station_ids"] = []
+        with tempfile.TemporaryDirectory() as directory:
+            route = load_config(
+                self.write_config(empty_filter, directory)
+            ).stations[0].routes[0]
+        self.assertIsNone(route.filter_mode)
+
         raw["stations"][0]["routes"][0]["filter_mode"] = "unknown"
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ConfigError, "filter_mode"):
@@ -206,6 +215,24 @@ class ConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ConfigError, "filter_mode"):
                 load_config(self.write_config(raw, directory))
+
+        for field_value, message in (
+            ("not-a-list", "filter_station_ids muss eine Liste sein"),
+            (["Master:2"] * 201, "enthält zu viele Haltestellen"),
+        ):
+            invalid = json.loads(json.dumps(raw))
+            invalid["stations"][0]["routes"][0]["filter_mode"] = "destination"
+            invalid["stations"][0]["routes"][0]["filter_station_ids"] = field_value
+            with tempfile.TemporaryDirectory() as directory:
+                with self.assertRaisesRegex(ConfigError, message):
+                    load_config(self.write_config(invalid, directory))
+
+        invalid = json.loads(json.dumps(raw))
+        invalid["stations"][0]["routes"][0]["filter_mode"] = "destination"
+        invalid["stations"][0]["routes"][0]["filter_station_ids"] = []
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ConfigError, "muss für einen Filter"):
+                load_config(self.write_config(invalid, directory))
 
     def test_optional_values_use_defaults(self) -> None:
         raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))

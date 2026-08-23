@@ -10,6 +10,7 @@ from unittest.mock import patch
 from hvv_display.geofox import (
     HAMBURG_TZ,
     MAX_LINE_OPTIONS,
+    MAX_ROUTE_STATION_SUGGESTIONS,
     GeofoxClient,
     GeofoxError,
     line_options_for_station,
@@ -19,7 +20,7 @@ from hvv_display.geofox import (
     route_matches,
     vehicle_type_label,
 )
-from hvv_display.models import Route, Station
+from hvv_display.models import LineRouteOption, Route, Station
 
 
 class FakeResponse:
@@ -55,6 +56,11 @@ class GeofoxClientTest(unittest.TestCase):
         self.assertTrue(route_matches("384", "S Elbgaustraße", routes))
         self.assertFalse(route_matches("184", "S Elbgaustraße", routes))
         self.assertTrue(route_matches("U2", "Niendorf Nord", routes))
+        self.assertFalse(
+            route_matches(
+                "U2", "Niendorf Nord", (Route("U2", "", "line:U2"),), "line:5"
+            )
+        )
         self.assertEqual(normalize("Recknitzstraße"), "recknitzstrasse")
 
     def test_line_options_filter_by_station_and_expose_vehicle_metadata(self) -> None:
@@ -172,6 +178,14 @@ class GeofoxClientTest(unittest.TestCase):
                             {"id": "Master:4", "name": "Mümmelmannsberg"},
                         ]
                     },
+                    {
+                        "stationSequence": [
+                            {"id": "Master:1", "name": "Jungfernstieg"},
+                            {"id": "Master:2", "name": "Niendorf Markt"},
+                            {"id": "Master:3", "name": "Niendorf Nord"},
+                        ]
+                    },
+                    {"stationSequence": [{"id": "Master:1", "name": "Endstation"}]},
                 ],
             }
         ]
@@ -194,6 +208,57 @@ class GeofoxClientTest(unittest.TestCase):
         self.assertEqual(
             line_route_options_for_station(None, "line:U2", "Master:1"), ()
         )
+        self.assertEqual(
+            line_route_options_for_station(
+                [{"id": "line:bad", "sublines": {}}], "line:bad", "Master:1"
+            ),
+            (),
+        )
+        self.assertEqual(
+            line_route_options_for_station(
+                [{"id": "line:bad", "sublines": [None, {"stationSequence": {}}]}],
+                "line:bad",
+                "Master:1",
+            ),
+            (),
+        )
+
+        many = [
+            {
+                "stationSequence": [
+                    {"id": "Master:1"},
+                    {"id": f"Master:{index + 10}"},
+                ]
+            }
+            for index in range(MAX_LINE_OPTIONS + 1)
+        ]
+        self.assertEqual(
+            len(
+                line_route_options_for_station(
+                    [{"id": "line:many", "sublines": many}],
+                    "line:many",
+                    "Master:1",
+                )
+            ),
+            MAX_LINE_OPTIONS,
+        )
+        suggestions = line_route_stations(
+            (
+                LineRouteOption(
+                    "line:U2",
+                    "Richtung Ende",
+                    tuple(
+                        f"Master:{index}"
+                        for index in range(MAX_ROUTE_STATION_SUGGESTIONS)
+                    ),
+                    tuple(
+                        (f"Master:{index}", f"Station {index}")
+                        for index in range(MAX_ROUTE_STATION_SUGGESTIONS)
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(len(suggestions), MAX_ROUTE_STATION_SUGGESTIONS)
 
     def test_list_lines_requests_all_sublines(self) -> None:
         response = FakeResponse(
@@ -251,6 +316,12 @@ class GeofoxClientTest(unittest.TestCase):
             ),
         )
         self.assertEqual(line_options.line_options("Master:1"), ())
+        self.assertEqual(
+            line_options.line_route_options("Master:1", "line:5"), ()
+        )
+        self.assertEqual(
+            line_options.line_route_stations("Master:1", "line:5"), ()
+        )
 
     def test_find_stations_returns_service_types_for_follow_up_flow(self) -> None:
         response = FakeResponse(
@@ -471,6 +542,14 @@ class GeofoxClientTest(unittest.TestCase):
                     "UBAHN",
                     "destination",
                     ("Master:2",),
+                ),
+                Route(
+                    "U2",
+                    "Richtung Niendorf Nord",
+                    "line:U2",
+                    "UBAHN",
+                    "direction",
+                    ("Master:2", "Master:3"),
                 ),
             ),
             "Master:1",
