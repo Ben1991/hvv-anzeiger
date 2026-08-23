@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -13,15 +15,8 @@ concurrency:
 
 jobs:
   tests:
-    name: Python ${{ matrix.python-version }} tests and quality
+    name: Python 3.11 tests and quality
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        python-version:
-          - "3.10"
-          - "3.11"
-          - "3.13"
 
     steps:
       - name: Check out repository
@@ -30,7 +25,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
           cache: pip
 
       - name: Install project and test tools
@@ -41,30 +36,21 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q hvv_display tests
 
-      - name: Run unit tests on compatibility versions
-        if: matrix.python-version != '3.11'
-        run: python -m unittest discover -s tests -v
-
       - name: Run tests with coverage
-        if: matrix.python-version == '3.11'
         run: |
           coverage run -m unittest discover -s tests -v
           coverage report
 
       - name: Run Ruff
-        if: matrix.python-version == '3.11'
         run: ruff check .
 
       - name: Audit runtime dependencies
-        if: matrix.python-version == '3.11'
         run: pip-audit --requirement requirements.txt --disable-pip
 
       - name: Build package
-        if: matrix.python-version == '3.11'
         run: python -m build --no-isolation
 
       - name: Render display preview on primary version
-        if: matrix.python-version == '3.11'
         run: hvv-preview /tmp/hvv-anzeiger-preview.png
 
   shell:

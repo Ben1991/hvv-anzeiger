@@ -35,9 +35,15 @@ class GeofoxError(RuntimeError):
         message: str,
         *,
         retry_after_seconds: int | None = None,
+        kind: str = "technical",
+        http_status: int | None = None,
+        return_code: str | None = None,
     ) -> None:
         super().__init__(message)
         self.retry_after_seconds = retry_after_seconds
+        self.kind = kind
+        self.http_status = http_status
+        self.return_code = return_code
 
 
 def _retry_after_seconds(value: Any, *, now: datetime | None = None) -> int | None:
@@ -103,13 +109,41 @@ def _https_base_url(value: str) -> str:
 
 
 def _safe_external_text(value: Any, limit: int = 160) -> str:
-    """Make API-controlled text safe for one-line logs and user messages."""
     return "".join(
         character if character.isprintable() else " " for character in str(value)
     ).strip()[:limit]
 
 
+def _return_code_error(result: dict[str, Any]) -> GeofoxError:
+    code = _safe_external_text(result.get("returnCode") or "UNKNOWN", 80)
+    user_messages = {
+        "ERROR_CN_TOO_MANY": "Zu viele Treffer – bitte genauer eingeben.",
+        "ERROR_COMM": "Geofox ist aktuell nicht erreichbar.",
+        "START_NOT_FOUND": "Haltestelle wurde nicht gefunden.",
+        "DEST_NOT_FOUND": "Zielstation wurde nicht gefunden.",
+        "VIA_NOT_FOUND": "Zwischenhaltestelle wurde nicht gefunden.",
+        "FORCED_START_NOT_FOUND": "Haltestelle wurde nicht eindeutig gefunden.",
+        "FORCED_DEST_NOT_FOUND": "Zielstation wurde nicht eindeutig gefunden.",
+    }
+    if code == "ERROR_TEXT":
+        text = _safe_external_text(
+            result.get("errorText") or "Geofox meldet einen Fehler"
+        )
+        return GeofoxError(text, kind="validation", return_code=code)
+    if code in user_messages:
+        kind = "temporary" if code == "ERROR_COMM" else "validation"
+        return GeofoxError(user_messages[code], kind=kind, return_code=code)
+    return GeofoxError("Geofox meldet einen unbekannten Fehler.", return_code=code)
+
+
 class GeofoxClient:
+    # Geofox rate limits apply to the application, not to a Python object. The
+    # web UI creates clients for different operations, therefore all instances
+    # share one serialization lock and one request timestamp.
+    _global_rate_lock = threading.Lock()
+    _global_last_request_at = 0.0
+    _global_retry_until = 0.0
+
     def __init__(
         self,
         base_url: str,
@@ -122,7 +156,11 @@ class GeofoxClient:
         urlopen: Callable[..., Any] = urllib.request.urlopen,
     ) -> None:
         if not user or not password:
-            raise GeofoxError("GEOFOX_USER und GEOFOX_PASSWORD müssen gesetzt sein")
+            raise GeofoxError(
+                "GEOFOX_USER und GEOFOX_PASSWORD müssen gesetzt sein",
+                kind="credentials",
+                http_status=401,
+            )
         self.base_url = _https_base_url(base_url)
         self.user = user
         self._password = password.encode("utf-8")
@@ -130,32 +168,39 @@ class GeofoxClient:
         self.timeout = timeout
         self.min_request_interval = min_request_interval
         self._urlopen = urlopen
-        self._last_request_at = 0.0
-        self._rate_lock = threading.Lock()
 
     @staticmethod
     def encode_body(payload: dict[str, Any]) -> bytes:
-        return json.dumps(
-            payload, ensure_ascii=False, separators=(",", ":")
-        ).encode("utf-8")
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(
+            "utf-8"
+        )
 
     def signature(self, body: bytes) -> str:
         digest = hmac.new(self._password, body, hashlib.sha1).digest()
         return base64.b64encode(digest).decode("ascii")
 
     def _wait_for_rate_limit(self) -> None:
-        with self._rate_lock:
-            remaining = self.min_request_interval - (
-                time.monotonic() - self._last_request_at
+        with self._global_rate_lock:
+            now = time.monotonic()
+            wait_until = max(
+                self._global_retry_until,
+                self._global_last_request_at + self.min_request_interval,
             )
+            remaining = wait_until - now
             if remaining > 0:
                 time.sleep(remaining)
-            self._last_request_at = time.monotonic()
+            type(self)._global_last_request_at = time.monotonic()
+
+    @classmethod
+    def _apply_retry_after(cls, seconds: int | None) -> None:
+        if seconds:
+            cls._global_retry_until = max(
+                cls._global_retry_until, time.monotonic() + seconds
+            )
 
     def _post(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
         body = self.encode_body(payload)
         trace_id = str(uuid.uuid4())
-        # The base URL is validated as HTTPS before urllib receives it.
         request = urllib.request.Request(  # noqa: S310
             f"{self.base_url}/{method}",
             data=body,
@@ -177,19 +222,35 @@ class GeofoxClient:
                 raw = response.read(MAX_RESPONSE_BYTES + 1)
         except urllib.error.HTTPError as exc:
             LOG.error("Geofox HTTP %s, Trace-ID %s", exc.code, trace_id)
-            if exc.code == 401:
-                raise GeofoxError("Geofox-Zugangsdaten wurden abgelehnt") from exc
+            retry_after = _retry_after_seconds(exc.headers.get("Retry-After"))
             if exc.code == 429:
+                self._apply_retry_after(retry_after)
                 raise GeofoxError(
-                    "Geofox-Anfragelimit erreicht",
-                    retry_after_seconds=_retry_after_seconds(
-                        exc.headers.get("Retry-After")
-                    ),
+                    "Geofox-Anfragelimit erreicht – bitte später erneut versuchen.",
+                    retry_after_seconds=retry_after,
+                    kind="rate_limit",
+                    http_status=429,
                 ) from exc
-            raise GeofoxError(f"Geofox antwortet mit HTTP {exc.code}") from exc
+            if exc.code in (401, 403):
+                raise GeofoxError(
+                    "Geofox-Zugangsdaten oder Berechtigungen wurden abgelehnt.",
+                    kind="credentials",
+                    http_status=exc.code,
+                ) from exc
+            if exc.code in (500, 503):
+                raise GeofoxError(
+                    "Geofox ist aktuell nicht erreichbar.",
+                    kind="temporary",
+                    http_status=exc.code,
+                ) from exc
+            raise GeofoxError(
+                f"Geofox antwortet mit HTTP {exc.code}", http_status=exc.code
+            ) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             LOG.error("Geofox nicht erreichbar, Trace-ID %s", trace_id)
-            raise GeofoxError("Geofox ist nicht erreichbar") from exc
+            raise GeofoxError(
+                "Geofox ist aktuell nicht erreichbar.", kind="temporary"
+            ) from exc
 
         if len(raw) > MAX_RESPONSE_BYTES:
             LOG.error("Geofox-Antwort zu groß, Trace-ID %s", trace_id)
@@ -208,21 +269,20 @@ class GeofoxClient:
                 _safe_external_text(result.get("returnCode"), 80),
                 trace_id,
             )
-            message = _safe_external_text(
-                result.get("errorText") or result.get("returnCode") or "Unbekannt"
-            )
-            raise GeofoxError(f"Geofox-Fehler: {message}")
+            raise _return_code_error(result)
         return result
 
-    def find_station(self, name: str, city: str = "Hamburg") -> dict[str, str]:
+    def find_station(self, name: str, city: str = "Hamburg") -> dict[str, Any]:
         matches = self.find_stations(name, city)
         if not matches:
-            raise GeofoxError(f"Haltestelle {city}, {name} wurde nicht gefunden")
+            raise GeofoxError(
+                f"Haltestelle {city}, {name} wurde nicht gefunden", kind="validation"
+            )
         if len(matches) > 1:
             names = ", ".join(str(item.get("combinedName")) for item in matches[:3])
             raise GeofoxError(
-                f"Haltestelle {name} ist nicht eindeutig ({names}); "
-                "ID in config.json setzen"
+                f"Haltestelle {name} ist nicht eindeutig ({names}); bitte auswählen.",
+                kind="validation",
             )
         station = matches[0]
         return {
@@ -230,9 +290,10 @@ class GeofoxClient:
             "city": str(station.get("city") or city),
             "id": str(station["id"]),
             "type": "STATION",
+            "serviceTypes": list(station.get("serviceTypes") or []),
         }
 
-    def find_stations(self, name: str, city: str = "Hamburg") -> list[dict[str, str]]:
+    def find_stations(self, name: str, city: str = "Hamburg") -> list[dict[str, Any]]:
         result = self._post(
             "checkName",
             {
@@ -243,10 +304,15 @@ class GeofoxClient:
                 "coordinateType": "EPSG_4326",
             },
         )
+        raw_results = result.get("results") or []
+        if not isinstance(raw_results, list):
+            raise GeofoxError("Geofox liefert keine gültige Haltestellenliste")
         candidates = [
             candidate
-            for candidate in (result.get("results") or [])
-            if candidate.get("type") == "STATION" and candidate.get("id")
+            for candidate in raw_results
+            if isinstance(candidate, dict)
+            and candidate.get("type") == "STATION"
+            and candidate.get("id")
         ]
         target_name = normalize(name)
         target_city = normalize(city)
@@ -266,14 +332,19 @@ class GeofoxClient:
         ]
         return [
             {
-                "name": str(station.get("name") or name),
-                "city": str(station.get("city") or city),
-                "id": str(station["id"]),
-                "combinedName": str(
-                    station.get("combinedName") or station.get("name") or name
+                "name": _safe_external_text(station.get("name") or name, 120),
+                "city": _safe_external_text(station.get("city") or city, 80),
+                "id": _safe_external_text(station["id"], 160),
+                "combinedName": _safe_external_text(
+                    station.get("combinedName") or station.get("name") or name, 200
                 ),
+                "serviceTypes": [
+                    _safe_external_text(item, 40)
+                    for item in (station.get("serviceTypes") or [])
+                    if isinstance(item, (str, int))
+                ][:20],
             }
-            for station in matches
+            for station in matches[:10]
         ]
 
     def departure_list(
@@ -306,9 +377,7 @@ class GeofoxClient:
 
         result = self._post("departureList", payload)
         stations_by_id = {
-            station.station_id: station
-            for station in stations
-            if station.station_id
+            station.station_id: station for station in stations if station.station_id
         }
         departures: list[Departure] = []
         raw_departures = result.get("departures") or []
