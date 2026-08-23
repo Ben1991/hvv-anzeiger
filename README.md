@@ -33,6 +33,22 @@ Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
 
 ## Release Notes
 
+### Release V2.2.2 – einfachere Stations- und Linienauswahl
+
+V2.2.2 macht die Einrichtung von Haltestellen in der Weboberfläche klarer und
+schneller:
+
+- eine sichtbare Schrittfolge führt von der Geofox-Haltestellensuche über das
+  Laden der Linien bis zum Speichern
+- Stadt, Geofox-ID und ein freies Anzeige-Kürzel werden nach der Auswahl eines
+  Geofox-Treffers automatisch übernommen
+- Linien werden nach Verkehrsmittel gruppiert und können über ein Suchfeld
+  gefiltert werden; die Auswahl zeigt jederzeit „x von y ausgewählt“
+- die Statusanzeige zeigt den nächsten sinnvollen Schritt und blendet leere
+  Suchfelder aus
+- Browser-Smoke-Tests prüfen zusätzlich das Laden, Gruppieren und Filtern der
+  Linienauswahl
+
 ### Release V2.2.1 – überarbeitete V2.2-Release
 
 V2.2.1 veröffentlicht die überarbeitete V2.2-Implementierung mit einem
@@ -1056,7 +1072,7 @@ git checkout <versions-tag>
 ./install.sh
 ```
 
-Beispiel für eine veröffentlichte Version: `git checkout V2.2`. Ein
+Beispiel für eine veröffentlichte Version: `git checkout V2.2.2`. Ein
 Versions-Tag sollte nur verwendet werden, wenn er im Repository tatsächlich
 vorhanden ist.
 
