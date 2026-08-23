@@ -70,12 +70,18 @@ def verify_web_password(password: str, encoded: str) -> bool:
 def save_credentials(path: Path, user: str, password: str) -> None:
     if not user.strip() or not password:
         raise ValueError("Geofox-Anwendungs-ID und Passwort müssen ausgefüllt sein")
-    if any(character in user or character in password for character in ("\r", "\n", "\x00")):
+    if any(
+        character in user or character in password for character in ("\r", "\n", "\x00")
+    ):
         raise ValueError("Geofox-Zugangsdaten dürfen keine Zeilenumbrüche enthalten")
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = f"GEOFOX_USER={user.strip()}\nGEOFOX_PASSWORD={password}\n"
     with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", delete=False
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        delete=False,
     ) as handle:
         handle.write(payload)
         temporary = Path(handle.name)
@@ -94,7 +100,11 @@ def save_config(path: Path, raw_config: dict[str, Any]) -> None:
     mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", delete=False
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
         ) as handle:
             handle.write(payload)
             temporary = Path(handle.name)
@@ -167,12 +177,22 @@ def _page(title: str, content: str) -> bytes:
 
 
 class WebApplication:
-    def __init__(self, config_path: Path, credentials_path: Path, cache_path: Path, *, access_token: str | None = None, web_env_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        config_path: Path,
+        credentials_path: Path,
+        cache_path: Path,
+        *,
+        access_token: str | None = None,
+        web_env_path: Path | None = None,
+    ) -> None:
         self.config_path = config_path
         self.credentials_path = credentials_path
         self.cache_path = cache_path
         self.access_token = access_token
-        self.web_env_path = web_env_path or Path(os.environ.get("HVV_WEB_ENV_FILE", "var/web.env"))
+        self.web_env_path = web_env_path or Path(
+            os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")
+        )
         self.csrf_token = secrets.token_urlsafe(32)
 
     def authorize(self, headers: Any) -> bool:
@@ -186,15 +206,23 @@ class WebApplication:
         except (binascii.Error, UnicodeDecodeError):
             return False
         username, separator, password = decoded.partition(":")
-        return separator == ":" and username == "hvv-anzeiger" and verify_web_password(password, self.access_token)
+        return (
+            separator == ":"
+            and username == "hvv-anzeiger"
+            and verify_web_password(password, self.access_token)
+        )
 
     def validate_csrf(self, token: str) -> None:
         if not secrets.compare_digest(token, self.csrf_token):
             raise PermissionError("Ungültige Sitzungsbestätigung")
 
     def save_web_password(self, password: str) -> None:
-        if not password or any(character in password for character in ("\r", "\n", "\x00", '"', "\\")):
-            raise ValueError("Das Webpasswort darf nicht leer sein oder Sonderzeichen für die Env-Datei enthalten")
+        if not password or any(
+            character in password for character in ("\r", "\n", "\x00", '"', "\\")
+        ):
+            raise ValueError(
+                "Das Webpasswort darf nicht leer sein oder Sonderzeichen für die Env-Datei enthalten"
+            )
         self.web_env_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.web_env_path.with_name(f".{self.web_env_path.name}.tmp")
         encoded = hash_web_password(password)
@@ -211,17 +239,28 @@ class WebApplication:
 
     @staticmethod
     def restart_system() -> None:
-        result = subprocess.run(["/usr/bin/sudo", "-n", "systemctl", "reboot"], check=False, capture_output=True, text=True)
+        result = subprocess.run(
+            ["/usr/bin/sudo", "-n", "systemctl", "reboot"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
         if result.returncode:
-            raise OSError("Systemneustart wurde abgelehnt; systemctl-Berechtigung prüfen")
+            raise OSError(
+                "Systemneustart wurde abgelehnt; systemctl-Berechtigung prüfen"
+            )
 
-    def _client(self, *, user: str | None = None, password: str | None = None) -> GeofoxClient:
+    def _client(
+        self, *, user: str | None = None, password: str | None = None
+    ) -> GeofoxClient:
         config = load_config(self.config_path)
         credentials = load_credentials(self.credentials_path)
         return GeofoxClient(
             config.api.base_url,
             user if user is not None else credentials.get("GEOFOX_USER", ""),
-            password if password is not None else credentials.get("GEOFOX_PASSWORD", ""),
+            password
+            if password is not None
+            else credentials.get("GEOFOX_PASSWORD", ""),
             version=config.api.version,
             timeout=config.api.request_timeout_seconds,
         )
@@ -231,7 +270,12 @@ class WebApplication:
         config = load_config(self.config_path)
         client = self._client()
         stations = resolve_stations(client, config.stations, self.cache_path)
-        departures = client.departure_list(stations, now=now, max_list=30, max_time_offset=config.api.max_time_offset_minutes)
+        departures = client.departure_list(
+            stations,
+            now=now,
+            max_list=30,
+            max_time_offset=config.api.max_time_offset_minutes,
+        )
         return _departure_payload(departures[: config.api.max_departures], now), None
 
     def station_suggestions(self, query: str, city: str) -> list[dict[str, Any]]:
@@ -243,7 +287,9 @@ class WebApplication:
             raise ValueError("Suchbegriff oder Stadt ist zu lang")
         return self._client().find_stations(query, city)
 
-    def validate_station_config(self, raw_config: dict[str, Any], *, user: str, password: str) -> dict[str, Any]:
+    def validate_station_config(
+        self, raw_config: dict[str, Any], *, user: str, password: str
+    ) -> dict[str, Any]:
         stations = raw_config.get("stations")
         if not isinstance(stations, list) or not stations:
             raise ValueError("Mindestens eine Haltestelle muss konfiguriert sein")
@@ -255,13 +301,23 @@ class WebApplication:
             city = str(station.get("city") or "Hamburg").strip()
             station_id = str(station.get("id") or "").strip()
             if not name or not station_id:
-                raise ValueError(f"Haltestelle {index + 1}: Bitte einen Geofox-Vorschlag auswählen")
-            if len(name) > MAX_QUERY_LENGTH or len(city) > MAX_CITY_LENGTH or len(station_id) > MAX_STATION_ID_LENGTH:
+                raise ValueError(
+                    f"Haltestelle {index + 1}: Bitte einen Geofox-Vorschlag auswählen"
+                )
+            if (
+                len(name) > MAX_QUERY_LENGTH
+                or len(city) > MAX_CITY_LENGTH
+                or len(station_id) > MAX_STATION_ID_LENGTH
+            ):
                 raise ValueError(f"Haltestelle {index + 1}: Eingabe ist zu lang")
             matches = client.find_stations(name, city)
-            match = next((item for item in matches if item.get("id") == station_id), None)
+            match = next(
+                (item for item in matches if item.get("id") == station_id), None
+            )
             if match is None:
-                raise ValueError(f"Haltestelle {index + 1}: Geofox findet die ausgewählte Haltestelle nicht mehr")
+                raise ValueError(
+                    f"Haltestelle {index + 1}: Geofox findet die ausgewählte Haltestelle nicht mehr"
+                )
             station["name"] = match["name"]
             station["city"] = match["city"]
             station["id"] = match["id"]
@@ -273,10 +329,13 @@ class WebApplication:
             departures, error = self.departures()
         except (ConfigError, GeofoxError, OSError) as exc:
             departures, error = [], str(exc)
-        rows = "".join(
-            f'<div class="row"><div><div class="line">{html.escape(item["line"])}</div><div class="station">{html.escape(item["station"])}</div></div><div class="destination">{html.escape(item["destination"])}{(" <span class=delay>(+" + str(item["delay_seconds"] // 60) + " min)</span>") if item["delay_seconds"] else ""}</div><div class="time {"cancelled" if item["cancelled"] else ""}">{item["time"]}<br><small>in {item["minutes"]} min</small></div></div>'
-            for item in departures
-        ) or '<div class="empty">Keine passende Abfahrt verfügbar.</div>'
+        rows = (
+            "".join(
+                f'<div class="row"><div><div class="line">{html.escape(item["line"])}</div><div class="station">{html.escape(item["station"])}</div></div><div class="destination">{html.escape(item["destination"])}{(" <span class=delay>(+" + str(item["delay_seconds"] // 60) + " min)</span>") if item["delay_seconds"] else ""}</div><div class="time {"cancelled" if item["cancelled"] else ""}">{item["time"]}<br><small>in {item["minutes"]} min</small></div></div>'
+                for item in departures
+            )
+            or '<div class="empty">Keine passende Abfahrt verfügbar.</div>'
+        )
         message = f'<div class="notice">{html.escape(error)}</div>' if error else ""
         status = hardware_status()
         content = f'''<div class="toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lokale HVV-Anzeige · aktualisiert beim Öffnen</div></div><div><a href="/settings">Einstellungen</a> · <a href="/">Aktualisieren</a></div></div>{message}<section class="board" aria-label="Abfahrtsanzeige">{rows}</section><section class="status" aria-label="Hardware-Status"><div>CPU<strong>{html.escape(status["cpu"])}</strong></div><div>RAM<strong>{html.escape(status["ram"])}</strong></div><div>SD-Speicher<strong>{html.escape(status["storage"])}</strong></div></section><form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">System neu starten</button></form>'''
@@ -286,8 +345,44 @@ class WebApplication:
         raw_config = self.raw_config()
         credentials = load_credentials(self.credentials_path)
         notice = f'<div class="notice">{html.escape(message)}</div>' if message else ""
-        defaults = {"api.base_url":"https://gti.geofox.de/gti/public","api.version":63,"api.refresh_seconds":15,"api.request_timeout_seconds":8,"api.max_departures":5,"api.max_time_offset_minutes":90,"api.max_stale_age_minutes":5,"display.spi_port":0,"display.spi_device":0,"display.gpio_dc":24,"display.gpio_reset":25,"display.rotate":0,"display.bus_speed_hz":16000000,"display.bgr":False,"night_shutdown.enabled":False,"night_shutdown.start":"21:00","night_shutdown.end":"06:30"}
-        descriptions = {"api.base_url":"Offizielle HTTPS-Adresse der Geofox-Schnittstelle.","api.version":"API-Version des Geofox-Vertrags.","api.refresh_seconds":"Sekunden zwischen Abfragen; mindestens 15.","api.request_timeout_seconds":"Maximale Wartezeit pro Anfrage.","api.max_departures":"Sichtbare Abfahrten; 1 bis 5.","api.max_time_offset_minutes":"Wie weit in die Zukunft gesucht wird.","api.max_stale_age_minutes":"Wie lange alte Daten sichtbar bleiben.","display.spi_port":"Nummer des SPI-Busses.","display.spi_device":"Chip-Select des Displays.","display.gpio_dc":"GPIO für Data/Command.","display.gpio_reset":"GPIO für Display-Reset.","display.rotate":"Drehung: 0 bis 3 Vierteldrehungen.","display.bus_speed_hz":"SPI-Takt in Hertz.","display.bgr":"Bei vertauschten Rot-/Blaukanälen aktivieren.","night_shutdown.enabled":"Pausiert nachts Abfragen und Display.","night_shutdown.start":"Beginn in Hamburger Ortszeit (HH:MM).","night_shutdown.end":"Ende in Hamburger Ortszeit (HH:MM)."}
+        defaults = {
+            "api.base_url": "https://gti.geofox.de/gti/public",
+            "api.version": 63,
+            "api.refresh_seconds": 15,
+            "api.request_timeout_seconds": 8,
+            "api.max_departures": 5,
+            "api.max_time_offset_minutes": 90,
+            "api.max_stale_age_minutes": 5,
+            "display.spi_port": 0,
+            "display.spi_device": 0,
+            "display.gpio_dc": 24,
+            "display.gpio_reset": 25,
+            "display.rotate": 0,
+            "display.bus_speed_hz": 16000000,
+            "display.bgr": False,
+            "night_shutdown.enabled": False,
+            "night_shutdown.start": "21:00",
+            "night_shutdown.end": "06:30",
+        }
+        descriptions = {
+            "api.base_url": "Offizielle HTTPS-Adresse der Geofox-Schnittstelle.",
+            "api.version": "API-Version des Geofox-Vertrags.",
+            "api.refresh_seconds": "Sekunden zwischen Abfragen; mindestens 15.",
+            "api.request_timeout_seconds": "Maximale Wartezeit pro Anfrage.",
+            "api.max_departures": "Sichtbare Abfahrten; 1 bis 5.",
+            "api.max_time_offset_minutes": "Wie weit in die Zukunft gesucht wird.",
+            "api.max_stale_age_minutes": "Wie lange alte Daten sichtbar bleiben.",
+            "display.spi_port": "Nummer des SPI-Busses.",
+            "display.spi_device": "Chip-Select des Displays.",
+            "display.gpio_dc": "GPIO für Data/Command.",
+            "display.gpio_reset": "GPIO für Display-Reset.",
+            "display.rotate": "Drehung: 0 bis 3 Vierteldrehungen.",
+            "display.bus_speed_hz": "SPI-Takt in Hertz.",
+            "display.bgr": "Bei vertauschten Rot-/Blaukanälen aktivieren.",
+            "night_shutdown.enabled": "Pausiert nachts Abfragen und Display.",
+            "night_shutdown.start": "Beginn in Hamburger Ortszeit (HH:MM).",
+            "night_shutdown.end": "Ende in Hamburger Ortszeit (HH:MM).",
+        }
 
         def scalar(path: str, input_type: str = "text") -> str:
             section, key = path.split(".")
@@ -305,23 +400,28 @@ class WebApplication:
                 for route in station.get("routes", [])
             )
             valid = bool(station.get("id"))
-            service_types = json.dumps(station.get("serviceTypes", []), ensure_ascii=False)
+            service_types = json.dumps(
+                station.get("serviceTypes", []), ensure_ascii=False
+            )
             return f'''<article class="station-card" data-station data-valid="{str(valid).lower()}">
 <div class="station-heading"><h3>Haltestelle {index + 1}</h3><button type="button" class="reset" onclick="this.closest('[data-station]').remove()">Haltestelle entfernen</button></div>
 <div class="grid"><div><label>Name</label><input data-station-field="name" maxlength="{MAX_QUERY_LENGTH}" value="{html.escape(str(station.get("name", "")), quote=True)}" required autocomplete="off"><div class="subtle">Mindestens 2 Zeichen. Vorschläge erscheinen automatisch.</div></div><div><label>Stadt</label><input data-station-field="city" maxlength="{MAX_CITY_LENGTH}" value="{html.escape(str(station.get("city", "Hamburg")), quote=True)}" required><div class="subtle">Wird nach Auswahl aus Geofox übernommen.</div></div><div><label>Geofox-ID</label><input data-station-field="id" maxlength="{MAX_STATION_ID_LENGTH}" value="{html.escape(str(station.get("id") or ""), quote=True)}" readonly tabindex="-1"><div class="subtle">Technisches Metadatum; wird automatisch gesetzt.</div></div><div><label>Kürzel</label><input data-station-field="label" maxlength="3" value="{html.escape(str(station.get("label", "")), quote=True)}" required><div class="subtle">1–3 Zeichen für die Anzeige.</div></div></div>
 <input type="hidden" data-station-field="serviceTypes" value="{html.escape(service_types, quote=True)}">
-<div class="station-search"><select data-station-results aria-label="Geofox-Haltestellenvorschläge"><option value="">Treffer auswählen …</option></select><span class="subtle" data-search-message>{'<span class="ok">✓ Geofox-Haltestelle ausgewählt</span>' if valid else 'Bitte Haltestelle aus einem Geofox-Vorschlag auswählen.'}</span></div>
+<div class="station-search"><select data-station-results aria-label="Geofox-Haltestellenvorschläge"><option value="">Treffer auswählen …</option></select><span class="subtle" data-search-message>{'<span class="ok">✓ Geofox-Haltestelle ausgewählt</span>' if valid else "Bitte Haltestelle aus einem Geofox-Vorschlag auswählen."}</span></div>
 <details class="help-box"><summary>Richtung oder Zielstation?</summary><p><strong>Richtung</strong> wählt später den Linienast; auch Fahrten, die vorher enden, können angezeigt werden. <strong>Zu Zielstation</strong> zeigt nur Fahrten, die diese Station tatsächlich erreichen. Beispiel: U2 Richtung Niendorf Nord kann einen Kurzläufer nach Niendorf Markt enthalten; „Zu Zielstation Niendorf Nord“ nicht.</p></details>
 <h4>Linien und Ziele</h4><div data-routes>{routes}</div><button type="button" onclick="addRoute(this)">Route hinzufügen</button></article>'''
 
-        stations = "".join(station_card(station, index) for index, station in enumerate(raw_config.get("stations", []))) or station_card({"city":"Hamburg","routes":[]}, 0)
+        stations = "".join(
+            station_card(station, index)
+            for index, station in enumerate(raw_config.get("stations", []))
+        ) or station_card({"city": "Hamburg", "routes": []}, 0)
         raw = html.escape(json.dumps(raw_config, ensure_ascii=False))
         content = f'''<div class="toolbar"><div><h1>Einstellungen</h1><div class="subtle">Bedienbare Felder · jede Änderung wird validiert</div></div><a href="/">← Abfahrten</a></div>{notice}
 <form method="post" action="/settings" accept-charset="UTF-8" onsubmit="return prepareConfig()"><section class="card"><h2>Weboberfläche</h2><p class="subtle">Benutzername: <code>hvv-anzeiger</code>. Ein leeres Passwortfeld lässt den bisherigen Wert unverändert.</p><label for="web_password">Neues Webpasswort</label><input id="web_password" name="web_password" type="password" autocomplete="new-password" placeholder="unverändert lassen"></section>
 <section class="card"><h2>Geofox-Zugang</h2><label for="user">Anwendungs-ID</label><input id="user" name="user" value="{html.escape(credentials.get("GEOFOX_USER", ""), quote=True)}" autocomplete="username"><label for="password">Passwort</label><input id="password" name="password" type="password" autocomplete="new-password" placeholder="unverändert lassen"></section>
-<section class="card"><h2>Geofox-API</h2><div class="grid">{scalar("api.base_url")}{scalar("api.version","number")}{scalar("api.refresh_seconds","number")}{scalar("api.request_timeout_seconds","number")}{scalar("api.max_departures","number")}{scalar("api.max_time_offset_minutes","number")}{scalar("api.max_stale_age_minutes","number")}</div></section>
-<section class="card"><h2>Display</h2><div class="grid">{scalar("display.spi_port","number")}{scalar("display.spi_device","number")}{scalar("display.gpio_dc","number")}{scalar("display.gpio_reset","number")}{scalar("display.rotate","number")}{scalar("display.bus_speed_hz","number")}{scalar("display.bgr")}</div></section>
-<section class="card"><h2>Nachtabschaltung</h2><div class="grid">{scalar("night_shutdown.enabled")}{scalar("night_shutdown.start","time")}{scalar("night_shutdown.end","time")}</div></section>
+<section class="card"><h2>Geofox-API</h2><div class="grid">{scalar("api.base_url")}{scalar("api.version", "number")}{scalar("api.refresh_seconds", "number")}{scalar("api.request_timeout_seconds", "number")}{scalar("api.max_departures", "number")}{scalar("api.max_time_offset_minutes", "number")}{scalar("api.max_stale_age_minutes", "number")}</div></section>
+<section class="card"><h2>Display</h2><div class="grid">{scalar("display.spi_port", "number")}{scalar("display.spi_device", "number")}{scalar("display.gpio_dc", "number")}{scalar("display.gpio_reset", "number")}{scalar("display.rotate", "number")}{scalar("display.bus_speed_hz", "number")}{scalar("display.bgr")}</div></section>
+<section class="card"><h2>Nachtabschaltung</h2><div class="grid">{scalar("night_shutdown.enabled")}{scalar("night_shutdown.start", "time")}{scalar("night_shutdown.end", "time")}</div></section>
 <section class="card"><div class="station-heading"><div><h2>Haltestellen und Linien</h2><p class="subtle">Haltestelle eintippen, Geofox-Vorschlag auswählen; Name, Stadt und ID werden automatisch übernommen.</p></div><button type="button" onclick="addStation()">Haltestelle hinzufügen</button></div><div id="stations">{stations}</div></section>
 <textarea id="config_json" name="config_json" hidden>{raw}</textarea><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><p><button id="save-settings" type="submit">Speichern und prüfen</button></p></form>
 <script>
@@ -382,7 +482,13 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(payload)
 
-        def _send_json(self, data: dict[str, Any], status: HTTPStatus = HTTPStatus.OK, *, retry_after: int | None = None) -> None:
+        def _send_json(
+            self,
+            data: dict[str, Any],
+            status: HTTPStatus = HTTPStatus.OK,
+            *,
+            retry_after: int | None = None,
+        ) -> None:
             payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -401,35 +507,56 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
 
         def do_GET(self) -> None:  # noqa: N802
             if not application.authorize(self.headers):
-                self._unauthorized(); return
+                self._unauthorized()
+                return
             path = urlsplit(self.path).path
             if path == "/":
-                self._send(application.dashboard()); return
+                self._send(application.dashboard())
+                return
             if path == "/settings":
                 query = parse_qs(urlsplit(self.path).query)
-                self._send(application.settings("Gespeichert. Die laufende Anwendung übernimmt die Änderung bei der nächsten Aktualisierung; ein Neustart ist nicht nötig." if query.get("saved", [""])[0] == "1" else "")); return
+                self._send(
+                    application.settings(
+                        "Gespeichert. Die laufende Anwendung übernimmt die Änderung bei der nächsten Aktualisierung; ein Neustart ist nicht nötig."
+                        if query.get("saved", [""])[0] == "1"
+                        else ""
+                    )
+                )
+                return
             if path == "/api/departures":
                 try:
                     departures, error = application.departures()
                     self._send_json({"departures": departures, "error": error})
                 except (ConfigError, GeofoxError, OSError) as exc:
-                    self._send_json({"departures": [], "error": str(exc)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                    self._send_json(
+                        {"departures": [], "error": str(exc)},
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                    )
                 return
             if path == "/api/stations":
                 query = parse_qs(urlsplit(self.path).query)
                 try:
-                    stations = application.station_suggestions(query.get("q", [""])[0], query.get("city", ["Hamburg"])[0])
+                    stations = application.station_suggestions(
+                        query.get("q", [""])[0], query.get("city", ["Hamburg"])[0]
+                    )
                     self._send_json({"stations": stations})
                 except GeofoxError as exc:
-                    self._send_json({"stations": [], "error": str(exc)}, _geofox_http_status(exc), retry_after=exc.retry_after_seconds)
+                    self._send_json(
+                        {"stations": [], "error": str(exc)},
+                        _geofox_http_status(exc),
+                        retry_after=exc.retry_after_seconds,
+                    )
                 except (ConfigError, OSError, ValueError) as exc:
-                    self._send_json({"stations": [], "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                    self._send_json(
+                        {"stations": [], "error": str(exc)}, HTTPStatus.BAD_REQUEST
+                    )
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:  # noqa: N802
             if not application.authorize(self.headers):
-                self._unauthorized(); return
+                self._unauthorized()
+                return
             path = urlsplit(self.path).path
             if path == "/system/restart":
                 try:
@@ -438,12 +565,24 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                     application.restart_system()
                     self._send(_page("Neustart", "<h1>Neustart ausgelöst</h1>"))
                 except OverflowError as exc:
-                    self._send(_page("Fehler", f"<h1>{html.escape(str(exc))}</h1>"), HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-                except (OSError, PermissionError, ValueError, UnicodeDecodeError) as exc:
-                    self._send(_page("Fehler", f"<h1>{html.escape(str(exc))}</h1>"), HTTPStatus.FORBIDDEN)
+                    self._send(
+                        _page("Fehler", f"<h1>{html.escape(str(exc))}</h1>"),
+                        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    )
+                except (
+                    OSError,
+                    PermissionError,
+                    ValueError,
+                    UnicodeDecodeError,
+                ) as exc:
+                    self._send(
+                        _page("Fehler", f"<h1>{html.escape(str(exc))}</h1>"),
+                        HTTPStatus.FORBIDDEN,
+                    )
                 return
             if path != "/settings":
-                self.send_error(HTTPStatus.NOT_FOUND); return
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
             try:
                 values = self._form_values(MAX_FORM_BYTES)
                 application.validate_csrf(values.get("csrf_token", [""])[0])
@@ -454,9 +593,14 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 user = values.get("user", [""])[0].strip()
                 supplied_password = values.get("password", [""])[0]
                 password = supplied_password or current.get("GEOFOX_PASSWORD", "")
-                raw_config = application.validate_station_config(raw_config, user=user, password=password)
-                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json", delete=False) as handle:
-                    handle.write(json.dumps(raw_config, ensure_ascii=False)); temporary = Path(handle.name)
+                raw_config = application.validate_station_config(
+                    raw_config, user=user, password=password
+                )
+                with tempfile.NamedTemporaryFile(
+                    mode="w", encoding="utf-8", suffix=".json", delete=False
+                ) as handle:
+                    handle.write(json.dumps(raw_config, ensure_ascii=False))
+                    temporary = Path(handle.name)
                 try:
                     load_config(temporary)
                 finally:
@@ -466,16 +610,30 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                     application.save_web_password(web_password)
                 save_config(application.config_path, raw_config)
                 if supplied_password:
-                    save_credentials(application.credentials_path, user, supplied_password)
+                    save_credentials(
+                        application.credentials_path, user, supplied_password
+                    )
                 elif user != current.get("GEOFOX_USER", ""):
                     save_credentials(application.credentials_path, user, password)
-                self.send_response(HTTPStatus.SEE_OTHER); self.send_header("Location", "/settings?saved=1"); self._security_headers(); self.end_headers()
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", "/settings?saved=1")
+                self._security_headers()
+                self.end_headers()
             except OverflowError as exc:
-                self._send(application.settings(f"Nicht gespeichert: {exc}"), HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+                self._send(
+                    application.settings(f"Nicht gespeichert: {exc}"),
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
             except GeofoxError as exc:
-                self._send(application.settings(f"Nicht gespeichert: {exc}"), _geofox_http_status(exc))
+                self._send(
+                    application.settings(f"Nicht gespeichert: {exc}"),
+                    _geofox_http_status(exc),
+                )
             except (ValueError, ConfigError, OSError, PermissionError) as exc:
-                self._send(application.settings(f"Nicht gespeichert: {exc}"), HTTPStatus.BAD_REQUEST)
+                self._send(
+                    application.settings(f"Nicht gespeichert: {exc}"),
+                    HTTPStatus.BAD_REQUEST,
+                )
 
         def log_message(self, format: str, *args: object) -> None:
             LOG.info("web %s", format % args)
@@ -483,11 +641,30 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-def run(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, config: str = "config.json", credentials: str | None = None, cache: str = "var/stations.json", access_token: str | None = None) -> None:
+def run(
+    host: str = DEFAULT_HOST,
+    port: int = DEFAULT_PORT,
+    *,
+    config: str = "config.json",
+    credentials: str | None = None,
+    cache: str = "var/stations.json",
+    access_token: str | None = None,
+) -> None:
     if host not in {"127.0.0.1", "localhost", "::1"} and not access_token:
-        raise ValueError("Für einen nicht-lokalen Webhost muss HVV_WEB_PASSWORD_HASH gesetzt sein")
-    application = WebApplication(Path(config), Path(credentials or os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env")), Path(cache), access_token=access_token, web_env_path=Path(os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")))
-    server = ThreadingHTTPServer((host, port), make_handler(application)); server.application = application  # type: ignore[attr-defined]
+        raise ValueError(
+            "Für einen nicht-lokalen Webhost muss HVV_WEB_PASSWORD_HASH gesetzt sein"
+        )
+    application = WebApplication(
+        Path(config),
+        Path(
+            credentials or os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env")
+        ),
+        Path(cache),
+        access_token=access_token,
+        web_env_path=Path(os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")),
+    )
+    server = ThreadingHTTPServer((host, port), make_handler(application))
+    server.application = application  # type: ignore[attr-defined]
     LOG.info("Lokale Weboberfläche erreichbar unter http://%s:%d", host, port)
     try:
         server.serve_forever()
@@ -498,9 +675,36 @@ def run(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, config: str = "co
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Lokale Weboberfläche für den HVV-Anzeiger")
-    parser.add_argument("--host", default=os.environ.get("HVV_WEB_HOST", DEFAULT_HOST)); parser.add_argument("--port", type=int, default=int(os.environ.get("HVV_WEB_PORT", DEFAULT_PORT))); parser.add_argument("--config", default=os.environ.get("HVV_CONFIG", "config.json")); parser.add_argument("--credentials", default=os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env")); parser.add_argument("--cache", default=os.environ.get("HVV_STATION_CACHE", "var/stations.json")); parser.add_argument("--access-token", default=os.environ.get("HVV_WEB_PASSWORD_HASH"), help="Gesalzener Passwort-Hash für nicht-lokale Zugriffe")
-    args = parser.parse_args(); logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper()); run(args.host, args.port, config=args.config, credentials=args.credentials, cache=args.cache, access_token=args.access_token)
+    parser = argparse.ArgumentParser(
+        description="Lokale Weboberfläche für den HVV-Anzeiger"
+    )
+    parser.add_argument("--host", default=os.environ.get("HVV_WEB_HOST", DEFAULT_HOST))
+    parser.add_argument(
+        "--port", type=int, default=int(os.environ.get("HVV_WEB_PORT", DEFAULT_PORT))
+    )
+    parser.add_argument("--config", default=os.environ.get("HVV_CONFIG", "config.json"))
+    parser.add_argument(
+        "--credentials",
+        default=os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env"),
+    )
+    parser.add_argument(
+        "--cache", default=os.environ.get("HVV_STATION_CACHE", "var/stations.json")
+    )
+    parser.add_argument(
+        "--access-token",
+        default=os.environ.get("HVV_WEB_PASSWORD_HASH"),
+        help="Gesalzener Passwort-Hash für nicht-lokale Zugriffe",
+    )
+    args = parser.parse_args()
+    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
+    run(
+        args.host,
+        args.port,
+        config=args.config,
+        credentials=args.credentials,
+        cache=args.cache,
+        access_token=args.access_token,
+    )
 
 
 if __name__ == "__main__":

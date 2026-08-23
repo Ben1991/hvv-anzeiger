@@ -126,7 +126,9 @@ def _return_code_error(result: dict[str, Any]) -> GeofoxError:
         "FORCED_DEST_NOT_FOUND": "Zielstation wurde nicht eindeutig gefunden.",
     }
     if code == "ERROR_TEXT":
-        text = _safe_external_text(result.get("errorText") or "Geofox meldet einen Fehler")
+        text = _safe_external_text(
+            result.get("errorText") or "Geofox meldet einen Fehler"
+        )
         return GeofoxError(text, kind="validation", return_code=code)
     if code in user_messages:
         kind = "temporary" if code == "ERROR_COMM" else "validation"
@@ -393,7 +395,9 @@ class GeofoxClient:
             direction = str(line.get("direction", ""))
             response_station = raw.get("station") or {}
             response_station_id = (
-                response_station.get("id") if isinstance(response_station, dict) else None
+                response_station.get("id")
+                if isinstance(response_station, dict)
+                else None
             )
             selected_station = stations_by_id.get(response_station_id)
             if selected_station:
@@ -428,7 +432,9 @@ class GeofoxClient:
                     delay_seconds=delay_seconds,
                     cancelled=bool(raw.get("cancelled", False)),
                     station_label=(
-                        matching_stations[0].label if len(matching_stations) == 1 else ""
+                        matching_stations[0].label
+                        if len(matching_stations) == 1
+                        else ""
                     ),
                 )
             )
