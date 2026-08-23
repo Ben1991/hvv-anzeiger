@@ -1152,6 +1152,7 @@ def run(
     server = ThreadingHTTPServer((host, port), make_handler(application))
     if tls_certfile:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(tls_certfile, tls_keyfile)
         server.socket = context.wrap_socket(server.socket, server_side=True)
     server.application = application  # type: ignore[attr-defined]
