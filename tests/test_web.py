@@ -6,8 +6,12 @@ import stat
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from http.server import ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 from unittest.mock import patch
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 from hvv_display.geofox import HAMBURG_TZ
 from hvv_display.models import Departure
@@ -17,6 +21,7 @@ from hvv_display.web import (
     hardware_status,
     hash_web_password,
     load_credentials,
+    make_handler,
     save_config,
     save_credentials,
     verify_web_password,
@@ -216,6 +221,91 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn("line-badge-neutral", dashboard)
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", dashboard)
         self.assertNotIn("<script>alert(1)</script>", dashboard)
+
+    def test_display_mode_is_reload_safe_responsive_and_read_only(self) -> None:
+        with patch.object(
+            self.app,
+            "departures",
+            return_value=(
+                [
+                    {
+                        "line": "<script>alert(1)</script>",
+                        "product": "bus",
+                        "station": "R",
+                        "destination": "Ziel <b>West</b>",
+                        "time": "12:04",
+                        "display_time": "in 4 min",
+                        "minutes": 4,
+                        "delay_seconds": 0,
+                        "cancelled": False,
+                    }
+                ],
+                None,
+            ),
+        ):
+            display = self.app.display().decode("utf-8")
+        self.assertIn('<body class="display-page">', display)
+        self.assertIn('data-display-mode', display)
+        self.assertIn('<meta http-equiv="refresh" content="15">', display)
+        self.assertIn("line-badge-bus", display)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", display)
+        self.assertIn("Ziel &lt;b&gt;West&lt;/b&gt;", display)
+        self.assertNotIn("<script>alert(1)</script>", display)
+        self.assertNotIn("/settings", display)
+        self.assertNotIn("/system/restart", display)
+        self.assertNotIn("csrf_token", display)
+
+    def test_display_mode_distinguishes_error_and_empty_states(self) -> None:
+        with patch.object(
+            self.app, "departures", return_value=([], "Geofox ist nicht erreichbar")
+        ):
+            error_display = self.app.display().decode("utf-8")
+        self.assertIn('class="notice"', error_display)
+        self.assertIn('class="empty"', error_display)
+
+        with patch.object(self.app, "departures", return_value=([], None)):
+            empty_display = self.app.display().decode("utf-8")
+        self.assertNotIn('class="notice"', empty_display)
+        self.assertIn('class="empty"', empty_display)
+
+    def test_display_route_requires_authentication_and_sets_security_headers(
+        self,
+    ) -> None:
+        application = WebApplication(
+            self.config,
+            self.credentials,
+            Path(self.directory.name),
+            access_token=hash_web_password("test-web-password"),
+        )
+        with patch.object(application, "display", return_value=b"display"):
+            server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(application))
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            try:
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(f"{base_url}/display")  # noqa: S310
+                self.assertEqual(denied.exception.code, 401)
+
+                auth = "Basic " + base64.b64encode(
+                    b"hvv-anzeiger:test-web-password"
+                ).decode()
+                request = Request(  # noqa: S310
+                    f"{base_url}/display", headers={"Authorization": auth}
+                )
+                with urlopen(request) as response:  # noqa: S310
+                    self.assertEqual(response.read(), b"display")
+                    self.assertEqual(
+                        response.headers["Content-Security-Policy"],
+                        "default-src 'none'; style-src 'unsafe-inline'; "
+                        "script-src 'unsafe-inline'; img-src 'self' data:; "
+                        "connect-src 'self'; base-uri 'none'; form-action 'self'; "
+                        "frame-ancestors 'none'",
+                    )
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
 
     def test_restart_uses_non_interactive_sudo(self) -> None:
         result = type("Result", (), {"returncode": 0})()
