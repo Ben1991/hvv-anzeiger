@@ -34,6 +34,7 @@ from .geofox import (
 )
 from .render import get_line_style, line_style_css
 from .stations import resolve_stations
+from .time_display import format_departure_time, minutes_until
 
 LOG = logging.getLogger(__name__)
 DEFAULT_HOST = "127.0.0.1"
@@ -133,10 +134,16 @@ def save_config(path: Path, raw_config: dict[str, Any]) -> None:
 
 
 def _minutes_until(departure: Any, now: datetime) -> int:
-    return max(0, round((departure.departure_time - now).total_seconds() / 60))
+    return minutes_until(departure.departure_time, now)
 
 
-def _departure_payload(departures: list[Any], now: datetime) -> list[dict[str, Any]]:
+def _departure_payload(
+    departures: list[Any],
+    now: datetime,
+    *,
+    time_mode: str = "countdown",
+    minute_unit: str = "min",
+) -> list[dict[str, Any]]:
     return [
         {
             "line": departure.line,
@@ -144,7 +151,15 @@ def _departure_payload(departures: list[Any], now: datetime) -> list[dict[str, A
             "destination": departure.destination,
             "station": departure.station_label,
             "time": departure.departure_time.strftime("%H:%M"),
+            "display_time": format_departure_time(
+                departure.departure_time,
+                now,
+                time_mode=time_mode,
+                minute_unit=minute_unit,
+                cancelled=departure.cancelled,
+            ),
             "minutes": _minutes_until(departure, now),
+            "time_mode": time_mode,
             "delay_seconds": departure.delay_seconds,
             "cancelled": departure.cancelled,
         }
@@ -286,7 +301,15 @@ class WebApplication:
             max_list=30,
             max_time_offset=config.api.max_time_offset_minutes,
         )
-        return _departure_payload(departures[: config.api.max_departures], now), None
+        return (
+            _departure_payload(
+                departures[: config.api.max_departures],
+                now,
+                time_mode=config.display.time_mode,
+                minute_unit=config.display.minute_unit,
+            ),
+            None,
+        )
 
     def station_suggestions(self, query: str, city: str) -> list[dict[str, Any]]:
         query = query.strip()
@@ -506,7 +529,7 @@ class WebApplication:
             departures, error = [], str(exc)
         rows = (
             "".join(
-                f'<div class="row"><div><div class="line line-badge line-badge-{get_line_style(item.get("line", ""), item.get("product")).token}">{html.escape(str(item.get("line", "")))}</div><div class="station">{html.escape(str(item.get("station", "")))}</div></div><div class="destination">{html.escape(str(item.get("destination", "")))}{(" <span class=delay>(+" + str(item["delay_seconds"] // 60) + " min)</span>") if item["delay_seconds"] else ""}</div><div class="time {"cancelled" if item["cancelled"] else ""}">{html.escape(str(item["time"]))}<br><small>in {item["minutes"]} min</small></div></div>'
+                f'<div class="row"><div><div class="line line-badge line-badge-{get_line_style(item.get("line", ""), item.get("product")).token}">{html.escape(str(item.get("line", "")))}</div><div class="station">{html.escape(str(item.get("station", "")))}</div></div><div class="destination">{html.escape(str(item.get("destination", "")))}{(" <span class=delay>(+" + str(item["delay_seconds"] // 60) + " min)</span>") if item["delay_seconds"] else ""}</div><div class="time {"cancelled" if item["cancelled"] else ""}">{html.escape(str(item.get("display_time", item["time"]))) }{"" if item.get("time_mode") == "departure_time" else "<br><small>in " + str(item["minutes"]) + " min</small>"}</div></div>'
                 for item in departures
             )
             or '<div class="empty">Keine passende Abfahrt verfügbar.</div>'
@@ -535,6 +558,8 @@ class WebApplication:
             "display.rotate": 0,
             "display.bus_speed_hz": 16000000,
             "display.bgr": False,
+            "display.time_mode": "countdown",
+            "display.minute_unit": "min",
             "night_shutdown.enabled": False,
             "night_shutdown.start": "21:00",
             "night_shutdown.end": "06:30",
@@ -554,6 +579,8 @@ class WebApplication:
             "display.rotate": "Drehung: 0 bis 3 Vierteldrehungen.",
             "display.bus_speed_hz": "SPI-Takt in Hertz.",
             "display.bgr": "Bei vertauschten Rot-/Blaukanälen aktivieren.",
+            "display.time_mode": "Minuten bis Abfahrt oder konkrete Abfahrtszeit; gilt für Display und Web.",
+            "display.minute_unit": "Einheit für den Countdown; bei Abfahrtszeit nicht relevant.",
             "night_shutdown.enabled": "Pausiert nachts Abfragen und Display.",
             "night_shutdown.start": "Beginn in Hamburger Ortszeit (HH:MM).",
             "night_shutdown.end": "Ende in Hamburger Ortszeit (HH:MM).",
@@ -565,6 +592,10 @@ class WebApplication:
             default = defaults[path]
             if isinstance(default, bool):
                 control = f'<select id="{path}" data-path="{path}" data-type="bool" data-default="{str(default).lower()}"><option value="false" {"selected" if not value else ""}>Nein</option><option value="true" {"selected" if value else ""}>Ja</option></select>'
+            elif path == "display.time_mode":
+                control = f'<select id="{path}" data-path="{path}" data-default="countdown"><option value="countdown" {"selected" if value == "countdown" else ""}>Minuten bis Abfahrt</option><option value="departure_time" {"selected" if value == "departure_time" else ""}>Abfahrtszeit</option></select>'
+            elif path == "display.minute_unit":
+                control = f'<select id="{path}" data-path="{path}" data-default="min"><option value="min" {"selected" if value == "min" else ""}>min</option><option value="m" {"selected" if value == "m" else ""}>m</option><option value="none" {"selected" if value == "none" else ""}>keine Einheit</option></select>'
             else:
                 control = f'<input id="{path}" data-path="{path}" type="{input_type}" value="{html.escape(str(value), quote=True)}" data-default="{html.escape(str(default), quote=True)}">'
             return f'<div class="setting"><label for="{path}">{path}</label><div class="control-row">{control}<button type="button" class="reset" onclick="resetField(this)">Auf Standard zurücksetzen</button></div><div class="subtle">{descriptions[path]}</div></div>'
@@ -607,13 +638,14 @@ class WebApplication:
 <form method="post" action="/settings" accept-charset="UTF-8" onsubmit="return prepareConfig()"><section class="card"><h2>Weboberfläche</h2><p class="subtle">Benutzername: <code>hvv-anzeiger</code>. Ein leeres Passwortfeld lässt den bisherigen Wert unverändert.</p><label for="web_password">Neues Webpasswort</label><input id="web_password" name="web_password" type="password" autocomplete="new-password" placeholder="unverändert lassen"></section>
 <section class="card"><h2>Geofox-Zugang</h2><label for="user">Anwendungs-ID</label><input id="user" name="user" value="{html.escape(credentials.get("GEOFOX_USER", ""), quote=True)}" autocomplete="username"><label for="password">Passwort</label><input id="password" name="password" type="password" autocomplete="new-password" placeholder="unverändert lassen"></section>
 <section class="card"><h2>Geofox-API</h2><div class="grid">{scalar("api.base_url")}{scalar("api.version", "number")}{scalar("api.refresh_seconds", "number")}{scalar("api.request_timeout_seconds", "number")}{scalar("api.max_departures", "number")}{scalar("api.max_time_offset_minutes", "number")}{scalar("api.max_stale_age_minutes", "number")}</div></section>
-<section class="card"><h2>Display</h2><div class="grid">{scalar("display.spi_port", "number")}{scalar("display.spi_device", "number")}{scalar("display.gpio_dc", "number")}{scalar("display.gpio_reset", "number")}{scalar("display.rotate", "number")}{scalar("display.bus_speed_hz", "number")}{scalar("display.bgr")}</div></section>
+<section class="card"><h2>Display</h2><div class="grid">{scalar("display.spi_port", "number")}{scalar("display.spi_device", "number")}{scalar("display.gpio_dc", "number")}{scalar("display.gpio_reset", "number")}{scalar("display.rotate", "number")}{scalar("display.bus_speed_hz", "number")}{scalar("display.bgr")}{scalar("display.time_mode")}{scalar("display.minute_unit")}</div></section>
 <section class="card"><h2>Nachtabschaltung</h2><div class="grid">{scalar("night_shutdown.enabled")}{scalar("night_shutdown.start", "time")}{scalar("night_shutdown.end", "time")}</div></section>
 <section class="card"><div class="station-heading"><div><h2>Haltestellen und Linien</h2><p class="subtle">Haltestelle eintippen, Geofox-Vorschlag auswählen; Name, Stadt und ID werden automatisch übernommen.</p></div><button type="button" onclick="addStation()">Haltestelle hinzufügen</button></div><div id="stations">{stations}</div></section>
 <textarea id="config_json" name="config_json" hidden>{raw}</textarea><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><p><button id="save-settings" type="submit">Speichern und prüfen</button></p></form>
 <script>
 let requestSequence=0; let debounceTimers=new WeakMap(); let controllers=new WeakMap(); let lineControllers=new WeakMap(); let lineSequences=new WeakMap();
-function resetField(button){{const control=button.parentElement.querySelector('[data-path]');control.value=control.dataset.default}}
+function resetField(button){{const control=button.parentElement.querySelector('[data-path]');control.value=control.dataset.default;syncTimeDisplayControls()}}
+function syncTimeDisplayControls(){{const mode=document.getElementById('display.time_mode');const unit=document.getElementById('display.minute_unit');if(!mode||!unit)return;unit.disabled=mode.value==='departure_time';unit.closest('.setting').querySelector('.subtle').textContent=unit.disabled?'Bei Abfahrtszeit nicht relevant.':'Einheit für den Countdown; bei Abfahrtszeit nicht relevant.'}}
 function addRoute(button){{const row=document.createElement('div');row.className='route-row';row.innerHTML='<input data-route="line" placeholder="Linie" aria-label="Linie"><input data-route="destination" placeholder="Ziel" aria-label="Ziel"><input type="hidden" data-route-line-id><input type="hidden" data-route-product><input type="hidden" data-route-filter-mode><input type="hidden" data-route-filter-ids value="[]"><button type="button" class="reset" onclick="this.parentElement.remove()">Route entfernen</button>';button.closest('[data-station]').querySelector('[data-routes]').appendChild(row)}}
 function invalidateStation(card){{card.dataset.valid='false';card.querySelector('[data-station-field="id"]').value='';card.querySelector('[data-station-field="serviceTypes"]').value='[]';card.querySelector('[data-search-message]').textContent='Bitte Haltestelle aus einem Geofox-Vorschlag auswählen.';card.querySelector('[data-line-options]').replaceChildren();card.querySelector('[data-route-configs]').replaceChildren();card.querySelector('[data-lines-message]').textContent='Nach der Haltestellenauswahl hier die verfügbaren Linien laden.';card.querySelector('[data-load-lines]').disabled=true;lineControllers.get(card)?.abort();lineSequences.set(card,(lineSequences.get(card)||0)+1);card.querySelector('[data-routes]').replaceChildren();card.querySelector('[data-line-picker]').dataset.selectedLines='[]'}}
 function bindStation(card){{const name=card.querySelector('[data-station-field="name"]');const city=card.querySelector('[data-station-field="city"]');[name,city].forEach(input=>input.addEventListener('input',()=>{{invalidateStation(card);scheduleStationSearch(card)}}));}}
@@ -624,11 +656,44 @@ function addStation(){{const first=document.querySelector('[data-station]');cons
 function renderRouteConfig(input, options){{const card=input.closest('[data-station]');const container=card.querySelector('[data-route-configs]');[...container.children].filter(item=>item.dataset.routeConfig===input.value).forEach(item=>item.remove());const config=document.createElement('div');config.className='route-config';config.dataset.routeConfig=input.value;const title=document.createElement('strong');title.textContent=input.dataset.line+' · Filter';const help=document.createElement('span');help.className='subtle';help.textContent='Richtung zeigt auch Kurzläufer; Zielstation ist strenger.';const mode=document.createElement('select');mode.dataset.routeMode='true';mode.setAttribute('aria-label','Filtermodus für '+input.dataset.line);mode.append(new Option('Richtung','direction'),new Option('Zu Zielstation …','destination'));const filter=document.createElement('select');filter.dataset.routeFilter='true';filter.setAttribute('aria-label','Richtung oder Zielstation für '+input.dataset.line);const target=document.createElement('input');target.type='search';target.dataset.routeTarget='true';target.placeholder='Zielstation suchen …';target.setAttribute('autocomplete','off');const targetList=document.createElement('datalist');targetList.id='route-targets-'+Math.random().toString(36).slice(2);target.setAttribute('list',targetList.id);const fill=()=>{{filter.replaceChildren();targetList.replaceChildren();if(mode.value==='direction'){{target.hidden=true;filter.hidden=false;options.forEach(option=>filter.append(new Option(option.label,JSON.stringify(option.stationIds))))}}else{{target.hidden=false;filter.hidden=true;const seen=new Set();options.forEach(option=>option.stations.forEach(station=>{{if(!seen.has(station.id)){{seen.add(station.id);const suggestion=new Option(station.name,station.name);suggestion.dataset.stationId=station.id;targetList.append(suggestion)}}}}));const selectedIds=input.dataset.filterIds?JSON.parse(input.dataset.filterIds):[];const selected=[...targetList.options].find(option=>option.dataset.stationId===selectedIds[0]);target.value=selected?.value||'';target.dataset.stationId=selected?.dataset.stationId||''}}}};mode.value=input.dataset.filterMode||'direction';mode.addEventListener('change',fill);target.addEventListener('input',()=>{{const selected=[...targetList.options].find(option=>option.value===target.value);target.dataset.stationId=selected?.dataset.stationId||'';loadTargetStations(input,target,targetList)}});config.append(title,help,mode,target,targetList,filter);container.append(config);fill();const selectedIds=input.dataset.filterIds?JSON.parse(input.dataset.filterIds):[];if(mode.value==='direction'){{const wanted=JSON.stringify(selectedIds);[...filter.options].find(option=>option.value===wanted)?.setAttribute('selected','selected')}}}}
 async function loadTargetStations(input,target,targetList){{clearTimeout(target.dataset.targetTimer);const query=target.value.trim();if(query.length<2)return;target.dataset.targetTimer=setTimeout(async()=>{{const card=input.closest('[data-station]');const stationId=card.querySelector('[data-station-field="id"]').value.trim();const sequence=(Number(target.dataset.targetSequence||'0')+1);target.dataset.targetSequence=sequence;try{{const response=await fetch('/api/line-stations?station_id='+encodeURIComponent(stationId)+'&line_id='+encodeURIComponent(input.value)+'&q='+encodeURIComponent(query));const data=await response.json();if(Number(target.dataset.targetSequence)!==sequence)return;if(!response.ok)throw new Error(data.error||'Zielstationen konnten nicht geladen werden');targetList.replaceChildren(...data.stations.map(station=>{{const option=new Option(station.name,station.name);option.dataset.stationId=station.id;return option}}));const selected=[...targetList.options].find(option=>option.value===target.value);target.dataset.stationId=selected?.dataset.stationId||''}}catch(error){{target.dataset.stationId=''}}}},250)}}
 async function loadRouteOptions(input){{const card=input.closest('[data-station]');const stationId=card.querySelector('[data-station-field="id"]').value.trim();const sequence=(Number(input.dataset.routeSequence||'0')+1);input.dataset.routeSequence=sequence;input.disabled=true;try{{const response=await fetch('/api/line-routes?station_id='+encodeURIComponent(stationId)+'&line_id='+encodeURIComponent(input.value));const data=await response.json();if(Number(input.dataset.routeSequence)!==sequence)return;if(!response.ok)throw new Error(data.error||'Richtungen konnten nicht geladen werden');input.dataset.routeOptions=JSON.stringify(data.routes);renderRouteConfig(input,data.routes);if(!data.routes.length)throw new Error('Für diese Linie konnte keine eindeutige Strecke ermittelt werden')}}catch(error){{if(Number(input.dataset.routeSequence)===sequence){{input.checked=false;card.querySelector('[data-lines-message]').textContent=error.message}}}}finally{{if(Number(input.dataset.routeSequence)===sequence)input.disabled=false}}}}
-function renderLineOptions(card, lines){{const picker=card.querySelector('[data-line-picker]');const box=card.querySelector('[data-line-options]');let selected=[];try{{selected=JSON.parse(picker.dataset.selectedLines||'[]')}}catch(error){{selected=[]}}box.replaceChildren();card.querySelector('[data-route-configs]').replaceChildren();lines.forEach(line=>{{const chosen=selected.find(item=>item.id===line.id)||{{}};const label=document.createElement('label');label.className='line-option';const input=document.createElement('input');input.type='checkbox';input.dataset.lineOption='true';input.value=line.id;input.dataset.line=line.name;input.dataset.product=line.product;input.dataset.filterMode=chosen.filterMode||'';input.dataset.filterIds=JSON.stringify(chosen.filterStationIds||[]);input.checked=Boolean(chosen.id);input.addEventListener('change',()=>input.checked?loadRouteOptions(input):card.querySelector('[data-route-configs]').querySelector('[data-route-config="'+CSS.escape(input.value)+'"]')?.remove());label.append(input,document.createTextNode(line.name+' · '+line.productLabel+(line.carrier?' · '+line.carrier:'')));box.append(label);if(input.checked)loadRouteOptions(input)}}}}
+function renderLineOptions(card, lines){{
+    const picker=card.querySelector('[data-line-picker]');
+    const box=card.querySelector('[data-line-options]');
+    let selected=[];
+    try{{selected=JSON.parse(picker.dataset.selectedLines||'[]')}}catch(error){{selected=[]}}
+    box.replaceChildren();
+    card.querySelector('[data-route-configs]').replaceChildren();
+    lines.forEach(line=>{{
+        const chosen=selected.find(item=>item.id===line.id)||{{}};
+        const label=document.createElement('label');
+        label.className='line-option';
+        const input=document.createElement('input');
+        input.type='checkbox';
+        input.dataset.lineOption='true';
+        input.value=line.id;
+        input.dataset.line=line.name;
+        input.dataset.product=line.product;
+        input.dataset.filterMode=chosen.filterMode||'';
+        input.dataset.filterIds=JSON.stringify(chosen.filterStationIds||[]);
+        input.checked=Boolean(chosen.id);
+        input.addEventListener('change',()=>{{
+            if(input.checked){{
+                loadRouteOptions(input);
+            }}else{{
+                card.querySelector('[data-route-configs]')
+                    .querySelector('[data-route-config="'+CSS.escape(input.value)+'"]')
+                    ?.remove();
+            }}
+        }});
+        label.append(input,document.createTextNode(line.name+' · '+line.productLabel+(line.carrier?' · '+line.carrier:'')));
+        box.append(label);
+        if(input.checked)loadRouteOptions(input);
+    }});
+}}
 async function loadLines(button){{const card=button.closest('[data-station]');const stationId=card.querySelector('[data-station-field="id"]').value.trim();const message=card.querySelector('[data-lines-message]');if(!stationId){{message.textContent='Bitte zuerst eine Geofox-Haltestelle auswählen.';return}}const sequence=(lineSequences.get(card)||0)+1;lineSequences.set(card,sequence);lineControllers.get(card)?.abort();const controller=new AbortController();lineControllers.set(card,controller);button.disabled=true;message.innerHTML='<span class="spinner" aria-hidden="true"></span> Linien werden geladen …';try{{const response=await fetch('/api/lines?station_id='+encodeURIComponent(stationId),{{signal:controller.signal}});const data=await response.json();if(lineSequences.get(card)!==sequence)return;if(!response.ok)throw new Error(data.error||'Linien konnten nicht geladen werden');renderLineOptions(card,data.lines);message.textContent=data.lines.length?'Linien aller verfügbaren Verkehrsmittel auswählen.':'Für diese Haltestelle wurden keine Linien gefunden.'}}catch(error){{if(error.name!=='AbortError')message.textContent=error.message}}finally{{if(lineSequences.get(card)===sequence)button.disabled=false}}}}
 function selectedRoutes(card){{const manual=[...card.querySelectorAll('[data-route="line"]')].map(line=>{{const row=line.closest('.route-row');let ids=[];try{{ids=JSON.parse(row.querySelector('[data-route-filter-ids]')?.value||'[]')}}catch(error){{ids=[]}}return {{line:line.value.trim(),destination:row.querySelector('[data-route="destination"]').value.trim(),line_id:row.querySelector('[data-route-line-id]').value.trim()||undefined,product:row.querySelector('[data-route-product]').value.trim()||undefined,filter_mode:row.querySelector('[data-route-filter-mode]')?.value.trim()||undefined,filter_station_ids:Array.isArray(ids)?ids:[]}}}}).filter(route=>route.line);const selected=[...card.querySelectorAll('[data-line-option]')].filter(input=>input.checked).map(input=>{{const config=card.querySelector('[data-route-config="'+CSS.escape(input.value)+'"]');const mode=config?.querySelector('[data-route-mode]')?.value;const filter=config?.querySelector('[data-route-filter]');const target=config?.querySelector('[data-route-target]');let ids=[];let destination='';if(mode==='direction'&&filter?.value){{ids=JSON.parse(filter.value);destination=filter.selectedOptions[0]?.textContent||''}}else if(mode==='destination'&&target?.dataset.stationId){{ids=[target.dataset.stationId];destination=target.value.trim()}}return {{line:input.dataset.line,destination,line_id:input.value,product:input.dataset.product,filter_mode:mode||undefined,filter_station_ids:ids}}}});return selected.length?[...selected,...manual.filter(route=>!route.line_id)]:manual}}
 function prepareConfig(){{const invalid=[...document.querySelectorAll('[data-station]')].find(card=>card.dataset.valid!=='true');if(invalid){{invalid.querySelector('[data-search-message]').innerHTML='<span class="error">Bitte zuerst einen gültigen Geofox-Vorschlag auswählen.</span>';invalid.scrollIntoView({{behavior:'smooth',block:'center'}});return false}}const config=JSON.parse(document.getElementById('config_json').value);document.querySelectorAll('[data-path]').forEach(control=>{{const [section,key]=control.dataset.path.split('.');config[section][key]=control.dataset.type==='bool'?control.value==='true':(control.type==='number'?Number(control.value):control.value)}});config.stations=[...document.querySelectorAll('[data-station]')].map(card=>({{name:card.querySelector('[data-station-field="name"]').value,city:card.querySelector('[data-station-field="city"]').value,id:card.querySelector('[data-station-field="id"]').value,label:card.querySelector('[data-station-field="label"]').value,serviceTypes:JSON.parse(card.querySelector('[data-station-field="serviceTypes"]').value||'[]'),routes:selectedRoutes(card)}}));document.getElementById('config_json').value=JSON.stringify(config);document.getElementById('save-settings').disabled=true;document.getElementById('save-settings').textContent='Geofox prüft …';return true}}
-document.querySelectorAll('[data-station]').forEach(bindStation);document.querySelectorAll('[data-station-results]').forEach(select=>select.addEventListener('change',()=>applyStation(select)));
+document.querySelectorAll('[data-station]').forEach(bindStation);document.querySelectorAll('[data-station-results]').forEach(select=>select.addEventListener('change',()=>applyStation(select)));document.getElementById('display.time_mode')?.addEventListener('change',syncTimeDisplayControls);syncTimeDisplayControls();
 </script>'''
         return _page("Einstellungen", content)
 

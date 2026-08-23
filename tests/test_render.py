@@ -28,6 +28,32 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(image.size, (320, 240))
         self.assertEqual(image.mode, "RGB")
 
+    def test_time_display_modes_change_the_rendered_departure_label(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        departure = Departure("21", "Ziel", now + timedelta(minutes=7))
+        countdown = render_board([departure], now=now, minute_unit="min")
+        short_unit = render_board([departure], now=now, minute_unit="m")
+        no_unit = render_board([departure], now=now, minute_unit="none")
+        clock = render_board([departure], now=now, time_mode="departure_time")
+        self.assertNotEqual(countdown.tobytes(), short_unit.tobytes())
+        self.assertNotEqual(short_unit.tobytes(), no_unit.tobytes())
+        self.assertNotEqual(no_unit.tobytes(), clock.tobytes())
+
+    def test_board_state_uses_the_configured_time_format(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        departure = Departure("21", "Ziel", now + timedelta(minutes=7))
+        state = board_state_key(
+            [departure],
+            now=now,
+            last_updated=now,
+            stale=False,
+            error_message=None,
+            wifi_is_connected=True,
+            max_rows=5,
+            time_mode="departure_time",
+        )
+        self.assertIn("12:07", state[1][0])
+
     def test_line_styles_cover_hvv_modes_and_safe_fallback(self) -> None:
         expected = {
             ("5", "BUS"): ("bus", "pointed"),

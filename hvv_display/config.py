@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from .models import Route, Station
+from .time_display import MINUTE_UNITS, TIME_MODES
 
 MAX_ROUTE_FILTER_STATIONS = 200
 
@@ -37,6 +38,8 @@ class DisplayConfig:
     rotate: int
     bus_speed_hz: int
     bgr: bool
+    time_mode: str = "countdown"
+    minute_unit: str = "min"
 
 
 @dataclass(frozen=True)
@@ -141,11 +144,19 @@ def load_config(path: str | Path) -> AppConfig:
         rotate=int(display_raw.get("rotate", 0)),
         bus_speed_hz=int(display_raw.get("bus_speed_hz", 16_000_000)),
         bgr=_boolean(display_raw.get("bgr", False), "display.bgr"),
+        time_mode=str(display_raw.get("time_mode", "countdown")).strip(),
+        minute_unit=str(display_raw.get("minute_unit", "min")).strip(),
     )
     if display.rotate not in (0, 1, 2, 3):
         raise ConfigError("display.rotate muss 0, 1, 2 oder 3 sein")
     if display.bus_speed_hz <= 0:
         raise ConfigError("display.bus_speed_hz muss größer als 0 sein")
+    if display.time_mode not in TIME_MODES:
+        raise ConfigError(
+            "display.time_mode muss countdown oder departure_time sein"
+        )
+    if display.minute_unit not in MINUTE_UNITS:
+        raise ConfigError("display.minute_unit muss min, m oder none sein")
 
     night_shutdown = NightShutdownConfig(
         enabled=_boolean(

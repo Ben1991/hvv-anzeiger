@@ -27,6 +27,8 @@ class ConfigTest(unittest.TestCase):
         self.assertFalse(config.night_shutdown.enabled)
         self.assertEqual(config.night_shutdown.start.strftime("%H:%M"), "21:00")
         self.assertEqual(config.night_shutdown.end.strftime("%H:%M"), "06:30")
+        self.assertEqual(config.display.time_mode, "countdown")
+        self.assertEqual(config.display.minute_unit, "min")
 
     def test_refresh_below_limit_is_rejected(self) -> None:
         raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
@@ -253,6 +255,8 @@ class ConfigTest(unittest.TestCase):
             "rotate",
             "bus_speed_hz",
             "bgr",
+            "time_mode",
+            "minute_unit",
         ):
             raw["display"].pop(field, None)
         raw["stations"][0].pop("label")
@@ -263,6 +267,8 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.api.version, 63)
         self.assertEqual(config.api.max_stale_age_minutes, 5)
         self.assertEqual(config.display.bus_speed_hz, 16_000_000)
+        self.assertEqual(config.display.time_mode, "countdown")
+        self.assertEqual(config.display.minute_unit, "min")
         self.assertEqual(config.stations[0].label, "W")
         self.assertEqual(config.stations[0].city, "Hamburg")
         self.assertFalse(config.night_shutdown.enabled)
@@ -286,6 +292,18 @@ class ConfigTest(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as directory:
                     with self.assertRaisesRegex(ConfigError, message):
                         load_config(self.write_config(raw, directory))
+
+    def test_time_display_enums_are_validated(self) -> None:
+        original = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
+        for field, value, message in (
+            ("time_mode", "clock", "time_mode"),
+            ("minute_unit", "minutes", "minute_unit"),
+        ):
+            raw = json.loads(json.dumps(original))
+            raw["display"][field] = value
+            with tempfile.TemporaryDirectory() as directory:
+                with self.assertRaisesRegex(ConfigError, message):
+                    load_config(self.write_config(raw, directory))
 
 
 if __name__ == "__main__":
