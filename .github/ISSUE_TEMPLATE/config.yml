@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sicherheitslücke vertraulich melden
+    url: https://github.com/Ben1991/hvv-anzeiger/security/advisories/new
+    about: Bitte keine Sicherheitsprobleme öffentlich melden.
+  - name: Zum Projekt beitragen
+    url: https://github.com/Ben1991/hvv-anzeiger/blob/main/CONTRIBUTING.md
+    about: Arbeitsablauf und lokale Prüfungen vor dem ersten Pull Request.
