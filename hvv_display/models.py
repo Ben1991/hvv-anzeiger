@@ -37,3 +37,4 @@ class Departure:
     delay_seconds: int = 0
     cancelled: bool = False
     station_label: str = ""
+    product: str | None = None

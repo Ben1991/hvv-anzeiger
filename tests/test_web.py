@@ -154,6 +154,34 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn("System neu starten", dashboard)
         self.assertIn("/system/restart", dashboard)
 
+    def test_dashboard_uses_shared_safe_line_style_and_escapes_line_text(self) -> None:
+        with patch.object(
+            self.app,
+            "departures",
+            return_value=(
+                [
+                    {
+                        "line": "<script>alert(1)</script>",
+                        "product": "unknown",
+                        "station": "",
+                        "destination": "Ziel",
+                        "time": "12:04",
+                        "minutes": 4,
+                        "delay_seconds": 0,
+                        "cancelled": False,
+                    }
+                ],
+                None,
+            ),
+        ), patch(
+            "hvv_display.web.hardware_status",
+            return_value={"cpu": "", "ram": "", "storage": ""},
+        ):
+            dashboard = self.app.dashboard().decode("utf-8")
+        self.assertIn("line-badge-neutral", dashboard)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", dashboard)
+        self.assertNotIn("<script>alert(1)</script>", dashboard)
+
     def test_restart_uses_non_interactive_sudo(self) -> None:
         result = type("Result", (), {"returncode": 0})()
         with patch("hvv_display.web.subprocess.run", return_value=result) as run:

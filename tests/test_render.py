@@ -12,6 +12,8 @@ from hvv_display.render import (
     _font,
     _status_text,
     board_state_key,
+    get_line_style,
+    line_style_css,
     render_board,
 )
 
@@ -25,6 +27,65 @@ class RenderTest(unittest.TestCase):
         )
         self.assertEqual(image.size, (320, 240))
         self.assertEqual(image.mode, "RGB")
+
+    def test_line_styles_cover_hvv_modes_and_safe_fallback(self) -> None:
+        expected = {
+            ("5", "BUS"): ("bus", "pointed"),
+            ("U2", None): ("u2", "rectangle"),
+            ("U3", "UBAHN"): ("u3", "rectangle"),
+            ("U4", None): ("u4", "rectangle"),
+            ("S1", "SBAHN"): ("sbahn", "circle"),
+            ("S2", None): ("s2", "circle"),
+            ("S3", None): ("s3", "circle"),
+            ("S5", None): ("s5", "circle"),
+            ("S7", None): ("s7", "circle"),
+            ("A1", None): ("akn", "circle"),
+            ("RE1", None): ("regional", "rectangle"),
+            ("RB81", "REGIONAL"): ("regional", "rectangle"),
+            ("Fähre", "FERRY"): ("ferry", "pointed"),
+            ("X10", None): ("xpress", "pointed"),
+            ("N42", None): ("night", "pointed"),
+            ("future-value", "unknown"): ("neutral", "rounded"),
+            ("", None): ("neutral", "rounded"),
+        }
+        for input_values, style_values in expected.items():
+            with self.subTest(input_values=input_values):
+                style = get_line_style(*input_values)
+                self.assertEqual((style.token, style.shape), style_values)
+
+        self.assertEqual(get_line_style("5", "METROBUS").token, "bus")
+        self.assertEqual(get_line_style("U9", None).token, "u1")
+        self.assertEqual(get_line_style("S9", None).token, "sbahn")
+        self.assertEqual(get_line_style("10", "AKN").token, "akn")
+        self.assertEqual(get_line_style("10", "A").token, "akn")
+        self.assertEqual(get_line_style("10", "U").token, "u1")
+        self.assertEqual(get_line_style("10", "S").token, "sbahn")
+        self.assertEqual(get_line_style("10", "FAEHRE").token, "ferry")
+        self.assertEqual(get_line_style("10", "XPRESSBUS").token, "xpress")
+        self.assertEqual(get_line_style("10", "NACHTBUS").token, "night")
+        self.assertEqual(
+            get_line_style("<script>alert(1)</script>", None).token, "neutral"
+        )
+        self.assertEqual(get_line_style("unknown", "unknown").token, "neutral")
+
+    def test_line_style_css_contains_only_allowlisted_classes(self) -> None:
+        css = line_style_css()
+        self.assertIn(".line-badge-u2{", css)
+        self.assertIn("background:#d52b2f", css)
+        self.assertIn(".line-badge-neutral{", css)
+
+    def test_line_badges_render_each_shape_and_long_values_safely(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        departures = [
+            Departure("5", "Bus", now + timedelta(minutes=1), product="BUS"),
+            Departure("U2", "U-Bahn", now + timedelta(minutes=2)),
+            Departure("S1", "S-Bahn", now + timedelta(minutes=3)),
+            Departure(
+                "<script>alert(1)</script>", "Fallback", now + timedelta(minutes=4)
+            ),
+        ]
+        image = render_board(departures, now=now, max_rows=4)
+        self.assertEqual(image.size, (320, 240))
 
     def test_stale_state_has_red_status_bar(self) -> None:
         now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
