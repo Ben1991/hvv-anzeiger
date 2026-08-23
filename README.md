@@ -135,8 +135,11 @@ Das Kürzel macht in der gemeinsam sortierten Liste sichtbar, von welcher
 Haltestelle eine Abfahrt stammt. Alle Verbindungen lassen sich in
 `config.json` ersetzen.
 
-> **Andere Haltestellen gewünscht?** Öffne das Repository in Codex und nutze
-> den mitgelieferten Skill `$adjust-hvv-stations`. Ein möglicher Auftrag lautet:
+> **Andere Haltestellen oder Verbindungen gewünscht?** Nach der Installation
+> kannst du sie bequem über die lokale Weboberfläche einrichten und ändern –
+> das ist der einfache Weg für normale Nutzer. Alternativ kannst du das
+> Repository in Codex öffnen und den mitgelieferten Skill
+> `$adjust-hvv-stations` nutzen. Ein möglicher Auftrag lautet:
 > `Nutze $adjust-hvv-stations und zeige Linie 5 Richtung Hauptbahnhof ab
 > Rathausmarkt an.` Der Skill passt die Konfiguration an und prüft sie
 > anschließend automatisch. Weitere Hinweise und Beispiele stehen unter
@@ -161,6 +164,9 @@ vorgesehene Netzteil erforderlich.
 | Netzteil | [5-V-/2-A-Micro-USB-Netzteil suchen (Affiliate-Link)](https://www.amazon.de/s?k=5V+2A+Micro+USB+Netzteil+Raspberry+Pi+Zero+2+W&tag=bema19910e-21) | stabilisierte 5 V, mindestens 2 A und Micro-USB-Stecker |
 | Jumper-Kabel | [Buchse-Buchse-Jumper-Kabel suchen (Affiliate-Link)](https://www.amazon.de/s?k=Jumper+Kabel+Buchse+Buchse+2%2C54mm&tag=bema19910e-21) | 2,54-mm-Raster; Steckertyp passend zu den montierten Stiftleisten wählen |
 | GPIO-Stiftleiste, falls nötig | [2×20-GPIO-Stiftleiste suchen (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W+GPIO+Stiftleiste+2x20&tag=bema19910e-21) | nur erforderlich, wenn der Raspberry Pi ohne montierte Stiftleiste geliefert wird |
+| SD-/microSD-Kartenleser, falls nötig | [SD-/microSD-Kartenleser suchen (Affiliate-Link)](https://www.amazon.de/s?k=SD-Kartenleser+USB+microSD&tag=bema19910e-21) | nur erforderlich, wenn dein Rechner keinen passenden Leser zum Flashen der Speicherkarte hat |
+| Löt-Set, falls nötig | [Löt-Set für Elektronik suchen (Affiliate-Link)](https://www.amazon.de/s?k=Loetset+Loetkolben+Elektronik&tag=bema19910e-21) | einfache Grundausrüstung zum sicheren Verbinden der Leitungen |
+| „Dritte Hand“ / Platinenhalter, falls nötig | [Dritte Hand mit Platinenhalter und Klemmen suchen (Affiliate-Link)](https://www.amazon.de/s?k=Dritte+Hand+Platinenhalter+Klemmen&tag=bema19910e-21) | hält Kabel und Platine beim Löten sicher fest |
 
 > **Hinweis zu Affiliate-Links:** Als Amazon-Partner verdiene ich an
 > qualifizierten Verkäufen. Wenn du über einen entsprechend gekennzeichneten
@@ -305,6 +311,13 @@ Dateirechten unter `/etc/hvv-anzeiger.env`.
 
 ## Display anschließen
 
+Falls du noch keine Löt-Ausrüstung hast, sind ein [einfaches Löt-Set
+(Affiliate-Link)](https://www.amazon.de/s?k=Loetset+Loetkolben+Elektronik&tag=bema19910e-21)
+und eine [„Dritte Hand“ beziehungsweise ein Platinenhalter mit Klemmen
+(Affiliate-Link)](https://www.amazon.de/s?k=Dritte+Hand+Platinenhalter+Klemmen&tag=bema19910e-21)
+hilfreich. Alles davon ist optional und hängt von deiner vorhandenen
+Ausrüstung ab.
+
 Die Bezeichnungen unterscheiden sich je nach Modul. `SCK` kann auch `CLK`,
 `MOSI` auch `SDI` oder `DIN` und `CS` auch `CE` heißen.
 Falls das Displaymodul zusätzlich einen `MISO`-Pin nutzt, gehört dieser auf
@@ -339,6 +352,10 @@ Vor dem Verdrahten:
 ## Installieren
 
 ### Schnellinstallation
+
+Zum Flashen beziehungsweise Einrichten der Raspberry-Pi-OS-microSD-Karte
+brauchst du einen passenden [SD-/microSD-Kartenleser, falls dein Rechner noch
+keinen hat (Affiliate-Link)](https://www.amazon.de/s?k=SD-Kartenleser+USB+microSD&tag=bema19910e-21).
 
 Bei einer frisch aufgesetzten Raspberry-Pi-OS-Installation zuerst die
 Paketlisten und installierten Pakete aktualisieren und Git installieren:
