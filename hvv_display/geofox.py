@@ -330,6 +330,23 @@ def _return_code_error(result: dict[str, Any]) -> GeofoxError:
     return GeofoxError("Geofox meldet einen unbekannten Fehler.", return_code=code)
 
 
+def _http_error_body(exc: urllib.error.HTTPError) -> dict[str, Any] | None:
+    """Read and validate a bounded Geofox JSON body from an HTTP error."""
+    try:
+        raw = exc.read(MAX_RESPONSE_BYTES + 1)
+    except (OSError, ValueError):
+        return None
+    if len(raw) > MAX_RESPONSE_BYTES:
+        return None
+    try:
+        result = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(result, dict) or not isinstance(result.get("returnCode"), str):
+        return None
+    return result
+
+
 class GeofoxClient:
     # Geofox rate limits apply to the application, not to a Python object. The
     # web UI creates clients for different operations, therefore all instances
@@ -431,6 +448,17 @@ class GeofoxClient:
                         kind="rate_limit",
                         http_status=429,
                     ) from exc
+                if exc.code == 400:
+                    result = _http_error_body(exc)
+                    if result is not None:
+                        body_error = _return_code_error(result)
+                        raise GeofoxError(
+                            str(body_error),
+                            retry_after_seconds=retry_after,
+                            kind=body_error.kind,
+                            http_status=exc.code,
+                            return_code=body_error.return_code,
+                        ) from exc
                 if exc.code in (401, 403):
                     raise GeofoxError(
                         "Geofox-Zugangsdaten oder Berechtigungen wurden abgelehnt.",

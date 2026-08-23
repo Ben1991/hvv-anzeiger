@@ -18,6 +18,7 @@ from hvv_display.models import Departure
 from hvv_display.web import (
     WebApplication,
     _departure_payload,
+    _settings_field_errors,
     hardware_status,
     hash_web_password,
     load_credentials,
@@ -146,6 +147,29 @@ class WebApplicationTest(unittest.TestCase):
             self.assertIn(section, settings)
         self.assertIn("Bedienbare Felder", settings)
         self.assertIn("Sekunden zwischen Abfragen", settings)
+
+    def test_settings_renders_errors_next_to_the_affected_field_and_station(
+        self,
+    ) -> None:
+        field_errors = _settings_field_errors(
+            "Haltestelle 1: Filter für Linie U2 ist ungültig"
+        )
+        settings = self.app.settings(
+            "Nicht gespeichert",
+            field_errors={
+                **field_errors,
+                "display.time_mode": "Ungültiger Wert",
+            },
+        ).decode("utf-8")
+
+        self.assertIn(
+            'data-field-error="display.time_mode">Ungültiger Wert</span>', settings
+        )
+        self.assertIn(
+            'data-field-error="stations[0].routes">'
+            "Haltestelle 1: Filter für Linie U2 ist ungültig</p>",
+            settings,
+        )
 
     def test_settings_exposes_one_global_time_display_configuration(self) -> None:
         settings = self.app.settings().decode("utf-8")

@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import io
 import json
 import threading
 import unittest
@@ -51,6 +52,29 @@ class GeofoxClientTest(unittest.TestCase):
         ).decode("ascii")
         self.assertEqual(client.signature(body), expected)
         self.assertIn("Straße".encode(), body)
+
+    def test_http_400_body_return_code_is_exposed_as_geofox_error(self) -> None:
+        error = urllib.error.HTTPError(
+            "https://example.test/find",
+            400,
+            "Bad Request",
+            {},
+            io.BytesIO(b'{"returnCode":"DEST_NOT_FOUND"}'),
+        )
+        client = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",  # noqa: S106
+            min_request_interval=0,
+            urlopen=lambda *_args, **_kwargs: (_ for _ in ()).throw(error),
+        )
+
+        with self.assertRaises(GeofoxError) as raised:
+            client._post("find", {"version": 63})
+
+        self.assertEqual(str(raised.exception), "Zielstation wurde nicht gefunden.")
+        self.assertEqual(raised.exception.return_code, "DEST_NOT_FOUND")
+        self.assertEqual(raised.exception.http_status, 400)
 
     def test_route_matching_handles_spelling_variants(self) -> None:
         routes = (Route("384", "Elbgaustrasse"), Route("U2", ""))

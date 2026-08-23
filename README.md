@@ -29,7 +29,7 @@ Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
 
 ## Release Notes
 
-### Version 0.2.2 / V2.2 (vorbereitet)
+### Version 0.2.2 / V2.2
 
 - Stationsverwaltung über die Weboberfläche für alle von Geofox gemeldeten
   Verkehrsmittel, einschließlich Bus, U-Bahn, S-Bahn, AKN, Regionalverkehr
@@ -661,12 +661,16 @@ Für Haltestellen empfiehlt sich dieser Ablauf:
 2. Name und Stadt eingeben und „Geofox-Suche“ ausführen.
 3. Einen passenden Treffer auswählen; Name, Stadt und Geofox-ID werden
    übernommen.
-4. Mit „Route hinzufügen“ die gewünschten Linien und Ziele ergänzen.
-5. Ein eindeutiges Kürzel mit 1 bis 3 Zeichen vergeben und speichern.
+4. „Verfügbare Linien laden“ wählen und die gewünschten Verkehrsmittel
+   aktivieren.
+5. Für jede aktivierte Linie den Richtungs- oder Zielstationsfilter auswählen.
+6. Ein eindeutiges Kürzel mit 1 bis 3 Zeichen vergeben und speichern.
 
 Die Geofox-Suche liefert nur Vorschläge. Sie garantiert weder Vollständigkeit
 noch Korrektheit; bei Zweifeln ist die [offizielle GTI-Dokumentation](https://gti.geofox.de/)
-maßgeblich. Eine manuelle Eingabe bleibt jederzeit möglich.
+maßgeblich. Die Geofox-Auswahl ist der reguläre Einrichtungsweg. Die manuelle
+Routenbearbeitung bleibt nur als Legacy-/Fallback-Option für bestehende oder
+von Geofox nicht abgedeckte Konfigurationen verfügbar.
 
 Für einen dauerhaften Start kann die mitgelieferte Unit verwendet werden:
 
@@ -980,7 +984,7 @@ git checkout <versions-tag>
 ./install.sh
 ```
 
-Beispiel für die letzte veröffentlichte Version: `git checkout V2.1`. Ein
+Beispiel für eine veröffentlichte Version: `git checkout V2.2`. Ein
 Versions-Tag sollte nur verwendet werden, wenn er im Repository tatsächlich
 vorhanden ist.
 

@@ -10,3 +10,8 @@ dist/
 .env
 var/
 preview.png
+browser/node_modules/
+browser/playwright-report/
+browser/test-results/
+browser/smoke.spec.mjs-snapshots/
+test-results/

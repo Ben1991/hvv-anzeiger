@@ -11,6 +11,7 @@ import html
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import ssl
@@ -45,6 +46,50 @@ MAX_FORM_BYTES = 1_000_000
 MAX_QUERY_LENGTH = 120
 MAX_CITY_LENGTH = 80
 MAX_STATION_ID_LENGTH = 160
+
+
+def _settings_field_errors(message: str) -> dict[str, str]:
+    """Map validation messages to the nearest visible settings control."""
+    errors: dict[str, str] = {}
+    if "Anwendungs-ID" in message:
+        errors["user"] = message
+        errors["password"] = message
+    elif "Webpasswort" in message:
+        errors["web_password"] = message
+
+    for path in (
+        "api.base_url",
+        "api.version",
+        "api.refresh_seconds",
+        "api.request_timeout_seconds",
+        "api.max_departures",
+        "api.max_time_offset_minutes",
+        "api.max_stale_age_minutes",
+        "display.spi_port",
+        "display.spi_device",
+        "display.gpio_dc",
+        "display.gpio_reset",
+        "display.rotate",
+        "display.bus_speed_hz",
+        "display.bgr",
+        "display.show_station_label",
+        "display.time_mode",
+        "display.minute_unit",
+        "night_shutdown.enabled",
+        "night_shutdown.start",
+        "night_shutdown.end",
+    ):
+        if path in message:
+            errors[path] = message
+
+    station_match = re.search(r"Haltestelle (\d+)", message)
+    if station_match:
+        station_index = int(station_match.group(1)) - 1
+        if station_index >= 0:
+            errors[f"stations[{station_index}]"] = message
+            if any(word in message for word in ("Linie", "Filter", "Richtung")):
+                errors[f"stations[{station_index}].routes"] = message
+    return errors
 
 
 def hash_web_password(password: str) -> str:
@@ -245,6 +290,7 @@ def _page(
     )
     return f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{head}
 <title>{html.escape(title)} · HVV-Anzeiger</title><style>
+.field-error{{display:block;margin-top:6px;color:#ff9aa5;font-weight:600}}
 :root{{color-scheme:dark;font-family:system-ui,sans-serif;background:#0b1220;color:#f4f7fb}}body{{margin:0;background:linear-gradient(135deg,#0b1220,#17233b);min-height:100vh}}main{{max-width:980px;margin:auto;padding:24px 16px 48px}}a{{color:#8bd3ff}}h1{{margin:0 0 8px;font-size:clamp(2rem,6vw,4rem)}}.subtle{{color:#aab8cb}}.toolbar{{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:20px 0}}.board{{background:#05080e;border:1px solid #324057;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px #0006}}.row{{display:grid;grid-template-columns:76px minmax(0,1fr) 100px;gap:16px;align-items:center;padding:18px 22px;border-bottom:1px solid #202a3b}}.row:last-child{{border:0}}.line{{display:inline-block;min-width:42px;padding:2px 8px;text-align:center;font-size:1.35rem;font-weight:800;line-height:1.2}}.destination{{font-size:1.2rem;overflow-wrap:anywhere}}.time{{text-align:right;font-size:1.8rem;font-variant-numeric:tabular-nums}}.time small{{font-size:.65em;color:#aab8cb}}.station{{color:#8bd3ff;font-size:.8rem}}.delay{{color:#ff9d66;font-size:.85rem}}.cancelled{{color:#ff6b7a;text-decoration:line-through}}.status,.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:16px 0}}.status div,.card{{background:#121c2d;border:1px solid #324057;border-radius:14px;padding:20px}}.status strong{{display:block;font-size:1.15rem;margin-top:4px}}.setting{{min-width:0}}.control-row,.station-search{{display:flex;gap:8px;align-items:center;flex-wrap:wrap}}.control-row input,.control-row select{{flex:1;min-width:0}}.reset{{background:#26344a;border-color:#53627a;font-size:.85rem}}.station-card{{border:1px solid #53627a;border-radius:12px;padding:16px;margin:14px 0}}.station-heading{{display:flex;justify-content:space-between;align-items:center;gap:12px}}.route-row{{display:grid;grid-template-columns:1fr 2fr auto;gap:8px;margin:8px 0}}.station-search{{margin-top:10px}}.station-search select{{min-width:280px;flex:1}}button,input,textarea,select{{font:inherit;border-radius:9px;border:1px solid #53627a;padding:10px 12px;background:#101a2b;color:inherit}}button{{cursor:pointer;background:#207bb3;border-color:#65c6ff;font-weight:700}}button:disabled{{opacity:.55;cursor:wait}}label{{display:block;margin:14px 0 6px;font-weight:700}}.card{{margin-top:18px}}.danger{{background:#7e2632;border-color:#ff8793;margin-left:8px}}.notice{{padding:14px 16px;border-radius:10px;background:#3b2913;color:#ffdca6;margin:16px 0}}.ok{{color:#8ee6ad}}.error{{color:#ff9aa5}}.empty{{padding:42px 22px;text-align:center;color:#aab8cb}}.spinner{{display:inline-block;width:14px;height:14px;border:2px solid #53627a;border-top-color:#8bd3ff;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}}@keyframes spin{{to{{transform:rotate(360deg)}}}}details.help-box{{margin-top:12px}}code{{overflow-wrap:anywhere}}.display-page main{{max-width:1320px;min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;padding:clamp(16px,4vw,48px)}}.display-page .display-shell{{width:100%}}.display-page .display-toolbar{{margin:0 0 clamp(16px,3vw,28px)}}.display-page .display-toolbar h1{{font-size:clamp(2rem,5vw,4.5rem)}}.display-page .display-board{{border-radius:clamp(12px,2vw,22px)}}.display-page .row{{grid-template-columns:minmax(64px,8vw) minmax(0,1fr) minmax(96px,12vw);padding:clamp(14px,2.4vw,28px) clamp(16px,3vw,34px);gap:clamp(10px,2vw,28px)}}.display-page .line{{font-size:clamp(1.35rem,3vw,2.4rem);min-width:clamp(42px,5vw,72px)}}.display-page .destination{{font-size:clamp(1.15rem,2.7vw,2rem)}}.display-page .time{{font-size:clamp(1.5rem,3.4vw,3rem)}}.display-page .station{{font-size:clamp(.75rem,1.4vw,1rem)}}.display-page .display-refresh{{margin:16px 0 0;text-align:center;font-size:.85rem}}.display-exit{{font-size:clamp(.95rem,1.5vw,1.2rem)}}@media(max-width:600px){{.display-page main{{padding:12px 8px 24px;justify-content:flex-start}}.display-page .display-toolbar{{margin-bottom:14px}}.display-page .row{{grid-template-columns:minmax(48px,16vw) minmax(0,1fr) minmax(72px,22vw);gap:8px;padding:12px 10px}}.display-page .line{{min-width:32px;padding:2px 4px;font-size:1.05rem}}.display-page .destination{{font-size:1rem}}.display-page .time{{font-size:1.2rem}}.display-page .station{{font-size:.68rem}}.display-page .display-board{{border-radius:12px}}}}{line_style_css()}
 </style></head><body{body_attribute}><main>{content}</main></body></html>""".encode()
 
@@ -598,9 +644,15 @@ class WebApplication:
             head='<meta http-equiv="refresh" content="15">',
         )
 
-    def settings(self, message: str = "", restart_required: bool = False) -> bytes:
+    def settings(
+        self,
+        message: str = "",
+        restart_required: bool = False,
+        field_errors: dict[str, str] | None = None,
+    ) -> bytes:
         raw_config = self.raw_config()
         credentials = load_credentials(self.credentials_path)
+        field_errors = field_errors or {}
         notice = f'<div class="notice">{html.escape(message)}</div>' if message else ""
         defaults = {
             "api.base_url": "https://gti.geofox.de/gti/public",
@@ -666,7 +718,13 @@ class WebApplication:
                 if path == "display.show_station_label"
                 else path
             )
-            return f'<div class="setting"><label for="{path}">{label}</label><div class="control-row">{control}<button type="button" class="reset" onclick="resetField(this)">Auf Standard zurücksetzen</button></div><div class="subtle">{descriptions[path]}</div></div>'
+            error = field_errors.get(path, "")
+            error_markup = (
+                f'<span class="field-error" data-field-error="{html.escape(path, quote=True)}">{html.escape(error)}</span>'
+                if error
+                else ""
+            )
+            return f'<div class="setting"><label for="{path}">{label}</label><div class="control-row">{control}<button type="button" class="reset" onclick="resetField(this)">Auf Standard zurücksetzen</button></div><div class="subtle">{descriptions[path]}</div>{error_markup}</div>'
 
         def station_card(station: dict[str, Any], index: int) -> str:
             selected_lines = [
@@ -690,17 +748,29 @@ class WebApplication:
                 f'<div class="route-row"><input data-route="line" value="{html.escape(str(route.get("line", "")), quote=True)}" placeholder="Linie" aria-label="Linie"><input data-route="destination" value="{html.escape(str(route.get("destination", "")), quote=True)}" placeholder="Ziel" aria-label="Ziel"><input type="hidden" data-route-line-id value="{html.escape(str(route.get("line_id") or ""), quote=True)}"><input type="hidden" data-route-product value="{html.escape(str(route.get("product") or ""), quote=True)}"><input type="hidden" data-route-filter-mode value="{html.escape(str(route.get("filter_mode") or ""), quote=True)}"><input type="hidden" data-route-filter-ids value="{html.escape(json.dumps(route.get("filter_station_ids") or [], ensure_ascii=False), quote=True)}"><button type="button" class="reset" onclick="this.parentElement.remove()">Route entfernen</button></div>'
                 for route in station.get("routes", [])
             )
+            station_error = field_errors.get(f"stations[{index}]", "")
+            routes_error = field_errors.get(f"stations[{index}].routes", "")
+            station_error_markup = (
+                f'<p class="field-error" data-field-error="stations[{index}]">{html.escape(station_error)}</p>'
+                if station_error
+                else ""
+            )
+            routes_error_markup = (
+                f'<p class="field-error" data-field-error="stations[{index}].routes">{html.escape(routes_error)}</p>'
+                if routes_error
+                else ""
+            )
             valid = bool(station.get("id"))
             service_types = json.dumps(
                 station.get("serviceTypes", []), ensure_ascii=False
             )
             return f'''<article class="station-card" data-station data-valid="{str(valid).lower()}">
-<div class="station-heading"><h3>Haltestelle {index + 1}</h3><button type="button" class="reset" onclick="this.closest('[data-station]').remove()">Haltestelle entfernen</button></div>
+<div class="station-heading"><h3>Haltestelle {index + 1}</h3><button type="button" class="reset" onclick="this.closest('[data-station]').remove()">Haltestelle entfernen</button></div>{station_error_markup}
 <div class="grid"><div><label>Name</label><input data-station-field="name" maxlength="{MAX_QUERY_LENGTH}" value="{html.escape(str(station.get("name", "")), quote=True)}" required autocomplete="off"><div class="subtle">Mindestens 2 Zeichen. Vorschläge erscheinen automatisch.</div></div><div><label>Stadt</label><input data-station-field="city" maxlength="{MAX_CITY_LENGTH}" value="{html.escape(str(station.get("city", "Hamburg")), quote=True)}" required><div class="subtle">Wird nach Auswahl aus Geofox übernommen.</div></div><div><label>Geofox-ID</label><input data-station-field="id" maxlength="{MAX_STATION_ID_LENGTH}" value="{html.escape(str(station.get("id") or ""), quote=True)}" readonly tabindex="-1"><div class="subtle">Technisches Metadatum; wird automatisch gesetzt.</div></div><div><label>Kürzel</label><input data-station-field="label" maxlength="3" value="{html.escape(str(station.get("label", "")), quote=True)}" required><div class="subtle">1–3 Zeichen für die Anzeige.</div></div></div>
 <input type="hidden" data-station-field="serviceTypes" value="{html.escape(service_types, quote=True)}">
 <div class="station-search"><select data-station-results aria-label="Geofox-Haltestellenvorschläge"><option value="">Treffer auswählen …</option></select><span class="subtle" data-search-message>{'<span class="ok">✓ Geofox-Haltestelle ausgewählt</span>' if valid else "Bitte Haltestelle aus einem Geofox-Vorschlag auswählen."}</span></div>
 <details class="help-box"><summary>Richtung oder Zielstation?</summary><p><strong>Richtung</strong> wählt später den Linienast; auch Fahrten, die vorher enden, können angezeigt werden. <strong>Zu Zielstation</strong> zeigt nur Fahrten, die diese Station tatsächlich erreichen. Beispiel: U2 Richtung Niendorf Nord kann einen Kurzläufer nach Niendorf Markt enthalten; „Zu Zielstation Niendorf Nord“ nicht.</p></details>
-<h4>Linien und Ziele</h4><div data-line-picker data-selected-lines="{selected_lines_json}"><div class="control-row"><button type="button" data-load-lines onclick="loadLines(this)" {"disabled" if not valid else ""}>Verfügbare Linien laden</button><span class="subtle" data-lines-message>{'Mehrere Verkehrsmittel gemeinsam auswählen und danach Richtung oder Zielstation festlegen.' if valid else 'Nach der Haltestellenauswahl hier die verfügbaren Linien laden.'}</span></div><div data-line-options role="group" aria-label="Verfügbare Linien"></div><div data-route-configs></div></div><div data-routes>{routes}</div><details><summary>Legacy-Konfiguration manuell bearbeiten</summary><p class="subtle">Bestehende Bus-Konfigurationen bleiben kompatibel. Für neue Haltestellen bitte die Geofox-Linienauswahl verwenden.</p><button type="button" onclick="addRoute(this)">Route hinzufügen</button></details></article>'''
+<h4>Linien und Ziele</h4><div data-line-picker data-selected-lines="{selected_lines_json}"><div class="control-row"><button type="button" data-load-lines onclick="loadLines(this)" {"disabled" if not valid else ""}>Verfügbare Linien laden</button><span class="subtle" data-lines-message>{'Mehrere Verkehrsmittel gemeinsam auswählen und danach Richtung oder Zielstation festlegen.' if valid else 'Nach der Haltestellenauswahl hier die verfügbaren Linien laden.'}</span></div><div data-line-options role="group" aria-label="Verfügbare Linien"></div><div data-route-configs></div></div>{routes_error_markup}<div data-routes>{routes}</div><details><summary>Legacy-Konfiguration manuell bearbeiten</summary><p class="subtle">Bestehende Bus-Konfigurationen bleiben kompatibel. Für neue Haltestellen bitte die Geofox-Linienauswahl verwenden.</p><button type="button" onclick="addRoute(this)">Route hinzufügen</button></details></article>'''
 
         stations = "".join(
             station_card(station, index)
@@ -708,8 +778,8 @@ class WebApplication:
         ) or station_card({"city": "Hamburg", "routes": []}, 0)
         raw = html.escape(json.dumps(raw_config, ensure_ascii=False))
         content = f'''<div class="toolbar"><div><h1>Einstellungen</h1><div class="subtle">Bedienbare Felder · jede Änderung wird validiert</div></div><a href="/">← Abfahrten</a></div>{notice}
-<form method="post" action="/settings" accept-charset="UTF-8" onsubmit="return prepareConfig()"><section class="card"><h2>Weboberfläche</h2><p class="subtle">Benutzername: <code>hvv-anzeiger</code>. Ein leeres Passwortfeld lässt den bisherigen Wert unverändert.</p><label for="web_password">Neues Webpasswort</label><input id="web_password" name="web_password" type="password" autocomplete="new-password" placeholder="unverändert lassen"></section>
-<section class="card"><h2>Geofox-Zugang</h2><label for="user">Anwendungs-ID</label><input id="user" name="user" value="{html.escape(credentials.get("GEOFOX_USER", ""), quote=True)}" autocomplete="username"><label for="password">Passwort</label><input id="password" name="password" type="password" autocomplete="new-password" placeholder="unverändert lassen"></section>
+<form method="post" action="/settings" accept-charset="UTF-8" onsubmit="return prepareConfig()"><section class="card"><h2>Weboberfläche</h2><p class="subtle">Benutzername: <code>hvv-anzeiger</code>. Ein leeres Passwortfeld lässt den bisherigen Wert unverändert.</p><label for="web_password">Neues Webpasswort</label><input id="web_password" name="web_password" type="password" autocomplete="new-password" placeholder="unverändert lassen">{f'<span class="field-error" data-field-error="web_password">{html.escape(field_errors["web_password"])}</span>' if field_errors.get("web_password") else ""}</section>
+<section class="card"><h2>Geofox-Zugang</h2><label for="user">Anwendungs-ID</label><input id="user" name="user" value="{html.escape(credentials.get("GEOFOX_USER", ""), quote=True)}" autocomplete="username">{f'<span class="field-error" data-field-error="user">{html.escape(field_errors["user"])}</span>' if field_errors.get("user") else ""}<label for="password">Passwort</label><input id="password" name="password" type="password" autocomplete="new-password" placeholder="unverändert lassen">{f'<span class="field-error" data-field-error="password">{html.escape(field_errors["password"])}</span>' if field_errors.get("password") else ""}</section>
 <section class="card"><h2>Geofox-API</h2><div class="grid">{scalar("api.base_url")}{scalar("api.version", "number")}{scalar("api.refresh_seconds", "number")}{scalar("api.request_timeout_seconds", "number")}{scalar("api.max_departures", "number")}{scalar("api.max_time_offset_minutes", "number")}{scalar("api.max_stale_age_minutes", "number")}</div></section>
 <section class="card"><h2>Display</h2><div class="grid">{scalar("display.spi_port", "number")}{scalar("display.spi_device", "number")}{scalar("display.gpio_dc", "number")}{scalar("display.gpio_reset", "number")}{scalar("display.rotate", "number")}{scalar("display.bus_speed_hz", "number")}{scalar("display.bgr")}{scalar("display.show_station_label")}{scalar("display.time_mode")}{scalar("display.minute_unit")}</div></section>
 <section class="card"><h2>Nachtabschaltung</h2><div class="grid">{scalar("night_shutdown.enabled")}{scalar("night_shutdown.start", "time")}{scalar("night_shutdown.end", "time")}</div></section>
@@ -1019,17 +1089,26 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 self.end_headers()
             except OverflowError as exc:
                 self._send(
-                    application.settings(f"Nicht gespeichert: {exc}"),
+                    application.settings(
+                        f"Nicht gespeichert: {exc}",
+                        field_errors=_settings_field_errors(str(exc)),
+                    ),
                     HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
                 )
             except GeofoxError as exc:
                 self._send(
-                    application.settings(f"Nicht gespeichert: {exc}"),
+                    application.settings(
+                        f"Nicht gespeichert: {exc}",
+                        field_errors=_settings_field_errors(str(exc)),
+                    ),
                     _geofox_http_status(exc),
                 )
             except (ValueError, ConfigError, OSError, PermissionError) as exc:
                 self._send(
-                    application.settings(f"Nicht gespeichert: {exc}"),
+                    application.settings(
+                        f"Nicht gespeichert: {exc}",
+                        field_errors=_settings_field_errors(str(exc)),
+                    ),
                     HTTPStatus.BAD_REQUEST,
                 )
 
