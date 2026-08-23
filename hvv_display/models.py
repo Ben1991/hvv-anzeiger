@@ -8,6 +8,17 @@ from datetime import datetime
 class Route:
     line: str
     destination: str
+    line_id: str | None = None
+    product: str | None = None
+
+
+@dataclass(frozen=True)
+class LineOption:
+    line_id: str
+    name: str
+    product: str
+    product_label: str
+    carrier: str = ""
 
 
 @dataclass(frozen=True)
