@@ -30,6 +30,10 @@ class FakeResponse:
 
 
 class GeofoxErrorTest(unittest.TestCase):
+    def setUp(self) -> None:
+        GeofoxClient._global_last_request_at = 0.0
+        GeofoxClient._global_retry_until = 0.0
+
     def client_for(self, response: bytes) -> GeofoxClient:
         return GeofoxClient(
             "https://example.test",
@@ -73,11 +77,13 @@ class GeofoxErrorTest(unittest.TestCase):
             urlopen=lambda *_args, **_kwargs: (_ for _ in ()).throw(error),
         )
 
-        with self.assertRaisesRegex(GeofoxError, "Zugangsdaten wurden abgelehnt"):
+        with self.assertRaisesRegex(
+            GeofoxError, "Zugangsdaten oder Berechtigungen wurden abgelehnt"
+        ):
             client._post("departureList", {})
 
     def test_http_rate_limit_and_server_errors_have_safe_messages(self) -> None:
-        cases = ((429, "Anfragelimit"), (503, "HTTP 503"))
+        cases = ((429, "Anfragelimit"), (503, "Geofox ist aktuell nicht erreichbar"))
         for code, message in cases:
             with self.subTest(code=code):
                 error = urllib.error.HTTPError(
@@ -157,14 +163,14 @@ class GeofoxErrorTest(unittest.TestCase):
     def test_rate_limit_waits_only_for_remaining_interval(self) -> None:
         client = self.client_for(b'{"returnCode":"OK"}')
         client.min_request_interval = 1.0
-        client._last_request_at = 10.0
+        GeofoxClient._global_last_request_at = 10.0
         with (
             patch("hvv_display.geofox.time.monotonic", side_effect=[10.25, 11.25]),
             patch("hvv_display.geofox.time.sleep") as sleep,
         ):
             client._wait_for_rate_limit()
         sleep.assert_called_once_with(0.75)
-        self.assertEqual(client._last_request_at, 11.25)
+        self.assertEqual(GeofoxClient._global_last_request_at, 11.25)
 
     def test_api_error_uses_user_message(self) -> None:
         client = self.client_for(
@@ -267,6 +273,7 @@ class GeofoxErrorTest(unittest.TestCase):
                 "city": "Hamburg",
                 "id": "Master:1",
                 "type": "STATION",
+                "serviceTypes": [],
             },
         )
 
