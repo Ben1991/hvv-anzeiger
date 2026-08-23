@@ -176,7 +176,8 @@ class ProjectArtifactTest(unittest.TestCase):
         web_configuration_text = web_configuration.read_text(encoding="utf-8")
         self.assertIn("ip -4 route get 1.1.1.1", web_configuration_text)
         self.assertIn("hostname -I", web_configuration_text)
-        self.assertIn("--tls-certfile", web_configuration_text)
+        self.assertIn('CERT_FILE="${HVV_WEB_CERTFILE:', web_configuration_text)
+        self.assertIn('KEY_FILE="${HVV_WEB_KEYFILE:', web_configuration_text)
         self.assertIn("https://%s:8080/", web_configuration_text)
         smoke_test = ROOT / "tests" / "install-smoke.sh"
         self.assertTrue(smoke_test.stat().st_mode & stat.S_IXUSR)
