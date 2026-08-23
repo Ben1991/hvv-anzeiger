@@ -189,6 +189,25 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn("Bei mehreren Haltestellen", settings)
         self.assertIn("control.type==='checkbox'?control.checked", settings)
 
+    def test_station_search_is_below_name_and_selection_completes_station_setup(
+        self,
+    ) -> None:
+        settings = self.app.settings().decode("utf-8")
+        name_position = settings.index('data-station-field="name"')
+        search_position = settings.index("data-station-search")
+        city_position = settings.index('data-station-field="city"')
+
+        self.assertLess(name_position, search_position)
+        self.assertLess(search_position, city_position)
+        self.assertNotIn("Treffer auswählen", settings)
+        self.assertIn("defaultStationLabel", settings)
+        self.assertIn(
+            "card.querySelector('[data-load-lines]').disabled=false", settings
+        )
+        self.assertNotIn(
+            "loadLines(card.querySelector('[data-load-lines]'))", settings
+        )
+
     def test_departure_payload_uses_the_shared_time_formatter(self) -> None:
         now = datetime(2026, 7, 27, 18, 35, tzinfo=HAMBURG_TZ)
         departure = Departure("21", "Ziel", now + timedelta(minutes=7, seconds=30))
@@ -272,7 +291,8 @@ class WebApplicationTest(unittest.TestCase):
                         "station": "R",
                         "destination": "Ziel <b>West</b>",
                         "time": "12:04",
-                        "display_time": "in 4 min",
+                        "display_time": "4 m",
+                        "time_mode": "countdown",
                         "minutes": 4,
                         "delay_seconds": 0,
                         "cancelled": False,
@@ -286,6 +306,9 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn('data-display-mode', display)
         self.assertIn('<meta http-equiv="refresh" content="15">', display)
         self.assertIn("line-badge-bus", display)
+        self.assertIn(">12:04", display)
+        self.assertNotIn("4 m", display)
+        self.assertNotIn("in 4 min", display)
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", display)
         self.assertIn("Ziel &lt;b&gt;West&lt;/b&gt;", display)
         self.assertNotIn("<script>alert(1)</script>", display)

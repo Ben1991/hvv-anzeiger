@@ -12,11 +12,14 @@ WEB_SERVICE="hvv-anzeiger-web.service"
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APP_USER="hvv-anzeiger"
 APP_GROUP="hvv-anzeiger"
-WEB_ENV_FILE="${APP_DIR}/var/web.env"
+WEB_CERT_DIR="${HVV_WEB_CERT_DIR:-/etc/hvv-anzeiger}"
+WEB_CERT_FILE="${HVV_WEB_CERTFILE:-${WEB_CERT_DIR}/web.crt}"
+WEB_KEY_FILE="${HVV_WEB_KEYFILE:-${WEB_CERT_DIR}/web.key}"
 BACKUP_DIR="${APP_DIR}.previous"
 STAGING_DIR=""
 UNIT_BACKUP_DIR=""
 ENV_BACKUP_DIR=""
+WEB_CERT_BACKUP_DIR=""
 SERVICE_WAS_ACTIVE=0
 SWITCHED=0
 INSTALL_SUCCEEDED=0
@@ -62,6 +65,30 @@ restore_credentials() {
   fi
 }
 
+backup_web_certificates() {
+  local path name
+  for path in "$WEB_CERT_FILE" "$WEB_KEY_FILE"; do
+    name="$(basename "$path")"
+    if [[ -e "$path" ]]; then
+      sudo cp -p "$path" "$WEB_CERT_BACKUP_DIR/$name"
+    else
+      sudo touch "$WEB_CERT_BACKUP_DIR/$name.missing"
+    fi
+  done
+}
+
+restore_web_certificates() {
+  local path name
+  for path in "$WEB_CERT_FILE" "$WEB_KEY_FILE"; do
+    name="$(basename "$path")"
+    if [[ -e "$WEB_CERT_BACKUP_DIR/$name.missing" ]]; then
+      sudo rm -f -- "$path"
+    elif [[ -e "$WEB_CERT_BACKUP_DIR/$name" ]]; then
+      sudo cp -p "$WEB_CERT_BACKUP_DIR/$name" "$path"
+    fi
+  done
+}
+
 cleanup() {
   local exit_code=$?
   if ((INSTALL_SUCCEEDED == 0)); then
@@ -83,6 +110,9 @@ cleanup() {
     if [[ -n "$ENV_BACKUP_DIR" && -d "$ENV_BACKUP_DIR" ]]; then
       restore_credentials
     fi
+    if [[ -n "$WEB_CERT_BACKUP_DIR" && -d "$WEB_CERT_BACKUP_DIR" ]]; then
+      restore_web_certificates
+    fi
     if ((SERVICE_WAS_ACTIVE == 1)) && [[ -d "$APP_DIR" ]]; then
       echo "Installation fehlgeschlagen; vorherige Version wird gestartet." >&2
       sudo systemctl start "$SERVICE_NAME" || true
@@ -93,6 +123,9 @@ cleanup() {
   fi
   if [[ -n "$ENV_BACKUP_DIR" && -e "$ENV_BACKUP_DIR" ]]; then
     safe_remove_tree "$ENV_BACKUP_DIR"
+  fi
+  if [[ -n "$WEB_CERT_BACKUP_DIR" && -e "$WEB_CERT_BACKUP_DIR" ]]; then
+    safe_remove_tree "$WEB_CERT_BACKUP_DIR"
   fi
   exit "$exit_code"
 }
@@ -113,10 +146,12 @@ command -v raspi-config >/dev/null 2>&1 || fail "raspi-config wurde nicht gefund
 sudo -H python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' ||
   fail "Python 3.10 oder neuer ist erforderlich."
 
-echo "[1/9] Systempakete installieren"
+echo "[1/10] Systempakete installieren"
 sudo apt-get update
 sudo apt-get install -y \
   git \
+  iproute2 \
+  openssl \
   python3-dev \
   python3-venv \
   fonts-dejavu-core \
@@ -124,17 +159,17 @@ sudo apt-get install -y \
   zlib1g-dev \
   libfreetype6-dev
 
-echo "[2/9] SPI aktivieren"
+echo "[2/10] SPI aktivieren"
 sudo raspi-config nonint do_spi 0
 
-echo "[3/9] Netzwerk-Zeitsynchronisierung aktivieren"
+echo "[3/10] Netzwerk-Zeitsynchronisierung aktivieren"
 if command -v timedatectl >/dev/null 2>&1; then
   sudo timedatectl set-ntp true
 else
   fail "timedatectl wurde nicht gefunden; eine korrekte Systemzeit ist erforderlich."
 fi
 
-echo "[4/9] Eingeschränkten Dienstbenutzer vorbereiten"
+echo "[4/10] Eingeschränkten Dienstbenutzer vorbereiten"
 if ! getent group "$APP_GROUP" >/dev/null; then
   sudo groupadd --system "$APP_GROUP"
 fi
@@ -159,7 +194,7 @@ for hardware_group in spi gpio; do
 done
 sudo usermod --append --groups spi,gpio "$APP_USER"
 
-echo "[5/9] Neue Version separat vorbereiten"
+echo "[5/10] Neue Version separat vorbereiten"
 if [[ -e "$BACKUP_DIR" ]]; then
   fail "Rollback-Verzeichnis ${BACKUP_DIR} existiert bereits; bitte zuerst prüfen."
 fi
@@ -180,6 +215,7 @@ sudo install -m 0644 \
   "$STAGING_DIR/"
 sudo install -m 0755 \
   "$SOURCE_DIR/configure-credentials.sh" \
+  "$SOURCE_DIR/configure-web.sh" \
   "$SOURCE_DIR/diagnose.sh" \
   "$SOURCE_DIR/install.sh" \
   "$STAGING_DIR/"
@@ -200,7 +236,7 @@ sudo chmod 0750 "$STAGING_DIR/var"
 sudo chown "$APP_USER:$APP_GROUP" "$STAGING_DIR/config.json"
 sudo chmod 0640 "$STAGING_DIR/config.json"
 
-echo "[6/9] Python-Umgebung installieren und lokal prüfen"
+echo "[6/10] Python-Umgebung installieren und lokal prüfen"
 sudo python3 -m venv "$STAGING_DIR/.venv"
 sudo -H "$STAGING_DIR/.venv/bin/pip" install \
   --require-hashes \
@@ -213,7 +249,7 @@ sudo "$STAGING_DIR/.venv/bin/python" -m hvv_display.preview \
   "$STAGING_DIR/var/install-preview.png"
 sudo rm -f "$STAGING_DIR/var/install-preview.png"
 
-echo "[7/9] Geofox-Zugangsdaten einrichten"
+echo "[7/10] Geofox-Zugangsdaten einrichten"
 ENV_BACKUP_DIR="$(sudo mktemp -d "${TMPDIR:-/tmp}/hvv-credentials.XXXXXX")"
 if [[ -e "$ENV_FILE" ]]; then
   sudo cp -p "$ENV_FILE" "$ENV_BACKUP_DIR/credentials"
@@ -222,8 +258,10 @@ else
 fi
 HVV_ENV_FILE="$ENV_FILE" "$SOURCE_DIR/configure-credentials.sh"
 
-echo "[8/9] Neue Version transaktional aktivieren"
+echo "[8/10] Neue Version transaktional aktivieren"
 UNIT_BACKUP_DIR="$(sudo mktemp -d "${TMPDIR:-/tmp}/hvv-units.XXXXXX")"
+WEB_CERT_BACKUP_DIR="$(sudo mktemp -d "${TMPDIR:-/tmp}/hvv-web-certificates.XXXXXX")"
+backup_web_certificates
 backup_unit "$SERVICE_NAME.service"
 backup_unit "$WEB_SERVICE"
 backup_unit "$LOG_CLEANUP_SERVICE"
@@ -261,16 +299,10 @@ sudo "$APP_DIR/.venv/bin/python" -m hvv_display.preview \
   "$APP_DIR/var/install-preview.png"
 sudo rm -f "$APP_DIR/var/install-preview.png"
 
-if [[ ! -s "$WEB_ENV_FILE" ]]; then
-  echo "Richte den Standard-Webzugang für den LAN-Zugriff ein"
-  WEB_PASSWORD_HASH="$("$APP_DIR"/.venv/bin/python -c 'from hvv_display.web import hash_web_password; print(hash_web_password("hvv-anzeiger"))')"
-  printf 'HVV_WEB_PASSWORD_HASH="%s"\n' "$WEB_PASSWORD_HASH" |
-    sudo tee "$WEB_ENV_FILE" >/dev/null
-  sudo chown "$APP_USER:$APP_GROUP" "$WEB_ENV_FILE"
-  sudo chmod 0600 "$WEB_ENV_FILE"
-fi
+echo "[9/10] Webzugriff und aktuelle LAN-Adresse einrichten"
+"$APP_DIR/configure-web.sh"
 
-echo "[9/9] Autostart aktivieren und Ergebnis prüfen"
+echo "[10/10] Autostart aktivieren und Ergebnis prüfen"
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl enable "$WEB_SERVICE"
@@ -296,6 +328,10 @@ fi
 if [[ -n "$ENV_BACKUP_DIR" && -e "$ENV_BACKUP_DIR" ]]; then
   safe_remove_tree "$ENV_BACKUP_DIR"
   ENV_BACKUP_DIR=""
+fi
+if [[ -n "$WEB_CERT_BACKUP_DIR" && -e "$WEB_CERT_BACKUP_DIR" ]]; then
+  safe_remove_tree "$WEB_CERT_BACKUP_DIR"
+  WEB_CERT_BACKUP_DIR=""
 fi
 
 echo

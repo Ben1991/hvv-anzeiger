@@ -27,6 +27,12 @@ git pull --ff-only origin main
 echo "Installiere die neue Version ..."
 "$SCRIPT_DIR/install.sh"
 
+# install.sh performs this step as part of the transactional installation. Run
+# it once more after pulling so a changed LAN address is also handled explicitly
+# by the update workflow before the web service is restarted below.
+echo "Aktualisiere die Webadresse und das TLS-Zertifikat ..."
+"$SCRIPT_DIR/configure-web.sh"
+
 # A changed systemd unit is not necessarily restarted by enable --now when an
 # older instance is already active. Reload and restart explicitly so the web
 # service uses the just-installed bind address and configuration.
