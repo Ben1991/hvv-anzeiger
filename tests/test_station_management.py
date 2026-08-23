@@ -209,6 +209,27 @@ class StationManagementTest(unittest.TestCase):
                     raw, user="test", password="secret"  # noqa: S106
                 )
 
+    def test_settings_preserves_multimodal_filter_selection_data(self) -> None:
+        raw = json.loads(self.config.read_text(encoding="utf-8"))
+        raw["stations"][0]["routes"] = [
+            {
+                "line_id": "line:U2",
+                "line": "U2",
+                "product": "UBAHN",
+                "filter_mode": "destination",
+                "filter_station_ids": ["Master:2"],
+                "destination": "Niendorf Markt",
+            }
+        ]
+        self.config.write_text(
+            json.dumps(raw, ensure_ascii=False), encoding="utf-8"
+        )
+
+        page = self.app.settings().decode("utf-8")
+
+        self.assertIn('&quot;filterMode&quot;: &quot;destination&quot;', page)
+        self.assertIn('&quot;filterStationIds&quot;: [&quot;Master:2&quot;]', page)
+
     def test_station_config_rejects_unselected_or_stale_station(self) -> None:
         raw = json.loads(self.config.read_text(encoding="utf-8"))
         raw["stations"][0].pop("id", None)

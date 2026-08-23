@@ -674,6 +674,11 @@ class WebApplication:
                     "id": str(route.get("line_id") or ""),
                     "name": str(route.get("line") or ""),
                     "product": str(route.get("product") or ""),
+                    "filterMode": str(route.get("filter_mode") or ""),
+                    "filterStationIds": [
+                        str(station_id)
+                        for station_id in (route.get("filter_station_ids") or [])
+                    ],
                 }
                 for route in station.get("routes", [])
                 if isinstance(route, dict) and route.get("line_id")
