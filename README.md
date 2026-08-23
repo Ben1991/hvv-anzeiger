@@ -609,17 +609,17 @@ kann, ohne Schreibrechte auf den Anwendungscode zu erhalten.
 
 Beispielansicht der lokalen Oberfläche:
 
-![Lokale Abfahrtsanzeige mit Hardwarestatus](docs/web-dashboard.png)
+![V2.2: lokale Abfahrtsanzeige mit Hardwarestatus](docs/web-dashboard.png)
 
 Die Einstellungsseite zeigt die editierbare Konfiguration und erklärt die
 Bedeutung der einzelnen Konfigurationsbereiche:
 
-![Lokale Einstellungen mit Konfigurationseditor](docs/web-settings.png)
+![V2.2: lokale Einstellungen mit Konfigurationseditor](docs/web-settings.png)
 
 Haltestellen und Linien werden als eigene Karten gepflegt. Dadurch müssen
 Nutzer kein verschachteltes JSON bearbeiten:
 
-![Lokale Stations- und Routenkonfiguration](docs/web-stations.png)
+![V2.2: lokale Stations- und Routenkonfiguration](docs/web-stations.png)
 
 Die Schaltfläche „Geofox-Suche“ fragt passende Haltestellen-Vorschläge ab und
 übernimmt Name, Stadt und Geofox-ID nach der Auswahl. Die Vorschläge sind nicht

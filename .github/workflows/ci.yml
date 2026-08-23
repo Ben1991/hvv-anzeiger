@@ -115,7 +115,7 @@ jobs:
           python -m hvv_display.web \
             --host 127.0.0.1 \
             --port 18080 \
-            --config config.example.json \
+            --config browser/fixtures/config-filtered.json \
             --cache /tmp/hvv-anzeiger-stations.json > /tmp/hvv-anzeiger-web.log 2>&1 &
           echo $! > /tmp/hvv-anzeiger-web.pid
           for attempt in {1..30}; do

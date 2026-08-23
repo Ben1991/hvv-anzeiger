@@ -1,0 +1,66 @@
+{
+  "api": {
+    "base_url": "https://gti.geofox.de/gti/public",
+    "version": 63,
+    "refresh_seconds": 15,
+    "request_timeout_seconds": 8,
+    "max_departures": 5,
+    "max_time_offset_minutes": 90,
+    "max_stale_age_minutes": 5
+  },
+  "display": {
+    "spi_port": 0,
+    "spi_device": 0,
+    "gpio_dc": 24,
+    "gpio_reset": 25,
+    "rotate": 0,
+    "bus_speed_hz": 16000000,
+    "bgr": false,
+    "show_station_label": true,
+    "time_mode": "countdown",
+    "minute_unit": "min"
+  },
+  "night_shutdown": {
+    "enabled": false,
+    "start": "21:00",
+    "end": "06:30"
+  },
+  "stations": [
+    {
+      "name": "Weistritzstraße",
+      "city": "Hamburg",
+      "id": "Master:82039",
+      "label": "W",
+      "routes": [
+        {
+          "line": "186",
+          "destination": "S Othmarschen",
+          "line_id": "line:186",
+          "product": "BUS",
+          "filter_mode": "destination",
+          "filter_station_ids": ["Master:2"]
+        },
+        {
+          "line": "184",
+          "destination": "S Halstenbek"
+        },
+        {
+          "line": "384",
+          "destination": "Elbgaustraße"
+        }
+      ]
+    },
+    {
+      "name": "Recknitzstraße",
+      "city": "Hamburg",
+      "id": "Master:82015",
+      "label": "R",
+      "routes": [
+        {
+          "line": "21",
+          "destination": "U Niendorf Nord"
+        }
+      ]
+    }
+  ]
+}

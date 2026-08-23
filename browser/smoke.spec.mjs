@@ -28,6 +28,19 @@ test("dashboard, display mode, and settings have stable product surfaces", async
   await expect(page.getByRole("heading", { name: "Einstellungen" })).toBeVisible();
   await expect(page.locator("#display\\.time_mode")).toBeVisible();
   await expect(page.locator('[data-load-lines]')).toHaveCount(2);
+  const selectedLines = await page.locator("[data-selected-lines]").evaluateAll(
+    (elements) =>
+      elements.map((element) =>
+        JSON.parse(element.getAttribute("data-selected-lines")),
+      ),
+  );
+  expect(selectedLines[0]).toEqual([
+    expect.objectContaining({
+      id: "line:186",
+      filterMode: "destination",
+      filterStationIds: ["Master:2"],
+    }),
+  ]);
   await expect(
     page.locator("summary", { hasText: "Legacy-Konfiguration" }),
   ).toHaveCount(2);
@@ -36,4 +49,11 @@ test("dashboard, display mode, and settings have stable product surfaces", async
     caret: "hide",
     maxDiffPixelRatio: 0.1,
   });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  const mobileLayout = await page.evaluate(
+    () => document.documentElement.scrollWidth <= window.innerWidth,
+  );
+  expect(mobileLayout).toBe(true);
 });
