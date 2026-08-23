@@ -197,11 +197,55 @@ def hardware_status() -> dict[str, str]:
     return {"cpu": cpu, "ram": ram, "storage": storage}
 
 
-def _page(title: str, content: str) -> bytes:
-    return f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+def _departure_rows(departures: list[dict[str, Any]]) -> str:
+    rows = []
+    for item in departures:
+        line = str(item.get("line", ""))
+        style = get_line_style(line, str(item.get("product", ""))).token
+        delay_seconds = item.get("delay_seconds") or 0
+        try:
+            delay_seconds = max(0, int(delay_seconds))
+        except (TypeError, ValueError):
+            delay_seconds = 0
+        delay = (
+            f' <span class="delay">(+{delay_seconds // 60} min)</span>'
+            if delay_seconds
+            else ""
+        )
+        cancelled = "cancelled" if item.get("cancelled") else ""
+        display_time = html.escape(
+            str(item.get("display_time", item.get("time", "")))
+        )
+        countdown = (
+            ""
+            if item.get("time_mode") == "departure_time"
+            else f'<br><small>in {html.escape(str(item.get("minutes", ""))) } min</small>'
+        )
+        rows.append(
+            f'<div class="row"><div><div class="line line-badge line-badge-{style}">'
+            f'{html.escape(line)}</div><div class="station">'
+            f'{html.escape(str(item.get("station", "")))}</div></div>'
+            f'<div class="destination">{html.escape(str(item.get("destination", "")))}'
+            f"{delay}</div><div class=\"time {cancelled}\">{display_time}"
+            f"{countdown}</div></div>"
+        )
+    return "".join(rows) or '<div class="empty">Keine passende Abfahrt verfügbar.</div>'
+
+
+def _page(
+    title: str,
+    content: str,
+    *,
+    body_class: str = "",
+    head: str = "",
+) -> bytes:
+    body_attribute = (
+        f' class="{html.escape(body_class, quote=True)}"' if body_class else ""
+    )
+    return f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{head}
 <title>{html.escape(title)} · HVV-Anzeiger</title><style>
-:root{{color-scheme:dark;font-family:system-ui,sans-serif;background:#0b1220;color:#f4f7fb}}body{{margin:0;background:linear-gradient(135deg,#0b1220,#17233b);min-height:100vh}}main{{max-width:980px;margin:auto;padding:24px 16px 48px}}a{{color:#8bd3ff}}h1{{margin:0 0 8px;font-size:clamp(2rem,6vw,4rem)}}.subtle{{color:#aab8cb}}.toolbar{{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:20px 0}}.board{{background:#05080e;border:1px solid #324057;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px #0006}}.row{{display:grid;grid-template-columns:76px 1fr 100px;gap:16px;align-items:center;padding:18px 22px;border-bottom:1px solid #202a3b}}.row:last-child{{border:0}}.line{{display:inline-block;min-width:42px;padding:2px 8px;text-align:center;font-size:1.35rem;font-weight:800;line-height:1.2}}.destination{{font-size:1.2rem}}.time{{text-align:right;font-size:1.8rem;font-variant-numeric:tabular-nums}}.station{{color:#8bd3ff;font-size:.8rem}}.delay{{color:#ff9d66;font-size:.85rem}}.cancelled{{color:#ff6b7a;text-decoration:line-through}}.status,.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:16px 0}}.status div,.card{{background:#121c2d;border:1px solid #324057;border-radius:14px;padding:20px}}.status strong{{display:block;font-size:1.15rem;margin-top:4px}}.setting{{min-width:0}}.control-row,.station-search{{display:flex;gap:8px;align-items:center;flex-wrap:wrap}}.control-row input,.control-row select{{flex:1;min-width:0}}.reset{{background:#26344a;border-color:#53627a;font-size:.85rem}}.station-card{{border:1px solid #53627a;border-radius:12px;padding:16px;margin:14px 0}}.station-heading{{display:flex;justify-content:space-between;align-items:center;gap:12px}}.route-row{{display:grid;grid-template-columns:1fr 2fr auto;gap:8px;margin:8px 0}}.station-search{{margin-top:10px}}.station-search select{{min-width:280px;flex:1}}button,input,textarea,select{{font:inherit;border-radius:9px;border:1px solid #53627a;padding:10px 12px;background:#101a2b;color:inherit}}button{{cursor:pointer;background:#207bb3;border-color:#65c6ff;font-weight:700}}button:disabled{{opacity:.55;cursor:wait}}label{{display:block;margin:14px 0 6px;font-weight:700}}.card{{margin-top:18px}}.danger{{background:#7e2632;border-color:#ff8793;margin-left:8px}}.notice{{padding:14px 16px;border-radius:10px;background:#3b2913;color:#ffdca6;margin:16px 0}}.ok{{color:#8ee6ad}}.error{{color:#ff9aa5}}.empty{{padding:42px 22px;text-align:center;color:#aab8cb}}.spinner{{display:inline-block;width:14px;height:14px;border:2px solid #53627a;border-top-color:#8bd3ff;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}}@keyframes spin{{to{{transform:rotate(360deg)}}}}details.help-box{{margin-top:12px}}code{{overflow-wrap:anywhere}}{line_style_css()}
-</style></head><body><main>{content}</main></body></html>""".encode()
+:root{{color-scheme:dark;font-family:system-ui,sans-serif;background:#0b1220;color:#f4f7fb}}body{{margin:0;background:linear-gradient(135deg,#0b1220,#17233b);min-height:100vh}}main{{max-width:980px;margin:auto;padding:24px 16px 48px}}a{{color:#8bd3ff}}h1{{margin:0 0 8px;font-size:clamp(2rem,6vw,4rem)}}.subtle{{color:#aab8cb}}.toolbar{{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:20px 0}}.board{{background:#05080e;border:1px solid #324057;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px #0006}}.row{{display:grid;grid-template-columns:76px minmax(0,1fr) 100px;gap:16px;align-items:center;padding:18px 22px;border-bottom:1px solid #202a3b}}.row:last-child{{border:0}}.line{{display:inline-block;min-width:42px;padding:2px 8px;text-align:center;font-size:1.35rem;font-weight:800;line-height:1.2}}.destination{{font-size:1.2rem;overflow-wrap:anywhere}}.time{{text-align:right;font-size:1.8rem;font-variant-numeric:tabular-nums}}.time small{{font-size:.65em;color:#aab8cb}}.station{{color:#8bd3ff;font-size:.8rem}}.delay{{color:#ff9d66;font-size:.85rem}}.cancelled{{color:#ff6b7a;text-decoration:line-through}}.status,.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:16px 0}}.status div,.card{{background:#121c2d;border:1px solid #324057;border-radius:14px;padding:20px}}.status strong{{display:block;font-size:1.15rem;margin-top:4px}}.setting{{min-width:0}}.control-row,.station-search{{display:flex;gap:8px;align-items:center;flex-wrap:wrap}}.control-row input,.control-row select{{flex:1;min-width:0}}.reset{{background:#26344a;border-color:#53627a;font-size:.85rem}}.station-card{{border:1px solid #53627a;border-radius:12px;padding:16px;margin:14px 0}}.station-heading{{display:flex;justify-content:space-between;align-items:center;gap:12px}}.route-row{{display:grid;grid-template-columns:1fr 2fr auto;gap:8px;margin:8px 0}}.station-search{{margin-top:10px}}.station-search select{{min-width:280px;flex:1}}button,input,textarea,select{{font:inherit;border-radius:9px;border:1px solid #53627a;padding:10px 12px;background:#101a2b;color:inherit}}button{{cursor:pointer;background:#207bb3;border-color:#65c6ff;font-weight:700}}button:disabled{{opacity:.55;cursor:wait}}label{{display:block;margin:14px 0 6px;font-weight:700}}.card{{margin-top:18px}}.danger{{background:#7e2632;border-color:#ff8793;margin-left:8px}}.notice{{padding:14px 16px;border-radius:10px;background:#3b2913;color:#ffdca6;margin:16px 0}}.ok{{color:#8ee6ad}}.error{{color:#ff9aa5}}.empty{{padding:42px 22px;text-align:center;color:#aab8cb}}.spinner{{display:inline-block;width:14px;height:14px;border:2px solid #53627a;border-top-color:#8bd3ff;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}}@keyframes spin{{to{{transform:rotate(360deg)}}}}details.help-box{{margin-top:12px}}code{{overflow-wrap:anywhere}}.display-page main{{max-width:1320px;min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;padding:clamp(16px,4vw,48px)}}.display-page .display-shell{{width:100%}}.display-page .display-toolbar{{margin:0 0 clamp(16px,3vw,28px)}}.display-page .display-toolbar h1{{font-size:clamp(2rem,5vw,4.5rem)}}.display-page .display-board{{border-radius:clamp(12px,2vw,22px)}}.display-page .row{{grid-template-columns:minmax(64px,8vw) minmax(0,1fr) minmax(96px,12vw);padding:clamp(14px,2.4vw,28px) clamp(16px,3vw,34px);gap:clamp(10px,2vw,28px)}}.display-page .line{{font-size:clamp(1.35rem,3vw,2.4rem);min-width:clamp(42px,5vw,72px)}}.display-page .destination{{font-size:clamp(1.15rem,2.7vw,2rem)}}.display-page .time{{font-size:clamp(1.5rem,3.4vw,3rem)}}.display-page .station{{font-size:clamp(.75rem,1.4vw,1rem)}}.display-page .display-refresh{{margin:16px 0 0;text-align:center;font-size:.85rem}}.display-exit{{font-size:clamp(.95rem,1.5vw,1.2rem)}}@media(max-width:600px){{.display-page main{{padding:12px 8px 24px;justify-content:flex-start}}.display-page .display-toolbar{{margin-bottom:14px}}.display-page .row{{grid-template-columns:minmax(48px,16vw) minmax(0,1fr) minmax(72px,22vw);gap:8px;padding:12px 10px}}.display-page .line{{min-width:32px;padding:2px 4px;font-size:1.05rem}}.display-page .destination{{font-size:1rem}}.display-page .time{{font-size:1.2rem}}.display-page .station{{font-size:.68rem}}.display-page .display-board{{border-radius:12px}}}}{line_style_css()}
+</style></head><body{body_attribute}><main>{content}</main></body></html>""".encode()
 
 
 class WebApplication:
@@ -532,17 +576,26 @@ class WebApplication:
             departures, error = self.departures()
         except (ConfigError, GeofoxError, OSError) as exc:
             departures, error = [], str(exc)
-        rows = (
-            "".join(
-                f'<div class="row"><div><div class="line line-badge line-badge-{get_line_style(item.get("line", ""), item.get("product")).token}">{html.escape(str(item.get("line", "")))}</div><div class="station">{html.escape(str(item.get("station", "")))}</div></div><div class="destination">{html.escape(str(item.get("destination", "")))}{(" <span class=delay>(+" + str(item["delay_seconds"] // 60) + " min)</span>") if item["delay_seconds"] else ""}</div><div class="time {"cancelled" if item["cancelled"] else ""}">{html.escape(str(item.get("display_time", item["time"]))) }{"" if item.get("time_mode") == "departure_time" else "<br><small>in " + str(item["minutes"]) + " min</small>"}</div></div>'
-                for item in departures
-            )
-            or '<div class="empty">Keine passende Abfahrt verfügbar.</div>'
-        )
+        rows = _departure_rows(departures)
         message = f'<div class="notice">{html.escape(error)}</div>' if error else ""
         status = hardware_status()
-        content = f'''<div class="toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lokale HVV-Anzeige · aktualisiert beim Öffnen</div></div><div><a href="/settings">Einstellungen</a> · <a href="/">Aktualisieren</a></div></div>{message}<section class="board" aria-label="Abfahrtsanzeige">{rows}</section><section class="status" aria-label="Hardware-Status"><div>CPU<strong>{html.escape(status["cpu"])}</strong></div><div>RAM<strong>{html.escape(status["ram"])}</strong></div><div>SD-Speicher<strong>{html.escape(status["storage"])}</strong></div></section><form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">System neu starten</button></form>'''
+        content = f'''<div class="toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lokale HVV-Anzeige · aktualisiert beim Öffnen</div></div><div><a href="/display">Displaymodus</a> · <a href="/settings">Einstellungen</a> · <a href="/">Aktualisieren</a></div></div>{message}<section class="board" aria-label="Abfahrtsanzeige">{rows}</section><section class="status" aria-label="Hardware-Status"><div>CPU<strong>{html.escape(status["cpu"])}</strong></div><div>RAM<strong>{html.escape(status["ram"])}</strong></div><div>SD-Speicher<strong>{html.escape(status["storage"])}</strong></div></section><form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">System neu starten</button></form>'''
         return _page("Abfahrten", content)
+
+    def display(self) -> bytes:
+        try:
+            departures, error = self.departures()
+        except (ConfigError, GeofoxError, OSError) as exc:
+            departures, error = [], str(exc)
+        rows = _departure_rows(departures)
+        message = f'<div class="notice">{html.escape(error)}</div>' if error else ""
+        content = f'''<div class="display-shell" data-display-mode><div class="toolbar display-toolbar"><div><h1>Abfahrten</h1><div class="subtle">Reiner Displaymodus · automatische Aktualisierung</div></div><a class="display-exit" href="/" aria-label="Displaymodus verlassen">Standardansicht</a></div>{message}<section class="board display-board" aria-label="Abfahrtsanzeige">{rows}</section><p class="display-refresh subtle">Aktualisierung alle 15 Sekunden · <a href="/">Displaymodus verlassen</a></p></div>'''
+        return _page(
+            "Displaymodus",
+            content,
+            body_class="display-page",
+            head='<meta http-equiv="refresh" content="15">',
+        )
 
     def settings(self, message: str = "", restart_required: bool = False) -> bytes:
         raw_config = self.raw_config()
@@ -745,6 +798,13 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("X-Frame-Options", "DENY")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'none'; style-src 'unsafe-inline'; "
+                "script-src 'unsafe-inline'; img-src 'self' data:; "
+                "connect-src 'self'; base-uri 'none'; form-action 'self'; "
+                "frame-ancestors 'none'",
+            )
 
         def _send(self, payload: bytes, status: HTTPStatus = HTTPStatus.OK) -> None:
             self.send_response(status)
@@ -784,6 +844,9 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
             path = urlsplit(self.path).path
             if path == "/":
                 self._send(application.dashboard())
+                return
+            if path == "/display":
+                self._send(application.display())
                 return
             if path == "/settings":
                 query = parse_qs(urlsplit(self.path).query)

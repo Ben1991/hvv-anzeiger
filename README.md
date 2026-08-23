@@ -507,6 +507,17 @@ Raspberry Pi verwenden:
 http://<raspberry-pi-ip>:8080
 ```
 
+Für einen Kiosk- oder Zweitbildschirm ohne Einstellungen, Hardwarestatus und
+Neustartaktion gibt es den geschützten reinen Displaymodus:
+
+```text
+http://<raspberry-pi-ip>:8080/display
+```
+
+Die URL bleibt beim automatischen Neuladen erhalten. Über „Standardansicht“
+kommt man jederzeit zurück zum normalen Dashboard; auch dieser Wechsel bleibt
+durch die Web-Anmeldung geschützt.
+
 Der mitgelieferte Webdienst ist dafür bereits auf das lokale Netzwerk gebunden
 und wird durch eine Anmeldung geschützt. Die Standarddaten sind:
 
@@ -1102,7 +1113,7 @@ bash -n install.sh configure-credentials.sh diagnose.sh
 
 Bei jedem Push und Pull Request prüft GitHub Actions:
 
-- Python 3.10, 3.11 und 3.13
+- Python 3.11 für Tests und Qualitätsprüfungen
 - Unit- und Integrationstests mit 100 Prozent Coverage
 - Ruff sowie Abhängigkeitsprüfung auf bekannte Schwachstellen
 - Shell-Skripte und systemd-Units
