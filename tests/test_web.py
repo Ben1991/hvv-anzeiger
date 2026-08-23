@@ -201,7 +201,9 @@ class WebApplicationTest(unittest.TestCase):
         self.assertLess(search_position, city_position)
         self.assertNotIn("Treffer auswählen", settings)
         self.assertIn("defaultStationLabel", settings)
-        self.assertIn("card.querySelector('[data-load-lines]').disabled=false", settings)
+        self.assertIn(
+            "card.querySelector('[data-load-lines]').disabled=false", settings
+        )
         self.assertNotIn(
             "loadLines(card.querySelector('[data-load-lines]'))", settings
         )
