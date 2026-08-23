@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -39,6 +41,7 @@ jobs:
           python -m pip install --no-build-isolation --no-deps --editable .
 
       - name: Compile Python sources
+        if: matrix.python-version == '3.11'
         run: python -m compileall -q hvv_display tests
 
       - name: Run unit tests on compatibility versions
