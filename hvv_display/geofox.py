@@ -19,12 +19,33 @@ from typing import Any
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
-from .models import Departure, Route, Station
+from .models import Departure, LineOption, Route, Station
 
 LOG = logging.getLogger(__name__)
 HAMBURG_TZ = ZoneInfo("Europe/Berlin")
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_RETRY_AFTER_SECONDS = 3600
+MAX_LINE_OPTIONS = 200
+_VEHICLE_LABELS = {
+    "UBAHN": "U-Bahn",
+    "SBAHN": "S-Bahn",
+    "ABAHN": "A-Bahn",
+    "AKN": "AKN",
+    "RBAHN": "Regionalbahn",
+    "FBAHN": "Fernbahn",
+    "ZUG": "Bahn",
+    "TRAIN": "Bahn",
+    "BUS": "Bus",
+    "STADTBUS": "Stadtbus",
+    "REGIONALBUS": "Regionalbus",
+    "METROBUS": "MetroBus",
+    "SCHNELLBUS": "SchnellBus",
+    "NACHTBUS": "NachtBus",
+    "XPRESSBUS": "XpressBus",
+    "AST": "Anruf-Sammeltaxi",
+    "SCHIFF": "Fähre",
+    "FAEHRE": "Fähre",
+}
 
 
 class GeofoxError(RuntimeError):
@@ -81,7 +102,9 @@ def route_matches(line_name: str, direction: str, routes: tuple[Route, ...]) -> 
     normalized_direction = normalize(direction)
     for route in routes:
         expected = normalize(route.destination)
-        if normalize(line_name) == normalize(route.line) and (
+        if normalize(line_name) != normalize(route.line):
+            continue
+        if not expected or (
             expected in normalized_direction or normalized_direction in expected
         ):
             return True
@@ -112,6 +135,81 @@ def _safe_external_text(value: Any, limit: int = 160) -> str:
     return "".join(
         character if character.isprintable() else " " for character in str(value)
     ).strip()[:limit]
+
+
+def _vehicle_code(value: Any) -> str:
+    if isinstance(value, dict):
+        value = (
+            value.get("simpleType")
+            or value.get("vehicleType")
+            or value.get("shortInfo")
+            or ""
+        )
+    return str(value or "").strip().upper().replace("-", "_").replace(" ", "_")
+
+
+def _safe_vehicle_product(value: Any) -> str:
+    code = _vehicle_code(value).replace("_", "")
+    return code if code in _VEHICLE_LABELS else "UNKNOWN"
+
+
+def vehicle_type_label(value: Any) -> str:
+    code = _safe_vehicle_product(value)
+    return _VEHICLE_LABELS.get(code, "Unbekanntes Verkehrsmittel")
+
+
+def line_options_for_station(
+    lines: Any, station_id: str
+) -> tuple[LineOption, ...]:
+    options: list[LineOption] = []
+    seen: set[str] = set()
+    for raw_line in lines if isinstance(lines, list) else []:
+        if not isinstance(raw_line, dict) or raw_line.get("exists") is False:
+            continue
+        line_id = _safe_external_text(raw_line.get("id"), 160)
+        line_name = _safe_external_text(raw_line.get("name"), 80)
+        if not line_id or not line_name or line_id in seen:
+            continue
+        sublines = raw_line.get("sublines")
+        if not isinstance(sublines, list):
+            continue
+        for subline in sublines:
+            if not isinstance(subline, dict):
+                continue
+            sequence = subline.get("stationSequence")
+            if not isinstance(sequence, list) or not any(
+                isinstance(stop, dict) and str(stop.get("id", "")) == station_id
+                for stop in sequence
+            ):
+                continue
+            raw_product = _vehicle_code(
+                subline.get("vehicleType") or raw_line.get("type")
+            )
+            product = _safe_vehicle_product(raw_product) if raw_product else "UNKNOWN"
+            if product == "UNKNOWN":
+                LOG.warning("Linie %s hat kein bekanntes Verkehrsmittel", line_name)
+            options.append(
+                LineOption(
+                    line_id=line_id,
+                    name=line_name,
+                    product=product,
+                    product_label=vehicle_type_label(product),
+                    carrier=_safe_external_text(
+                        raw_line.get("carrierNameShort")
+                        or raw_line.get("carrierNameLong"),
+                        80,
+                    ),
+                )
+            )
+            seen.add(line_id)
+            break
+        if len(options) >= MAX_LINE_OPTIONS:
+            LOG.warning(
+                "Linienliste für Haltestelle auf %d Einträge begrenzt",
+                MAX_LINE_OPTIONS,
+            )
+            break
+    return tuple(options)
 
 
 def _return_code_error(result: dict[str, Any]) -> GeofoxError:
@@ -347,6 +445,27 @@ class GeofoxClient:
             for station in matches[:10]
         ]
 
+    def list_lines(self) -> list[dict[str, Any]]:
+        result = self._post(
+            "listLines",
+            {
+                "language": "de",
+                "version": self.version,
+                "dataReleaseID": "",
+                "modificationTypes": ["MAIN", "SEQUENCE"],
+                "withSublines": True,
+            },
+        )
+        lines = result.get("lines")
+        if lines is None:
+            lines = []
+        if not isinstance(lines, list):
+            raise GeofoxError("Geofox liefert keine gültige Linienliste")
+        return lines
+
+    def line_options(self, station_id: str) -> tuple[LineOption, ...]:
+        return line_options_for_station(self.list_lines(), station_id)
+
     def departure_list(
         self,
         stations: tuple[Station, ...],
@@ -367,9 +486,19 @@ class GeofoxClient:
             },
             "maxList": max_list,
             "maxTimeOffset": max_time_offset,
-            "serviceTypes": ["BUS"],
             "useRealtime": True,
         }
+        filters = [
+            {
+                "serviceID": route.line_id,
+                "serviceName": route.line,
+            }
+            for station in stations
+            for route in station.routes
+            if route.line_id
+        ]
+        if filters:
+            payload["filter"] = filters
         if len(station_names) == 1:
             payload["station"] = station_names[0]
         else:
@@ -393,6 +522,9 @@ class GeofoxClient:
                 continue
             line_name = str(line.get("name", ""))
             direction = str(line.get("direction", ""))
+            product = _safe_vehicle_product(
+                line.get("type") or line.get("vehicleType")
+            )
             response_station = raw.get("station") or {}
             response_station_id = (
                 response_station.get("id")
@@ -436,6 +568,7 @@ class GeofoxClient:
                         if len(matching_stations) == 1
                         else ""
                     ),
+                    product=product or None,
                 )
             )
         return sorted(departures, key=lambda departure: departure.departure_time)

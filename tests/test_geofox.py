@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import json
 import unittest
 import urllib.error
 from datetime import datetime
@@ -8,10 +9,13 @@ from unittest.mock import patch
 
 from hvv_display.geofox import (
     HAMBURG_TZ,
+    MAX_LINE_OPTIONS,
     GeofoxClient,
     GeofoxError,
+    line_options_for_station,
     normalize,
     route_matches,
+    vehicle_type_label,
 )
 from hvv_display.models import Route, Station
 
@@ -45,10 +49,162 @@ class GeofoxClientTest(unittest.TestCase):
         self.assertIn("Straße".encode(), body)
 
     def test_route_matching_handles_spelling_variants(self) -> None:
-        routes = (Route("384", "Elbgaustrasse"),)
+        routes = (Route("384", "Elbgaustrasse"), Route("U2", ""))
         self.assertTrue(route_matches("384", "S Elbgaustraße", routes))
         self.assertFalse(route_matches("184", "S Elbgaustraße", routes))
+        self.assertTrue(route_matches("U2", "Niendorf Nord", routes))
         self.assertEqual(normalize("Recknitzstraße"), "recknitzstrasse")
+
+    def test_line_options_filter_by_station_and_expose_vehicle_metadata(self) -> None:
+        lines = [
+            {
+                "id": "line:5",
+                "name": "5",
+                "type": {"simpleType": "BUS"},
+                "carrierNameShort": "HHA",
+                "sublines": [
+                    {
+                        "vehicleType": "METROBUS",
+                        "stationSequence": [{"id": "Master:1"}],
+                    }
+                ],
+            },
+            {
+                "id": "line:U2",
+                "name": "U2",
+                "type": {"simpleType": "TRAIN"},
+                "sublines": [
+                    {
+                        "vehicleType": {"simpleType": "UBAHN"},
+                        "stationSequence": [{"id": "Master:1"}],
+                    }
+                ],
+            },
+            {
+                "id": "line:S1",
+                "name": "S1",
+                "sublines": [
+                    {
+                        "vehicleType": "SBAHN",
+                        "stationSequence": [{"id": "Master:2"}],
+                    }
+                ],
+            },
+            {"id": "gone", "name": "Gone", "exists": False, "sublines": []},
+            {"id": "no-sequence", "name": "No", "sublines": []},
+            {
+                "id": "unknown",
+                "name": "X",
+                "sublines": [
+                    {"stationSequence": [{"id": "Master:1"}]},
+                ],
+            },
+            {"id": "", "name": "Empty", "sublines": []},
+            {"id": "no-name", "name": "", "sublines": []},
+            {"id": "tuple-sequence", "name": "Tuple", "sublines": ()},
+            {
+                "id": "bad-subline",
+                "name": "Bad",
+                "sublines": ["not an object"],
+            },
+            {
+                "id": "line:5",
+                "name": "Duplicate",
+                "sublines": [
+                    {
+                        "vehicleType": "BUS",
+                        "stationSequence": [{"id": "Master:1"}],
+                    }
+                ],
+            },
+        ]
+        options = line_options_for_station(lines, "Master:1")
+        self.assertEqual([option.name for option in options], ["5", "U2", "X"])
+        self.assertEqual(options[0].product, "METROBUS")
+        self.assertEqual(options[0].product_label, "MetroBus")
+        self.assertEqual(options[0].carrier, "HHA")
+        self.assertEqual(options[1].product_label, "U-Bahn")
+        self.assertEqual(options[2].product, "UNKNOWN")
+        self.assertEqual(options[2].product_label, "Unbekanntes Verkehrsmittel")
+        self.assertEqual(line_options_for_station(None, "Master:1"), ())
+        self.assertEqual(vehicle_type_label("FAEHRE"), "Fähre")
+        self.assertEqual(
+            vehicle_type_label("not-a-real-type"), "Unbekanntes Verkehrsmittel"
+        )
+
+        limited = [
+            {
+                "id": f"line:{index}",
+                "name": str(index),
+                "sublines": [
+                    {
+                        "vehicleType": "BUS",
+                        "stationSequence": [{"id": "Master:1"}],
+                    }
+                ],
+            }
+            for index in range(MAX_LINE_OPTIONS + 1)
+        ]
+        self.assertEqual(
+            len(line_options_for_station(limited, "Master:1")), MAX_LINE_OPTIONS
+        )
+
+    def test_list_lines_requests_all_sublines(self) -> None:
+        response = FakeResponse(
+            b'{"returnCode":"OK","dataReleaseID":"release-1",'
+            b'"lines":[{"id":"line:5","name":"5","sublines":[]}]} '
+        )
+        requests = []
+
+        def urlopen(request, **_kwargs):
+            requests.append(json.loads(request.data.decode("utf-8")))
+            return response
+
+        client = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",
+            min_request_interval=0,
+            urlopen=urlopen,
+        )
+        self.assertEqual(client.list_lines()[0]["name"], "5")
+        self.assertEqual(requests[0]["dataReleaseID"], "")
+        self.assertEqual(requests[0]["withSublines"], True)
+        self.assertEqual(requests[0]["modificationTypes"], ["MAIN", "SEQUENCE"])
+
+        invalid = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",
+            min_request_interval=0,
+            urlopen=lambda *_args, **_kwargs: FakeResponse(
+                b'{"returnCode":"OK","lines":{}}'
+            ),
+        )
+        with self.assertRaisesRegex(GeofoxError, "Linienliste"):
+            invalid.list_lines()
+
+        missing = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",
+            min_request_interval=0,
+            urlopen=lambda *_args, **_kwargs: FakeResponse(
+                b'{"returnCode":"OK"}'
+            ),
+        )
+        self.assertEqual(missing.list_lines(), [])
+
+        line_options = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",
+            min_request_interval=0,
+            urlopen=lambda *_args, **_kwargs: FakeResponse(
+                b'{"returnCode":"OK","lines":[]}'
+            ),
+        )
+        self.assertEqual(line_options.line_options("Master:1"), ())
 
     def test_find_stations_returns_service_types_for_follow_up_flow(self) -> None:
         response = FakeResponse(
@@ -185,6 +341,52 @@ class GeofoxClientTest(unittest.TestCase):
         self.assertEqual([departure.line for departure in result], ["21", "186"])
         self.assertEqual(result[0].departure_time.strftime("%H:%M"), "12:04")
         self.assertEqual(result[1].departure_time.strftime("%H:%M"), "12:11")
+
+    def test_departures_support_multimodal_line_ids_without_bus_restriction(
+        self,
+    ) -> None:
+        response = FakeResponse(
+            b'{"returnCode":"OK","departures":['
+            b'{"line":{"name":"U2","direction":"Niendorf Nord",'
+            b'"type":"UBAHN"},"timeOffset":4},'
+            b'{"line":{"name":"5","direction":"Burgwedel",'
+            b'"type":"BUS"},"timeOffset":6}]}'
+        )
+        requests = []
+
+        def urlopen(request, **_kwargs):
+            requests.append(json.loads(request.data.decode("utf-8")))
+            return response
+
+        client = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",
+            min_request_interval=0,
+            urlopen=urlopen,
+        )
+        station = Station(
+            "Jungfernstieg",
+            "Hamburg",
+            (
+                Route("U2", "", "line:U2", "UBAHN"),
+                Route("5", "", "line:5", "BUS"),
+            ),
+            "Master:1",
+        )
+        result = client.departure_list(
+            (station,), now=datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        )
+        self.assertEqual([departure.line for departure in result], ["U2", "5"])
+        self.assertEqual([departure.product for departure in result], ["UBAHN", "BUS"])
+        self.assertNotIn("serviceTypes", requests[0])
+        self.assertEqual(
+            requests[0]["filter"],
+            [
+                {"serviceID": "line:U2", "serviceName": "U2"},
+                {"serviceID": "line:5", "serviceName": "5"},
+            ],
+        )
 
     def test_offset_uses_real_minutes_across_daylight_saving_change(self) -> None:
         response = FakeResponse(

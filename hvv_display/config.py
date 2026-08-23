@@ -173,12 +173,7 @@ def load_config(path: str | Path) -> AppConfig:
                 f"stations[{index}].label muss zwischen 1 und 3 Zeichen lang sein"
             )
         routes = tuple(
-            Route(
-                line=str(_required(route, "line", f"stations[{index}].routes")),
-                destination=str(
-                    _required(route, "destination", f"stations[{index}].routes")
-                ),
-            )
+            _route_from_raw(route, f"stations[{index}].routes")
             for route in _required(station_raw, "routes", f"stations[{index}]")
         )
         if not routes:
@@ -203,4 +198,24 @@ def load_config(path: str | Path) -> AppConfig:
         display=display,
         night_shutdown=night_shutdown,
         stations=tuple(stations),
+    )
+
+
+def _route_from_raw(route: Any, section: str) -> Route:
+    if not isinstance(route, dict):
+        raise ConfigError(f"{section} muss Objekte enthalten")
+    line = str(_required(route, "line", section)).strip()
+    if "destination" not in route and "line_id" not in route:
+        _required(route, "destination", section)
+    line_id = route.get("line_id")
+    line_id = str(line_id).strip() if line_id is not None else None
+    destination = str(route.get("destination", "")).strip()
+    if not line or (not destination and not line_id):
+        raise ConfigError(f"{section}.destination oder line_id muss gesetzt sein")
+    product = route.get("product")
+    return Route(
+        line=line,
+        destination=destination,
+        line_id=line_id or None,
+        product=str(product).strip() if product is not None else None,
     )

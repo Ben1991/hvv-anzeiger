@@ -142,6 +142,29 @@ class ConfigTest(unittest.TestCase):
                     with self.assertRaisesRegex(ConfigError, "größer als 0"):
                         load_config(self.write_config(raw, directory))
 
+    def test_multimodal_line_route_can_omit_destination(self) -> None:
+        raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
+        raw["stations"][0]["routes"] = [
+            {"line": "U2", "line_id": "line:U2", "product": "UBAHN"}
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            config = load_config(self.write_config(raw, directory))
+        route = config.stations[0].routes[0]
+        self.assertEqual(route.line, "U2")
+        self.assertEqual(route.destination, "")
+        self.assertEqual(route.line_id, "line:U2")
+        self.assertEqual(route.product, "UBAHN")
+
+        raw["stations"][0]["routes"] = [{"line": "", "destination": ""}]
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ConfigError, "destination oder line_id"):
+                load_config(self.write_config(raw, directory))
+
+        raw["stations"][0]["routes"] = [None]
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ConfigError, "muss Objekte enthalten"):
+                load_config(self.write_config(raw, directory))
+
     def test_station_label_length_and_empty_routes_are_rejected(self) -> None:
         original = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
         for label in (" ", "LANG"):
