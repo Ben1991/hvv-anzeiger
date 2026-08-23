@@ -16,6 +16,7 @@
     "rotate": 0,
     "bus_speed_hz": 16000000,
     "bgr": false,
+    "show_station_label": true,
     "time_mode": "countdown",
     "minute_unit": "min"
   },

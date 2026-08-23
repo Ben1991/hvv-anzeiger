@@ -154,6 +154,49 @@ class RenderTest(unittest.TestCase):
         )
         self.assertNotEqual(without_label.tobytes(), with_label.tobytes())
 
+    def test_station_label_can_be_hidden_without_leaving_a_badge_or_layout_gap(
+        self,
+    ) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        departure = Departure(
+            "21",
+            "U Niendorf Nord",
+            now + timedelta(minutes=3),
+            station_label="R",
+        )
+        hidden = render_board(
+            [departure],
+            now=now,
+            show_station_label=False,
+        )
+        no_label = render_board(
+            [Departure("21", "U Niendorf Nord", now + timedelta(minutes=3))],
+            now=now,
+        )
+        self.assertEqual(hidden.tobytes(), no_label.tobytes())
+
+    def test_hidden_station_label_is_not_part_of_visible_state(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        with_label = Departure(
+            "21", "Ziel", now + timedelta(minutes=3), station_label="W"
+        )
+        other_label = Departure(
+            "21", "Ziel", now + timedelta(minutes=3), station_label="R"
+        )
+        arguments = {
+            "now": now,
+            "last_updated": now,
+            "stale": False,
+            "error_message": None,
+            "wifi_is_connected": True,
+            "max_rows": 5,
+            "show_station_label": False,
+        }
+        self.assertEqual(
+            board_state_key([with_label], **arguments),
+            board_state_key([other_label], **arguments),
+        )
+
     def test_disconnected_wifi_has_visible_red_status_bar(self) -> None:
         now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
         connected = render_board(

@@ -38,6 +38,7 @@ class DisplayConfig:
     rotate: int
     bus_speed_hz: int
     bgr: bool
+    show_station_label: bool = True
     time_mode: str = "countdown"
     minute_unit: str = "min"
 
@@ -144,6 +145,10 @@ def load_config(path: str | Path) -> AppConfig:
         rotate=int(display_raw.get("rotate", 0)),
         bus_speed_hz=int(display_raw.get("bus_speed_hz", 16_000_000)),
         bgr=_boolean(display_raw.get("bgr", False), "display.bgr"),
+        show_station_label=_boolean(
+            display_raw.get("show_station_label", True),
+            "display.show_station_label",
+        ),
         time_mode=str(display_raw.get("time_mode", "countdown")).strip(),
         minute_unit=str(display_raw.get("minute_unit", "min")).strip(),
     )

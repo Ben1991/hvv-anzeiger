@@ -120,6 +120,7 @@ def update_board(
     night_shutdown: bool = False,
     time_mode: str = "countdown",
     minute_unit: str = "min",
+    show_station_label: bool = True,
 ) -> tuple[object, ...]:
     """Render and transfer a frame only when its visible content changed."""
     if night_shutdown:
@@ -136,6 +137,7 @@ def update_board(
             time_is_synchronized=time_is_synchronized,
             time_mode=time_mode,
             minute_unit=minute_unit,
+            show_station_label=show_station_label,
         )
     if current_state == previous_state:
         LOG.debug("Displayinhalt unverändert; Aktualisierung übersprungen")
@@ -155,6 +157,7 @@ def update_board(
             time_is_synchronized=time_is_synchronized,
             time_mode=time_mode,
             minute_unit=minute_unit,
+            show_station_label=show_station_label,
         )
     if output:
         output_path = Path(output)
@@ -361,6 +364,7 @@ def run() -> int:
                     night_shutdown=night_active,
                     time_mode=config.display.time_mode,
                     minute_unit=config.display.minute_unit,
+                    show_station_label=config.display.show_station_label,
                 )
             except (OSError, RuntimeError) as exc:
                 LOG.warning(
