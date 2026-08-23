@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hvv-anzeiger"
-version = "0.2.1"
+version = "0.2.2"
 description = "HVV departure display for a Raspberry Pi and ILI9341 TFT"
 readme = "README.md"
 license = "GPL-3.0-only"

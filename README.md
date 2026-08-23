@@ -29,6 +29,24 @@ Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
 
 ## Release Notes
 
+### Version 0.2.2 / V2.2 (vorbereitet)
+
+- Stationsverwaltung über die Weboberfläche für alle von Geofox gemeldeten
+  Verkehrsmittel, einschließlich Bus, U-Bahn, S-Bahn, AKN, Regionalverkehr
+  und Fähre
+- sichere Linienauswahl mit konfigurierbarem Richtungs- oder
+  Zielstationsfilter; bestehende manuelle Bus-Konfigurationen bleiben
+  kompatibel
+- einheitliche, verkehrsmittelabhängige Linienfarben und -formen in Display,
+  Web-Dashboard und geschütztem Displaymodus
+- konfigurierbare Darstellung mit Countdown oder absoluter Abfahrtszeit,
+  wählbarer Countdown-Einheit und optional ausgeblendeten Haltestellenkürzeln
+- geschützter, responsiver `/display`-Modus für Kiosk- und Zweitbildschirme
+- zusätzliche Sicherheitskorrekturen für Geofox-Anfrageserialisierung und
+  nicht-lokale Webzugriffe
+- Code of Conduct sowie strukturierte Bug- und Feature-Issue-Templates für
+  Beiträge zum Projekt
+
 ### Version 0.2.1 / V2.1
 
 - lokal gebundene Weboberfläche unter `http://127.0.0.1:8080`; Zugriff von
@@ -92,6 +110,10 @@ V1 war die erste veröffentlichte Version des HVV-Anzeigers. Sie wurde am
 - Linie, Fahrtziel, absolute Uhrzeit und verbleibende Minuten
 - gemeinsame chronologische Sortierung über mehrere Haltestellen
 - frei konfigurierbare Haltestellen, Linien, Ziele und sichtbare Kürzel
+- Bus-, U-Bahn-, S-Bahn-, AKN-, Regional- und Fährverbindungen mit passender
+  Linienkennzeichnung
+- wahlweise Countdown oder absolute Abfahrtszeit sowie optional ausgeblendete
+  Haltestellenkürzel
 - Geofox-Echtzeitprognosen einschließlich Verspätungen und Ausfällen
 - Aktualisierung im Normalbetrieb alle 15 Sekunden
 - sichtbare Hinweise bei fehlendem WLAN, veralteten Daten oder noch nicht
@@ -540,8 +562,8 @@ ssh -L 8080:127.0.0.1:8080 <benutzer>@<raspberry-pi-ip>
 ```
 
 Danach auf dem eigenen Rechner ebenfalls `http://127.0.0.1:8080` öffnen. Das
-ist nur die lokale Tunnel-Adresse; für den direkten Zugriff im LAN die
-Raspberry-Pi-IP wie oben verwenden.
+ist die lokale Tunnel-Adresse. Für direkten LAN-Zugriff müssen Passwortschutz
+und TLS wie im folgenden Abschnitt gemeinsam konfiguriert werden.
 
 Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
 
@@ -577,7 +599,9 @@ gegen Cross-Site-Requests geschützt.
 Das Standardpasswort ist nur für die erste Einrichtung gedacht. Wer es nicht
 ändert, kann die lokal gebundene Oberfläche mit den bekannten Standarddaten
 öffnen und damit auch Konfiguration, Geofox-Zugangsdaten und den Systemneustart
-auslösen.
+auslösen. Für direkten Zugriff aus dem LAN müssen Passwortschutz und TLS
+gemeinsam konfiguriert werden; unverschlüsseltes Basic Auth über HTTP wird
+nicht unterstützt.
 
 Der Installer gibt `config.json` dem Dienstbenutzer `hvv-anzeiger` mit den
 Rechten `0640`, damit die Weboberfläche die validierte Datei atomar speichern
@@ -605,7 +629,8 @@ vollständig oder garantiert korrekt. Im Zweifel gilt die
 Die Einstellungsseite enthält alle Werte aus `config.json` und macht sie als
 verständliche Eingabefelder editierbar; jeder Wert hat einen eigenen
 „Auf Standard zurücksetzen“-Button. Sie erklärt die Bereiche `api` (Geofox-Verbindung und
-Abfrageverhalten), `display` (SPI, GPIO, Drehung und Farben),
+Abfrageverhalten), `display` (SPI, GPIO, Drehung, Farben, Zeitdarstellung und
+Haltestellenkürzel),
 `night_shutdown` (Nachtzeitraum) und `stations` (Haltestellen, Kürzel, Linien
 und Ziele). Vor dem Speichern wird die gesamte Konfiguration mit denselben
 Regeln wie beim Displaystart geprüft. Zugangsdaten werden nicht in
@@ -622,7 +647,9 @@ Die Einstellungsseite bildet die vollständige Konfiguration ab:
   Rot-/Blau-Farbkanäle.
 - `night_shutdown`: Aktivierung sowie Beginn und Ende des Nachtfensters.
 - `stations`: Haltestellenkarten mit Name, Stadt, optionaler Geofox-ID,
-  Anzeige-Kürzel und beliebig vielen Linien-Ziel-Kombinationen.
+  Anzeige-Kürzel und beliebig vielen Linien-Ziel-Kombinationen. Die
+  Linienauswahl kann zusätzlich Verkehrsmittelkennung und einen Richtungs- oder
+  Zielstationsfilter speichern.
 
 Jeder Wert hat eine kurze Erklärung und einen Button „Auf Standard
 zurücksetzen“. Änderungen werden erst gespeichert, nachdem die vollständige
@@ -766,7 +793,11 @@ abgeschaltet.
 | `stations[].label` | erster Buchstabe des Namens | eindeutiges Kürzel mit 1 bis 3 Zeichen |
 | `stations[].routes` | Pflichtfeld | mindestens eine erlaubte Linie-Ziel-Kombination |
 | `stations[].routes[].line` | Pflichtfeld | Linienbezeichnung, zum Beispiel `"21"` |
-| `stations[].routes[].destination` | Pflichtfeld | erwartetes Fahrtziel |
+| `stations[].routes[].destination` | Pflichtfeld, außer bei `line_id` | erwartetes Fahrtziel oder gespeicherter Filtername |
+| `stations[].routes[].line_id` | optional | Geofox-Linienkennung für multimodale Linien, zum Beispiel `"line:U2"` |
+| `stations[].routes[].product` | optional | von Geofox gelieferte Verkehrsart, zum Beispiel `"UBAHN"` |
+| `stations[].routes[].filter_mode` | optional | `direction` für eine Richtung oder `destination` für eine Zielstation |
+| `stations[].routes[].filter_station_ids` | optional | Geofox-IDs der erlaubten Richtungs- oder Zielstationen |
 
 Beispiel:
 
@@ -949,8 +980,9 @@ git checkout <versions-tag>
 ./install.sh
 ```
 
-Beispiel: `git checkout v1.2.0`. Ein Versions-Tag sollte nur verwendet werden,
-wenn er im Repository tatsächlich vorhanden ist.
+Beispiel für die letzte veröffentlichte Version: `git checkout V2.1`. Ein
+Versions-Tag sollte nur verwendet werden, wenn er im Repository tatsächlich
+vorhanden ist.
 
 Anschließend:
 
