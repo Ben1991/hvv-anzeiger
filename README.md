@@ -55,6 +55,9 @@ zusätzlichen End-to-End- und Responsive-Testlauf:
   einschließlich eines Displaybeispiels Jungfernstieg Richtung Hauptbahnhof
 - alle GitHub-CI-Gates einschließlich Shell-Installer und CodeQL sind grün
 
+<details>
+<summary>Ältere Release Notes anzeigen</summary>
+
 ### Version 0.2.2 / V2.2
 
 - Stationsverwaltung über die Weboberfläche für alle von Geofox gemeldeten
@@ -111,7 +114,15 @@ V1 war die erste veröffentlichte Version des HVV-Anzeigers. Sie wurde am
 - [V1 auf GitHub ansehen](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V1)
 - [Quellcode von V1 anzeigen](https://github.com/Ben1991/hvv-anzeiger/tree/V1)
 
+</details>
+
 ## Inhalt
+
+Für die erste Einrichtung: [Voraussetzungen](#voraussetzungen) →
+[Geofox-Zugang beantragen](#geofox-zugang-beantragen) →
+[Display anschließen](#display-anschließen) → [Installieren](#installieren).
+Für den Alltag sind [Konfigurieren](#konfigurieren) und
+[Betrieb und Updates](#betrieb-und-updates) die wichtigsten Abschnitte.
 
 - [Release Notes](#release-notes)
 - [Funktionen](#funktionen)
@@ -427,9 +438,15 @@ chmod +x install.sh
 Der Installer fragt bei der ersten Installation die Geofox Application-ID und
 das Passwort ab. Das Passwort bleibt während der Eingabe unsichtbar.
 
+Am Ende erkennt der Installer die aktuell verwendete lokale IPv4-Adresse und
+gibt die fertige HTTPS-Adresse der Weboberfläche aus. Öffne diese Adresse auf
+einem Rechner im selben Netzwerk. Das Zertifikat ist selbst signiert; die
+Browserwarnung muss beim ersten Aufruf bestätigt werden.
+
 `install.sh` richtet ein:
 
 - erforderliche Betriebssystem- und Python-Pakete
+- OpenSSL sowie ein selbst signiertes Zertifikat für den LAN-Webzugriff
 - SPI und Netzwerk-Zeitsynchronisierung
 - Anwendung unter `/opt/hvv-anzeiger`
 - nicht interaktiven Dienstbenutzer `hvv-anzeiger`
@@ -453,10 +470,17 @@ sudo systemctl enable --now hvv-anzeiger-web
 
 ### Weboberfläche: Verbindung abgelehnt
 
-Wenn `http://127.0.0.1:8080` mit „Verbindung abgelehnt“ antwortet,
-läuft der Webdienst meist noch nicht oder eine aktualisierte systemd-Unit ist
-noch nicht geladen. Die folgenden Befehle laden die Unit neu, aktivieren den
-Autostart und starten den Dienst mit der aktuellen Konfiguration:
+Wenn `https://<raspberry-pi-ip>:8080` mit „Verbindung abgelehnt“ antwortet,
+prüfe zuerst die aktuelle Adresse des Raspberry Pi:
+
+```bash
+ip -4 route get 1.1.1.1
+hostname -I
+```
+
+Die Weboberfläche verwendet HTTPS und bindet auf allen IPv4-Schnittstellen.
+Die folgenden Befehle laden die Unit neu, aktivieren den Autostart und starten
+den Dienst mit der aktuellen Konfiguration:
 
 ```bash
 sudo systemctl status hvv-anzeiger-web --no-pager
@@ -467,7 +491,7 @@ sudo systemctl restart hvv-anzeiger-web
 sudo systemctl status hvv-anzeiger-web --no-pager
 ```
 
-Die Ausgabe von `ss` sollte eine Bindung an `127.0.0.1:8080` zeigen. Fehlt sie
+Die Ausgabe von `ss` sollte eine Bindung an `0.0.0.0:8080` zeigen. Fehlt sie
 oder bleibt der Dienst in `failed`, zeigt das Journal die Ursache:
 
 ```bash
@@ -475,8 +499,16 @@ sudo journalctl -u hvv-anzeiger-web -n 80 --no-pager
 ```
 
 Nach einem Update führt `update.sh` das Neuladen und den Neustart automatisch
-durch. Auf dem Raspberry Pi ist die Adresse `http://127.0.0.1:8080`; für einen
-anderen Rechner zuerst einen SSH-Tunnel aufbauen.
+durch. Die aktuelle URL kann jederzeit erneut ausgegeben werden:
+
+```bash
+cd /opt/hvv-anzeiger
+./configure-web.sh
+sudo systemctl restart hvv-anzeiger-web
+```
+
+Die Ausgabe enthält die aktuelle Adresse im Format
+`https://<raspberry-pi-ip>:8080/`.
 
 Wenn die Oberfläche erreichbar ist, das Speichern aber mit `Read-only file
 system` für eine Datei wie `.config.json.…` fehlschlägt, läuft noch eine alte
@@ -537,39 +569,51 @@ sudo systemctl enable --now hvv-anzeiger
 
 ### Lokale Weboberfläche
 
-Für eine gut erreichbare lokale Ansicht gibt es eine Weboberfläche. Sie zeigt
+Die lokale Weboberfläche zeigt
 die Abfahrten in einer großen, displayähnlichen Ansicht, den Hardwarezustand
 des Raspberry Pi (CPU, RAM und freien SD-Speicher) sowie einen kontrollierten
-Button zum Neustart des Systems:
+Button zum Neustart des Systems.
 
-Wenn der Installer verwendet wurde, kann die Weboberfläche als Dienst gestartet
-und dauerhaft aktiviert werden:
+Für den direkten Zugriff im selben LAN die vom Installer ausgegebene Adresse
+öffnen:
 
-```bash
-sudo systemctl enable --now hvv-anzeiger-web
+```text
+https://<raspberry-pi-ip>:8080/
 ```
 
-Für den Zugriff von einem anderen Rechner den lokalen SSH-Tunnel verwenden:
+Falls der Router dem Raspberry Pi später eine andere Adresse gibt, aktualisiert
+`configure-web.sh` das Zertifikat bei Bedarf:
+
+```bash
+cd /opt/hvv-anzeiger
+./configure-web.sh
+sudo systemctl restart hvv-anzeiger-web
+```
+
+Alternativ kann weiterhin ein lokaler SSH-Tunnel verwendet werden:
 
 ```bash
 ssh -L 8080:127.0.0.1:8080 <benutzer>@<raspberry-pi-ip>
 ```
 
-Danach auf dem eigenen Rechner `http://127.0.0.1:8080` öffnen.
+Danach auf dem eigenen Rechner `https://127.0.0.1:8080` öffnen und die
+Zertifikatswarnung bestätigen.
 
 Für einen Kiosk- oder Zweitbildschirm ohne Einstellungen, Hardwarestatus und
 Neustartaktion gibt es den geschützten reinen Displaymodus:
 
 ```text
-http://127.0.0.1:8080/display
+https://<raspberry-pi-ip>:8080/display
 ```
 
 Die URL bleibt beim automatischen Neuladen erhalten. Über „Standardansicht“
 kommt man jederzeit zurück zum normalen Dashboard; auch dieser Wechsel bleibt
-durch die Web-Anmeldung geschützt.
+durch die Web-Anmeldung geschützt. Der reine Displaymodus zeigt die absolute
+Abfahrtszeit wie das Hardware-Display; die Countdown-Einstellung betrifft das
+Dashboard und die konfigurierbare Darstellung des Hardware-Displays.
 
-Der mitgelieferte Webdienst ist auf den Raspberry Pi selbst gebunden und wird
-durch eine Anmeldung geschützt. Die Standarddaten sind:
+Der Webdienst läuft als lokaler Dienst auf dem Raspberry Pi und ist durch eine
+Anmeldung geschützt. Die Standarddaten sind:
 
 ```text
 Benutzername: hvv-anzeiger
@@ -580,16 +624,8 @@ Beim ersten Aufruf fragt der Browser nach den Zugangsdaten. Ändere das
 Standardpasswort anschließend in der Einstellungsseite unter „Weboberfläche“.
 Gespeichert wird nur ein gesalzener Passwort-Hash mit restriktiven Dateirechten.
 
-Soll die Oberfläche von einem anderen Rechner aus sicher geöffnet werden, ist
-ein SSH-Tunnel die einfachste Variante:
-
-```bash
-ssh -L 8080:127.0.0.1:8080 <benutzer>@<raspberry-pi-ip>
-```
-
-Danach auf dem eigenen Rechner ebenfalls `http://127.0.0.1:8080` öffnen. Das
-ist die lokale Tunnel-Adresse. Für direkten LAN-Zugriff müssen Passwortschutz
-und TLS wie im folgenden Abschnitt gemeinsam konfiguriert werden.
+<details>
+<summary>Manuellen Webstart und TLS-Konfiguration anzeigen</summary>
 
 Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
 
@@ -597,10 +633,9 @@ Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
 .venv/bin/hvv-web --config config.json --cache var/stations.json
 ```
 
-Ohne weitere Optionen ist sie nur lokal auf dem Raspberry Pi erreichbar. Der
-installierte systemd-Dienst bindet deshalb ebenfalls nur an `127.0.0.1`.
-Für einen direkten Zugriff im LAN müssen Passwortschutz und TLS gemeinsam
-konfiguriert werden:
+Ohne weitere Optionen ist sie nur lokal auf dem Raspberry Pi erreichbar. Für
+den direkten Zugriff im LAN müssen Passwortschutz und TLS gemeinsam gesetzt
+werden:
 
 ```bash
 .venv/bin/hvv-web --host 0.0.0.0 --port 8080 \
@@ -623,11 +658,12 @@ Remote-Betrieb ausgeschlossen. Auch lokal sind alle schreibenden Formulare
 gegen Cross-Site-Requests geschützt.
 
 Das Standardpasswort ist nur für die erste Einrichtung gedacht. Wer es nicht
-ändert, kann die lokal gebundene Oberfläche mit den bekannten Standarddaten
-öffnen und damit auch Konfiguration, Geofox-Zugangsdaten und den Systemneustart
-auslösen. Für direkten Zugriff aus dem LAN müssen Passwortschutz und TLS
-gemeinsam konfiguriert werden; unverschlüsseltes Basic Auth über HTTP wird
-nicht unterstützt.
+ändert, kann die Oberfläche mit den bekannten Standarddaten öffnen und damit
+auch Konfiguration, Geofox-Zugangsdaten und den Systemneustart auslösen. Der
+Installer richtet deshalb TLS und Passwortschutz gemeinsam ein;
+unverschlüsseltes Basic Auth über HTTP wird nicht unterstützt.
+
+</details>
 
 Der Installer gibt `config.json` dem Dienstbenutzer `hvv-anzeiger` mit den
 Rechten `0640`, damit die Weboberfläche die validierte Datei atomar speichern
@@ -647,9 +683,10 @@ Nutzer kein verschachteltes JSON bearbeiten:
 
 ![V2.2: lokale Stations- und Routenkonfiguration](docs/web-stations.png)
 
-Die Schaltfläche „Geofox-Suche“ fragt passende Haltestellen-Vorschläge ab und
-übernimmt Name, Stadt und Geofox-ID nach der Auswahl. Die Vorschläge sind nicht
-vollständig oder garantiert korrekt. Im Zweifel gilt die
+Die Eingabe unter „Name“ fragt passende Geofox-Vorschläge ab und zeigt sie
+direkt darunter. Nach der Auswahl werden Name, Stadt und Geofox-ID übernommen;
+ein freies Anzeige-Kürzel mit 1 bis 3 Anfangsbuchstaben wird vorgeschlagen. Die
+Vorschläge sind nicht vollständig oder garantiert korrekt. Im Zweifel gilt die
 [offizielle Geofox-GTI-Dokumentation](https://gti.geofox.de/).
 
 Die Einstellungsseite enthält alle Werte aus `config.json` und macht sie als
@@ -684,17 +721,15 @@ Konfiguration mit denselben Regeln wie beim Programmstart validiert wurde.
 Für Haltestellen empfiehlt sich dieser Ablauf:
 
 1. „Haltestelle hinzufügen“ wählen oder eine vorhandene Karte öffnen.
-2. Name und Stadt eingeben und „Geofox-Suche“ ausführen.
-3. Einen passenden Treffer auswählen; Name, Stadt und Geofox-ID werden
-   übernommen.
-4. „Verfügbare Linien laden“ wählen und die gewünschten Verkehrsmittel
+2. Einen Namen eingeben und einen Geofox-Vorschlag direkt darunter auswählen.
+   Stadt und Geofox-ID werden übernommen; ein freies Anzeige-Kürzel wird
+   vorgeschlagen.
+3. „Verfügbare Linien laden“ wählen und die gewünschten Verkehrsmittel
    aktivieren.
-5. Für jede aktivierte Linie den Richtungs- oder Zielstationsfilter auswählen.
-6. Ein eindeutiges Kürzel mit 1 bis 3 Zeichen vergeben und speichern.
+4. Für jede aktivierte Linie den Richtungs- oder Zielstationsfilter auswählen.
+5. Das vorgeschlagene Kürzel prüfen oder anpassen und speichern.
 
-Die Geofox-Suche liefert nur Vorschläge. Sie garantiert weder Vollständigkeit
-noch Korrektheit; bei Zweifeln ist die [offizielle GTI-Dokumentation](https://gti.geofox.de/)
-maßgeblich. Die Geofox-Auswahl ist der reguläre Einrichtungsweg. Die manuelle
+Die Geofox-Auswahl ist der reguläre Einrichtungsweg. Die manuelle
 Routenbearbeitung bleibt nur als Legacy-/Fallback-Option für bestehende oder
 von Geofox nicht abgedeckte Konfigurationen verfügbar.
 
@@ -782,7 +817,7 @@ ohne eingebettete Zugangsdaten, Query-Parameter oder Fragment sein.
 | `display.bus_speed_hz` | `16000000` | SPI-Takt; größer als 0 |
 | `display.bgr` | `false` | bei vertauschtem Rot und Blau auf `true` setzen |
 | `display.show_station_label` | `true` | blaues Haltestellen-Kürzel in Display und Web anzeigen; bei mehreren Haltestellen ohne Kürzel nicht mehr direkt erkennbar |
-| `display.time_mode` | `countdown` | `countdown` für Minuten bis Abfahrt oder `departure_time` für die Uhrzeit |
+| `display.time_mode` | `countdown` | `countdown` für Minuten bis Abfahrt oder `departure_time` für die Uhrzeit in Hardware-Display und Dashboard; `/display` zeigt immer die absolute Abfahrtszeit |
 | `display.minute_unit` | `min` | Countdown-Einheit `min`, `m` oder `none`; bei `departure_time` nicht relevant |
 
 Für ein um 180 Grad gedrehtes Display üblicherweise `display.rotate` auf `2`
@@ -820,7 +855,7 @@ abgeschaltet.
 | `stations[].name` | Pflichtfeld | Geofox-Haltestellenname |
 | `stations[].city` | `"Hamburg"` | Stadt für die Haltestellensuche |
 | `stations[].id` | kein Default | optionale eindeutige Geofox-ID |
-| `stations[].label` | erster Buchstabe des Namens | eindeutiges Kürzel mit 1 bis 3 Zeichen |
+| `stations[].label` | erste freie 1–3 Buchstaben des Namens | eindeutiges Anzeige-Kürzel |
 | `stations[].routes` | Pflichtfeld | mindestens eine erlaubte Linie-Ziel-Kombination |
 | `stations[].routes[].line` | Pflichtfeld | Linienbezeichnung, zum Beispiel `"21"` |
 | `stations[].routes[].destination` | Pflichtfeld, außer bei `line_id` | erwartetes Fahrtziel oder gespeicherter Filtername |
@@ -987,9 +1022,11 @@ cd ~/hvv-anzeiger
 
 Das Skript prüft, dass es als normaler Benutzer in einem sauberen `main`-
 Checkout ausgeführt wird, lädt die aktuelle Version per Fast-Forward und
-startet anschließend `install.sh`. Dadurch werden lokale Änderungen nicht
-überschrieben. Das Skript führt bewusst kein `sudo` selbst aus; der Installer
-fragt die benötigten Rechte bei Bedarf über `sudo` ab.
+startet anschließend `install.sh`. Dabei wird auch `configure-web.sh` ausgeführt,
+damit die aktuelle lokale IPv4-Adresse und das passende TLS-Zertifikat verwendet
+werden. Dadurch werden lokale Änderungen nicht überschrieben. Das Skript führt
+bewusst kein `sudo` selbst aus; die beiden Einrichtungsskripte fragen die
+benötigten Rechte bei Bedarf über `sudo` ab.
 
 Die einzelnen Schritte sind weiterhin auch manuell möglich:
 
@@ -1027,9 +1064,10 @@ Ein normales Anwendungsupdate benötigt keinen Neustart des Raspberry Pi. Die
 laufenden Dienste werden vom Installer aktualisiert und neu gestartet.
 Vorhandene `config.json`, Zugangsdaten und die Webkonfiguration bleiben
 erhalten; neue Defaults überschreiben eine bestehende Konfiguration nicht.
-Öffne danach die Weboberfläche auf dem Raspberry Pi unter
-`http://127.0.0.1:8080`. Für einen anderen Rechner zuerst einen SSH-Tunnel
-aufbauen; dort bleibt die Adresse ebenfalls `http://127.0.0.1:8080`.
+Öffne danach die Weboberfläche unter der vom Installer ausgegebenen Adresse
+`https://<raspberry-pi-ip>:8080/`. Falls sich die IP geändert hat, zuerst
+`cd /opt/hvv-anzeiger && ./configure-web.sh` und danach
+`sudo systemctl restart hvv-anzeiger-web` ausführen.
 
 Schlägt `git pull` wegen eigener lokaler Änderungen fehl, diese Änderungen nicht
 ungeprüft überschreiben. Zuerst sichern oder in Git committen. Der Installer
@@ -1180,7 +1218,7 @@ Prüfungen ausführen:
 ruff check .
 coverage run -m unittest discover -s tests -v
 coverage report
-bash -n install.sh configure-credentials.sh diagnose.sh
+bash -n install.sh update.sh configure-credentials.sh configure-web.sh diagnose.sh
 ```
 
 ### Automatische Qualitätsprüfung

@@ -170,6 +170,14 @@ class ProjectArtifactTest(unittest.TestCase):
         credentials = ROOT / "configure-credentials.sh"
         self.assertTrue(credentials.stat().st_mode & stat.S_IXUSR)
         self.assertTrue(os.access(credentials, os.X_OK))
+        web_configuration = ROOT / "configure-web.sh"
+        self.assertTrue(web_configuration.stat().st_mode & stat.S_IXUSR)
+        self.assertTrue(os.access(web_configuration, os.X_OK))
+        web_configuration_text = web_configuration.read_text(encoding="utf-8")
+        self.assertIn("ip -4 route get 1.1.1.1", web_configuration_text)
+        self.assertIn("hostname -I", web_configuration_text)
+        self.assertIn("--tls-certfile", web_configuration_text)
+        self.assertIn("https://%s:8080/", web_configuration_text)
         smoke_test = ROOT / "tests" / "install-smoke.sh"
         self.assertTrue(smoke_test.stat().st_mode & stat.S_IXUSR)
         self.assertTrue(os.access(smoke_test, os.X_OK))
@@ -192,13 +200,14 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("INSTALL_SUCCEEDED", installer_text)
         self.assertIn('sudo install -m 0755 \\', installer_text)
         self.assertIn('"$SOURCE_DIR/configure-credentials.sh"', installer_text)
-        self.assertIn('WEB_ENV_FILE="${APP_DIR}/var/web.env"', installer_text)
-        self.assertIn("hash_web_password(\"hvv-anzeiger\")", installer_text)
+        self.assertIn('"$SOURCE_DIR/configure-web.sh"', installer_text)
+        self.assertIn("openssl", installer_text)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
             encoding="utf-8"
         )
         self.assertIn("tests/install-smoke.sh", workflow)
         update_script = (ROOT / "update.sh").read_text(encoding="utf-8")
+        self.assertIn('"$SCRIPT_DIR/configure-web.sh"', update_script)
         self.assertIn('systemctl daemon-reload', update_script)
         self.assertIn('systemctl restart "$WEB_SERVICE"', update_script)
         self.assertIn('systemctl is-active --quiet "$WEB_SERVICE"', update_script)
@@ -230,7 +239,9 @@ class ProjectArtifactTest(unittest.TestCase):
         web_service = (ROOT / "systemd" / "hvv-anzeiger-web.service").read_text(
             encoding="utf-8"
         )
-        self.assertIn("--host 127.0.0.1", web_service)
+        self.assertIn("--host 0.0.0.0", web_service)
+        self.assertIn("--tls-certfile /etc/hvv-anzeiger/web.crt", web_service)
+        self.assertIn("--tls-keyfile /etc/hvv-anzeiger/web.key", web_service)
         self.assertIn("EnvironmentFile=-/opt/hvv-anzeiger/var/web.env", web_service)
         self.assertIn(
             "Environment=HVV_WEB_ENV_FILE=/opt/hvv-anzeiger/var/web.env",
