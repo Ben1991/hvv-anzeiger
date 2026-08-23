@@ -33,6 +33,22 @@ Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
 
 ## Release Notes
 
+### Release V2.2.2 – einfachere Stations- und Linienauswahl
+
+V2.2.2 macht die Einrichtung von Haltestellen in der Weboberfläche klarer und
+schneller:
+
+- eine sichtbare Schrittfolge führt von der Geofox-Haltestellensuche über das
+  Laden der Linien bis zum Speichern
+- Stadt, Geofox-ID und ein freies Anzeige-Kürzel werden nach der Auswahl eines
+  Geofox-Treffers automatisch übernommen
+- Linien werden nach Verkehrsmittel gruppiert und können über ein Suchfeld
+  gefiltert werden; die Auswahl zeigt jederzeit „x von y ausgewählt“
+- die Statusanzeige zeigt den nächsten sinnvollen Schritt und blendet leere
+  Suchfelder aus
+- Browser-Smoke-Tests prüfen zusätzlich das Laden, Gruppieren und Filtern der
+  Linienauswahl
+
 ### Release V2.2.1 – überarbeitete V2.2-Release
 
 V2.2.1 veröffentlicht die überarbeitete V2.2-Implementierung mit einem
@@ -724,10 +740,19 @@ Für Haltestellen empfiehlt sich dieser Ablauf:
 2. Einen Namen eingeben und einen Geofox-Vorschlag direkt darunter auswählen.
    Stadt und Geofox-ID werden übernommen; ein freies Anzeige-Kürzel wird
    vorgeschlagen.
-3. „Verfügbare Linien laden“ wählen und die gewünschten Verkehrsmittel
-   aktivieren.
-4. Für jede aktivierte Linie den Richtungs- oder Zielstationsfilter auswählen.
-5. Das vorgeschlagene Kürzel prüfen oder anpassen und speichern.
+3. „Verfügbare Linien laden“ wählen. Die Linien sind nach Verkehrsmittel
+   gruppiert; mit dem Suchfeld lässt sich eine konkrete Linie schnell finden.
+4. Gewünschte Linien anklicken. Die markierten Karten zeigen die Auswahl an;
+   die Zahl „x von y ausgewählt“ hilft bei der Kontrolle.
+5. Für jede aktivierte Linie optional „Richtung“ oder „Zu Zielstation …“
+   festlegen. „Richtung“ lässt auch Kurzläufer zu, das Ziel ist strenger.
+6. Das vorgeschlagene Kürzel prüfen oder anpassen und unten „Speichern und
+   prüfen“ wählen.
+
+Die Oberfläche zeigt den nächsten Schritt direkt an: „1 · Haltestelle
+auswählen“, „2 · Linien laden“, „3 · Linien auswählen“ oder „4 · Richtung/Ziel
+prüfen“. Eine Richtung oder Zielstation ist optional; ohne Filter werden alle
+Fahrten der ausgewählten Linie berücksichtigt.
 
 Die Geofox-Auswahl ist der reguläre Einrichtungsweg. Die manuelle
 Routenbearbeitung bleibt nur als Legacy-/Fallback-Option für bestehende oder
@@ -1047,7 +1072,7 @@ git checkout <versions-tag>
 ./install.sh
 ```
 
-Beispiel für eine veröffentlichte Version: `git checkout V2.2`. Ein
+Beispiel für eine veröffentlichte Version: `git checkout V2.2.2`. Ein
 Versions-Tag sollte nur verwendet werden, wenn er im Repository tatsächlich
 vorhanden ist.
 
