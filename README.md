@@ -9,10 +9,14 @@ Eine kompakte Abfahrtsanzeige für einen Raspberry Pi Zero 2 W oder ein
 kompatibles Raspberry-Pi-Modell mit 40-Pin-GPIO und ein
 2,2-Zoll-ILI9341-SPI-Display. Sie läuft ohne grafische Oberfläche auf
 Raspberry Pi OS Lite, lädt alle 15 Sekunden aktuelle Geofox-Prognosen, filtert
-die gewünschten Busverbindungen und sortiert sie haltestellenübergreifend nach
+die gewünschten Verbindungen und sortiert sie haltestellenübergreifend nach
 der erwarteten Abfahrtszeit.
 
-![Beispielansicht der HVV-Abfahrtsanzeige](docs/hvv-anzeiger-preview.png)
+![Beispielhafte Abfahrten ab Jungfernstieg Richtung Hauptbahnhof mit Bus, U-Bahn und S-Bahn](docs/hvv-anzeiger-preview.png)
+
+Das Preview zeigt beispielhafte Abfahrten ab Jungfernstieg in Richtung
+Hauptbahnhof. Bus, U-Bahn und S-Bahn werden dabei mit ihren unterschiedlichen
+Linienfarben und -formen dargestellt; die angezeigten Zeiten sind illustrativ.
 
 ## Praxisbeispiel
 
