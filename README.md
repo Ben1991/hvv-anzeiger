@@ -33,6 +33,28 @@ Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
 
 ## Release Notes
 
+### Release V2.2.1 – überarbeitete V2.2-Release
+
+V2.2.1 veröffentlicht die überarbeitete V2.2-Implementierung mit einem
+zusätzlichen End-to-End- und Responsive-Testlauf:
+
+- Geofox-gestützte Haltestellen- und Linienauswahl für Bus, U-Bahn, S-Bahn,
+  AKN, Regionalverkehr und Fähre
+- Richtungs- und Zielstationsfilter bleiben beim erneuten Laden der Linien
+  erhalten
+- Geofox-Anfragen werden global serialisiert; HTTP-400-Fehlercodes aus
+  Response-Bodies werden verständlich ausgewertet
+- Speichermeldungen erscheinen zusätzlich direkt am betroffenen Feld bzw. an
+  der Liniengruppe
+- responsiver, geschützter `/display`-Modus und mobile Stations-/
+  Linienkonfiguration ohne horizontalen Overflow
+- Browser-Smoke- und visuelle Regressionstests prüfen Dashboard, Displaymodus,
+  Settings, Filterpersistenz und das 390-Pixel-Mobile-Layout
+- `web.py` ist in der Coverage-Messung enthalten; die CI läuft mit Python 3.11
+- README-Screenshots wurden aus der geprüften Weboberfläche neu erzeugt,
+  einschließlich eines Displaybeispiels Jungfernstieg Richtung Hauptbahnhof
+- alle GitHub-CI-Gates einschließlich Shell-Installer und CodeQL sind grün
+
 ### Version 0.2.2 / V2.2
 
 - Stationsverwaltung über die Weboberfläche für alle von Geofox gemeldeten
