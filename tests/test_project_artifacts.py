@@ -230,7 +230,7 @@ class ProjectArtifactTest(unittest.TestCase):
         web_service = (ROOT / "systemd" / "hvv-anzeiger-web.service").read_text(
             encoding="utf-8"
         )
-        self.assertIn("--host 0.0.0.0", web_service)
+        self.assertIn("--host 127.0.0.1", web_service)
         self.assertIn("EnvironmentFile=-/opt/hvv-anzeiger/var/web.env", web_service)
         self.assertIn(
             "Environment=HVV_WEB_ENV_FILE=/opt/hvv-anzeiger/var/web.env",

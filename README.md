@@ -29,9 +29,28 @@ Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
 
 ## Release Notes
 
+### Version 0.2.2 / V2.2
+
+- Stationsverwaltung über die Weboberfläche für alle von Geofox gemeldeten
+  Verkehrsmittel, einschließlich Bus, U-Bahn, S-Bahn, AKN, Regionalverkehr
+  und Fähre
+- sichere Linienauswahl mit konfigurierbarem Richtungs- oder
+  Zielstationsfilter; bestehende manuelle Bus-Konfigurationen bleiben
+  kompatibel
+- einheitliche, verkehrsmittelabhängige Linienfarben und -formen in Display,
+  Web-Dashboard und geschütztem Displaymodus
+- konfigurierbare Darstellung mit Countdown oder absoluter Abfahrtszeit,
+  wählbarer Countdown-Einheit und optional ausgeblendeten Haltestellenkürzeln
+- geschützter, responsiver `/display`-Modus für Kiosk- und Zweitbildschirme
+- zusätzliche Sicherheitskorrekturen für Geofox-Anfrageserialisierung und
+  nicht-lokale Webzugriffe
+- Code of Conduct sowie strukturierte Bug- und Feature-Issue-Templates für
+  Beiträge zum Projekt
+
 ### Version 0.2.1 / V2.1
 
-- Weboberfläche im lokalen Netzwerk unter `http://<raspberry-pi-ip>:8080`
+- lokal gebundene Weboberfläche unter `http://127.0.0.1:8080`; Zugriff von
+  anderen Rechnern per SSH-Tunnel oder mit eigener TLS-Konfiguration
 - automatischer Start der Weboberfläche bei Installation und nach jedem Reboot
 - Standard-Anmeldung `hvv-anzeiger` / `hvv-anzeiger` für die Ersteinrichtung
 - Webpasswort in der Einstellungsseite änderbar; gespeichert wird nur ein
@@ -91,6 +110,10 @@ V1 war die erste veröffentlichte Version des HVV-Anzeigers. Sie wurde am
 - Linie, Fahrtziel, absolute Uhrzeit und verbleibende Minuten
 - gemeinsame chronologische Sortierung über mehrere Haltestellen
 - frei konfigurierbare Haltestellen, Linien, Ziele und sichtbare Kürzel
+- Bus-, U-Bahn-, S-Bahn-, AKN-, Regional- und Fährverbindungen mit passender
+  Linienkennzeichnung
+- wahlweise Countdown oder absolute Abfahrtszeit sowie optional ausgeblendete
+  Haltestellenkürzel
 - Geofox-Echtzeitprognosen einschließlich Verspätungen und Ausfällen
 - Aktualisierung im Normalbetrieb alle 15 Sekunden
 - sichtbare Hinweise bei fehlendem WLAN, veralteten Daten oder noch nicht
@@ -404,7 +427,7 @@ sudo systemctl enable --now hvv-anzeiger-web
 
 ### Weboberfläche: Verbindung abgelehnt
 
-Wenn `http://<raspberry-pi-ip>:8080` mit „Verbindung abgelehnt“ antwortet,
+Wenn `http://127.0.0.1:8080` mit „Verbindung abgelehnt“ antwortet,
 läuft der Webdienst meist noch nicht oder eine aktualisierte systemd-Unit ist
 noch nicht geladen. Die folgenden Befehle laden die Unit neu, aktivieren den
 Autostart und starten den Dienst mit der aktuellen Konfiguration:
@@ -418,7 +441,7 @@ sudo systemctl restart hvv-anzeiger-web
 sudo systemctl status hvv-anzeiger-web --no-pager
 ```
 
-Die Ausgabe von `ss` sollte eine Bindung an `0.0.0.0:8080` zeigen. Fehlt sie
+Die Ausgabe von `ss` sollte eine Bindung an `127.0.0.1:8080` zeigen. Fehlt sie
 oder bleibt der Dienst in `failed`, zeigt das Journal die Ursache:
 
 ```bash
@@ -426,8 +449,8 @@ sudo journalctl -u hvv-anzeiger-web -n 80 --no-pager
 ```
 
 Nach einem Update führt `update.sh` das Neuladen und den Neustart automatisch
-durch. Die Adresse muss die tatsächliche Raspberry-Pi-IP enthalten, zum
-Beispiel `http://192.168.178.51:8080`.
+durch. Auf dem Raspberry Pi ist die Adresse `http://127.0.0.1:8080`; für einen
+anderen Rechner zuerst einen SSH-Tunnel aufbauen.
 
 Wenn die Oberfläche erreichbar ist, das Speichern aber mit `Read-only file
 system` für eine Datei wie `.config.json.…` fehlschlägt, läuft noch eine alte
@@ -500,26 +523,27 @@ und dauerhaft aktiviert werden:
 sudo systemctl enable --now hvv-anzeiger-web
 ```
 
-Für den Zugriff von einem Rechner im selben lokalen Netzwerk die IP-Adresse des
-Raspberry Pi verwenden:
+Für den Zugriff von einem anderen Rechner den lokalen SSH-Tunnel verwenden:
 
-```text
-http://<raspberry-pi-ip>:8080
+```bash
+ssh -L 8080:127.0.0.1:8080 <benutzer>@<raspberry-pi-ip>
 ```
+
+Danach auf dem eigenen Rechner `http://127.0.0.1:8080` öffnen.
 
 Für einen Kiosk- oder Zweitbildschirm ohne Einstellungen, Hardwarestatus und
 Neustartaktion gibt es den geschützten reinen Displaymodus:
 
 ```text
-http://<raspberry-pi-ip>:8080/display
+http://127.0.0.1:8080/display
 ```
 
 Die URL bleibt beim automatischen Neuladen erhalten. Über „Standardansicht“
 kommt man jederzeit zurück zum normalen Dashboard; auch dieser Wechsel bleibt
 durch die Web-Anmeldung geschützt.
 
-Der mitgelieferte Webdienst ist dafür bereits auf das lokale Netzwerk gebunden
-und wird durch eine Anmeldung geschützt. Die Standarddaten sind:
+Der mitgelieferte Webdienst ist auf den Raspberry Pi selbst gebunden und wird
+durch eine Anmeldung geschützt. Die Standarddaten sind:
 
 ```text
 Benutzername: hvv-anzeiger
@@ -538,8 +562,8 @@ ssh -L 8080:127.0.0.1:8080 <benutzer>@<raspberry-pi-ip>
 ```
 
 Danach auf dem eigenen Rechner ebenfalls `http://127.0.0.1:8080` öffnen. Das
-ist nur die lokale Tunnel-Adresse; für den direkten Zugriff im LAN die
-Raspberry-Pi-IP wie oben verwenden.
+ist die lokale Tunnel-Adresse. Für direkten LAN-Zugriff müssen Passwortschutz
+und TLS wie im folgenden Abschnitt gemeinsam konfiguriert werden.
 
 Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
 
@@ -547,25 +571,37 @@ Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
 .venv/bin/hvv-web --config config.json --cache var/stations.json
 ```
 
-Ohne weitere Optionen ist sie nur lokal auf dem Raspberry Pi erreichbar. Mit
-`--host 0.0.0.0` kann sie im lokalen Netz unter
-`http://<raspberry-pi-ip>:8080` freigegeben werden. Dafür muss zusätzlich ein
-Passwort-Hash über `HVV_WEB_PASSWORD_HASH` in `/opt/hvv-anzeiger/var/web.env`
-gesetzt werden. Der Installer erzeugt ihn automatisch:
+Ohne weitere Optionen ist sie nur lokal auf dem Raspberry Pi erreichbar. Der
+installierte systemd-Dienst bindet deshalb ebenfalls nur an `127.0.0.1`.
+Für einen direkten Zugriff im LAN müssen Passwortschutz und TLS gemeinsam
+konfiguriert werden:
+
+```bash
+.venv/bin/hvv-web --host 0.0.0.0 --port 8080 \
+  --tls-certfile /etc/hvv-anzeiger/web.crt \
+  --tls-keyfile /etc/hvv-anzeiger/web.key
+```
+
+Zusätzlich muss ein Passwort-Hash über `HVV_WEB_PASSWORD_HASH` in
+`/opt/hvv-anzeiger/var/web.env` gesetzt werden. Der Installer erzeugt ihn
+automatisch:
 
 ```text
 HVV_WEB_PASSWORD_HASH=...
 ```
 
-Die Oberfläche akzeptiert das Passwort als Browser-Anmeldung. Ohne Passwort-Hash startet sie bei einer
-nicht-lokalen Bind-Adresse nicht. Auch lokal sind alle schreibenden Formulare gegen
-Cross-Site-Requests geschützt.
+Die Oberfläche akzeptiert das Passwort als Browser-Anmeldung. Ohne
+Passwort-Hash oder TLS-Zertifikat startet sie bei einer nicht-lokalen
+Bind-Adresse nicht. Unverschlüsseltes Basic Auth über HTTP ist damit für den
+Remote-Betrieb ausgeschlossen. Auch lokal sind alle schreibenden Formulare
+gegen Cross-Site-Requests geschützt.
 
 Das Standardpasswort ist nur für die erste Einrichtung gedacht. Wer es nicht
-ändert, kann die Oberfläche im lokalen Netzwerk mit den bekannten Standarddaten
+ändert, kann die lokal gebundene Oberfläche mit den bekannten Standarddaten
 öffnen und damit auch Konfiguration, Geofox-Zugangsdaten und den Systemneustart
-auslösen. Für ein vertrauenswürdiges Heimnetz ist das eine bewusste, aber
-reduzierte Sicherheitsstufe.
+auslösen. Für direkten Zugriff aus dem LAN müssen Passwortschutz und TLS
+gemeinsam konfiguriert werden; unverschlüsseltes Basic Auth über HTTP wird
+nicht unterstützt.
 
 Der Installer gibt `config.json` dem Dienstbenutzer `hvv-anzeiger` mit den
 Rechten `0640`, damit die Weboberfläche die validierte Datei atomar speichern
@@ -593,7 +629,8 @@ vollständig oder garantiert korrekt. Im Zweifel gilt die
 Die Einstellungsseite enthält alle Werte aus `config.json` und macht sie als
 verständliche Eingabefelder editierbar; jeder Wert hat einen eigenen
 „Auf Standard zurücksetzen“-Button. Sie erklärt die Bereiche `api` (Geofox-Verbindung und
-Abfrageverhalten), `display` (SPI, GPIO, Drehung und Farben),
+Abfrageverhalten), `display` (SPI, GPIO, Drehung, Farben, Zeitdarstellung und
+Haltestellenkürzel),
 `night_shutdown` (Nachtzeitraum) und `stations` (Haltestellen, Kürzel, Linien
 und Ziele). Vor dem Speichern wird die gesamte Konfiguration mit denselben
 Regeln wie beim Displaystart geprüft. Zugangsdaten werden nicht in
@@ -610,7 +647,9 @@ Die Einstellungsseite bildet die vollständige Konfiguration ab:
   Rot-/Blau-Farbkanäle.
 - `night_shutdown`: Aktivierung sowie Beginn und Ende des Nachtfensters.
 - `stations`: Haltestellenkarten mit Name, Stadt, optionaler Geofox-ID,
-  Anzeige-Kürzel und beliebig vielen Linien-Ziel-Kombinationen.
+  Anzeige-Kürzel und beliebig vielen Linien-Ziel-Kombinationen. Die
+  Linienauswahl kann zusätzlich Verkehrsmittelkennung und einen Richtungs- oder
+  Zielstationsfilter speichern.
 
 Jeder Wert hat eine kurze Erklärung und einen Button „Auf Standard
 zurücksetzen“. Änderungen werden erst gespeichert, nachdem die vollständige
@@ -622,12 +661,16 @@ Für Haltestellen empfiehlt sich dieser Ablauf:
 2. Name und Stadt eingeben und „Geofox-Suche“ ausführen.
 3. Einen passenden Treffer auswählen; Name, Stadt und Geofox-ID werden
    übernommen.
-4. Mit „Route hinzufügen“ die gewünschten Linien und Ziele ergänzen.
-5. Ein eindeutiges Kürzel mit 1 bis 3 Zeichen vergeben und speichern.
+4. „Verfügbare Linien laden“ wählen und die gewünschten Verkehrsmittel
+   aktivieren.
+5. Für jede aktivierte Linie den Richtungs- oder Zielstationsfilter auswählen.
+6. Ein eindeutiges Kürzel mit 1 bis 3 Zeichen vergeben und speichern.
 
 Die Geofox-Suche liefert nur Vorschläge. Sie garantiert weder Vollständigkeit
 noch Korrektheit; bei Zweifeln ist die [offizielle GTI-Dokumentation](https://gti.geofox.de/)
-maßgeblich. Eine manuelle Eingabe bleibt jederzeit möglich.
+maßgeblich. Die Geofox-Auswahl ist der reguläre Einrichtungsweg. Die manuelle
+Routenbearbeitung bleibt nur als Legacy-/Fallback-Option für bestehende oder
+von Geofox nicht abgedeckte Konfigurationen verfügbar.
 
 Für einen dauerhaften Start kann die mitgelieferte Unit verwendet werden:
 
@@ -754,7 +797,11 @@ abgeschaltet.
 | `stations[].label` | erster Buchstabe des Namens | eindeutiges Kürzel mit 1 bis 3 Zeichen |
 | `stations[].routes` | Pflichtfeld | mindestens eine erlaubte Linie-Ziel-Kombination |
 | `stations[].routes[].line` | Pflichtfeld | Linienbezeichnung, zum Beispiel `"21"` |
-| `stations[].routes[].destination` | Pflichtfeld | erwartetes Fahrtziel |
+| `stations[].routes[].destination` | Pflichtfeld, außer bei `line_id` | erwartetes Fahrtziel oder gespeicherter Filtername |
+| `stations[].routes[].line_id` | optional | Geofox-Linienkennung für multimodale Linien, zum Beispiel `"line:U2"` |
+| `stations[].routes[].product` | optional | von Geofox gelieferte Verkehrsart, zum Beispiel `"UBAHN"` |
+| `stations[].routes[].filter_mode` | optional | `direction` für eine Richtung oder `destination` für eine Zielstation |
+| `stations[].routes[].filter_station_ids` | optional | Geofox-IDs der erlaubten Richtungs- oder Zielstationen |
 
 Beispiel:
 
@@ -937,8 +984,9 @@ git checkout <versions-tag>
 ./install.sh
 ```
 
-Beispiel: `git checkout v1.2.0`. Ein Versions-Tag sollte nur verwendet werden,
-wenn er im Repository tatsächlich vorhanden ist.
+Beispiel für eine veröffentlichte Version: `git checkout V2.2`. Ein
+Versions-Tag sollte nur verwendet werden, wenn er im Repository tatsächlich
+vorhanden ist.
 
 Anschließend:
 
@@ -953,9 +1001,9 @@ Ein normales Anwendungsupdate benötigt keinen Neustart des Raspberry Pi. Die
 laufenden Dienste werden vom Installer aktualisiert und neu gestartet.
 Vorhandene `config.json`, Zugangsdaten und die Webkonfiguration bleiben
 erhalten; neue Defaults überschreiben eine bestehende Konfiguration nicht.
-Öffne danach die Weboberfläche im lokalen Netzwerk unter
-`http://<raspberry-pi-ip>:8080`. Falls du stattdessen einen SSH-Tunnel
-verwendest, ist `http://127.0.0.1:8080` die Adresse auf dem eigenen Rechner.
+Öffne danach die Weboberfläche auf dem Raspberry Pi unter
+`http://127.0.0.1:8080`. Für einen anderen Rechner zuerst einen SSH-Tunnel
+aufbauen; dort bleibt die Adresse ebenfalls `http://127.0.0.1:8080`.
 
 Schlägt `git pull` wegen eigener lokaler Änderungen fehl, diese Änderungen nicht
 ungeprüft überschreiben. Zuerst sichern oder in Git committen. Der Installer

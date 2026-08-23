@@ -1,7 +1,9 @@
 import base64
 import hashlib
 import hmac
+import io
 import json
+import threading
 import unittest
 import urllib.error
 from datetime import datetime
@@ -50,6 +52,29 @@ class GeofoxClientTest(unittest.TestCase):
         ).decode("ascii")
         self.assertEqual(client.signature(body), expected)
         self.assertIn("Straße".encode(), body)
+
+    def test_http_400_body_return_code_is_exposed_as_geofox_error(self) -> None:
+        error = urllib.error.HTTPError(
+            "https://example.test/find",
+            400,
+            "Bad Request",
+            {},
+            io.BytesIO(b'{"returnCode":"DEST_NOT_FOUND"}'),
+        )
+        client = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",  # noqa: S106
+            min_request_interval=0,
+            urlopen=lambda *_args, **_kwargs: (_ for _ in ()).throw(error),
+        )
+
+        with self.assertRaises(GeofoxError) as raised:
+            client._post("find", {"version": 63})
+
+        self.assertEqual(str(raised.exception), "Zielstation wurde nicht gefunden.")
+        self.assertEqual(raised.exception.return_code, "DEST_NOT_FOUND")
+        self.assertEqual(raised.exception.http_status, 400)
 
     def test_route_matching_handles_spelling_variants(self) -> None:
         routes = (Route("384", "Elbgaustrasse"), Route("U2", ""))
@@ -420,6 +445,66 @@ class GeofoxClientTest(unittest.TestCase):
             second.find_stations("Test", "Hamburg")
         sleep.assert_called_once()
         self.assertAlmostEqual(sleep.call_args.args[0], 0.85, places=2)
+
+    def test_requests_are_serialized_across_client_instances(self) -> None:
+        response = FakeResponse(b'{"returnCode":"OK","results":[]}')
+        first_entered = threading.Event()
+        second_entered = threading.Event()
+        release_first = threading.Event()
+        state_lock = threading.Lock()
+        active_requests = 0
+        maximum_parallel_requests = 0
+
+        def urlopen(_request, **_kwargs):
+            nonlocal active_requests, maximum_parallel_requests
+            with state_lock:
+                active_requests += 1
+                maximum_parallel_requests = max(
+                    maximum_parallel_requests, active_requests
+                )
+                is_first = not first_entered.is_set()
+                if is_first:
+                    first_entered.set()
+                else:
+                    second_entered.set()
+            if is_first:
+                self.assertTrue(release_first.wait(2))
+            with state_lock:
+                active_requests -= 1
+            return response
+
+        clients = [
+            GeofoxClient(
+                "https://example.test",
+                "user",
+                "secret",
+                min_request_interval=0,
+                urlopen=urlopen,
+            )
+            for _ in range(2)
+        ]
+        errors: list[BaseException] = []
+
+        def request(client: GeofoxClient) -> None:
+            try:
+                client.find_stations("Test", "Hamburg")
+            except BaseException as exc:  # pragma: no cover - assertion helper
+                errors.append(exc)
+
+        first = threading.Thread(target=request, args=(clients[0],))
+        second = threading.Thread(target=request, args=(clients[1],))
+        first.start()
+        self.assertTrue(first_entered.wait(2))
+        second.start()
+        self.assertFalse(second_entered.wait(0.1))
+        self.assertEqual(maximum_parallel_requests, 1)
+        release_first.set()
+        first.join(2)
+        second.join(2)
+
+        self.assertFalse(first.is_alive() or second.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(maximum_parallel_requests, 1)
 
     def test_departures_are_filtered_and_sorted(self) -> None:
         response = FakeResponse(

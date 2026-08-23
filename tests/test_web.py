@@ -18,6 +18,7 @@ from hvv_display.models import Departure
 from hvv_display.web import (
     WebApplication,
     _departure_payload,
+    _settings_field_errors,
     hardware_status,
     hash_web_password,
     load_credentials,
@@ -111,6 +112,17 @@ class WebApplicationTest(unittest.TestCase):
                 credentials=str(self.credentials),
             )
 
+    def test_remote_access_requires_tls(self) -> None:
+        from hvv_display.web import run
+
+        with self.assertRaisesRegex(ValueError, "TLS"):
+            run(
+                host="0.0.0.0",  # noqa: S104
+                config=str(self.config),
+                credentials=str(self.credentials),
+                access_token=hash_web_password("test-web-password"),
+            )
+
     def test_remote_access_accepts_browser_basic_auth_with_web_token(self) -> None:
         from hvv_display.web import WebApplication
 
@@ -135,6 +147,29 @@ class WebApplicationTest(unittest.TestCase):
             self.assertIn(section, settings)
         self.assertIn("Bedienbare Felder", settings)
         self.assertIn("Sekunden zwischen Abfragen", settings)
+
+    def test_settings_renders_errors_next_to_the_affected_field_and_station(
+        self,
+    ) -> None:
+        field_errors = _settings_field_errors(
+            "Haltestelle 1: Filter für Linie U2 ist ungültig"
+        )
+        settings = self.app.settings(
+            "Nicht gespeichert",
+            field_errors={
+                **field_errors,
+                "display.time_mode": "Ungültiger Wert",
+            },
+        ).decode("utf-8")
+
+        self.assertIn(
+            'data-field-error="display.time_mode">Ungültiger Wert</span>', settings
+        )
+        self.assertIn(
+            'data-field-error="stations[0].routes">'
+            "Haltestelle 1: Filter für Linie U2 ist ungültig</p>",
+            settings,
+        )
 
     def test_settings_exposes_one_global_time_display_configuration(self) -> None:
         settings = self.app.settings().decode("utf-8")
