@@ -76,6 +76,29 @@ test("new station cards apply the selected Geofox station", async ({ page }) => 
       }),
     });
   });
+  await page.route("**/api/lines**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        lines: [
+          {
+            id: "line:124",
+            name: "124",
+            product: "bus",
+            productLabel: "Regionalbus",
+            carrier: "VHH",
+          },
+          {
+            id: "line:u2",
+            name: "U2",
+            product: "ubahn",
+            productLabel: "U-Bahn",
+            carrier: "HOCHBAHN",
+          },
+        ],
+      }),
+    });
+  });
 
   const initialCount = await page.locator("[data-station]").count();
   await page.getByRole("button", { name: "Haltestelle hinzufügen" }).click();
@@ -89,4 +112,12 @@ test("new station cards apply the selected Geofox station", async ({ page }) => 
     "Master:11041",
   );
   await expect(card.locator("[data-load-lines]")).toBeEnabled();
+  await card.locator("[data-load-lines]").click();
+  await expect(card.locator("[data-line-group]")).toHaveCount(2);
+  await expect(card.locator("[data-line-filter-row]")).toBeVisible();
+  await expect(card.locator("[data-line-count]")).toHaveText(
+    "0 von 2 ausgewählt",
+  );
+  await card.locator('[data-line-search]').fill("124");
+  await expect(card.locator('.line-option:not([hidden])')).toHaveCount(1);
 });
