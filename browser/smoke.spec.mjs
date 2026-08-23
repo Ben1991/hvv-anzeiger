@@ -57,3 +57,36 @@ test("dashboard, display mode, and settings have stable product surfaces", async
   );
   expect(mobileLayout).toBe(true);
 });
+
+test("new station cards apply the selected Geofox station", async ({ page }) => {
+  await page.goto("/settings");
+  await page.route("**/api/stations**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        stations: [
+          {
+            combinedName: "U Baumwall",
+            name: "U Baumwall",
+            city: "Hamburg",
+            id: "Master:11041",
+            serviceTypes: ["UBAHN"],
+          },
+        ],
+      }),
+    });
+  });
+
+  const initialCount = await page.locator("[data-station]").count();
+  await page.getByRole("button", { name: "Haltestelle hinzufügen" }).click();
+  const card = page.locator("[data-station]").nth(initialCount);
+  await card.locator('[data-station-field="name"]').fill("ba");
+  await expect(card.locator('[data-station-results] option')).toHaveCount(1);
+  await card.locator("[data-station-results]").selectOption({ label: "U Baumwall" });
+
+  await expect(card.locator('[data-station-field="city"]')).toHaveValue("Hamburg");
+  await expect(card.locator('[data-station-field="id"]')).toHaveValue(
+    "Master:11041",
+  );
+  await expect(card.locator("[data-load-lines]")).toBeEnabled();
+});

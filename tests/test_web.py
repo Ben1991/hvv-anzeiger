@@ -204,6 +204,9 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn(
             "card.querySelector('[data-load-lines]').disabled=false", settings
         )
+        self.assertIn(
+            "select.addEventListener('change',()=>applyStation(select))", settings
+        )
         self.assertNotIn(
             "loadLines(card.querySelector('[data-load-lines]'))", settings
         )
