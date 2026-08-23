@@ -181,6 +181,32 @@ class ConfigTest(unittest.TestCase):
             with self.assertRaisesRegex(ConfigError, "darf nicht leer"):
                 load_config(self.write_config(raw, directory))
 
+    def test_line_filter_route_round_trips_and_rejects_invalid_modes(self) -> None:
+        raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
+        raw["stations"][0]["routes"] = [
+            {
+                "line": "U2",
+                "line_id": "line:U2",
+                "filter_mode": "destination",
+                "filter_station_ids": ["Master:2"],
+                "destination": "Niendorf Markt",
+            }
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            route = load_config(self.write_config(raw, directory)).stations[0].routes[0]
+        self.assertEqual(route.filter_mode, "destination")
+        self.assertEqual(route.filter_station_ids, ("Master:2",))
+
+        raw["stations"][0]["routes"][0]["filter_mode"] = "unknown"
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ConfigError, "filter_mode"):
+                load_config(self.write_config(raw, directory))
+
+        raw["stations"][0]["routes"][0]["filter_mode"] = None
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ConfigError, "filter_mode"):
+                load_config(self.write_config(raw, directory))
+
     def test_optional_values_use_defaults(self) -> None:
         raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
         for field in (

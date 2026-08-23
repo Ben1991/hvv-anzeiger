@@ -10,6 +10,8 @@ from urllib.parse import urlsplit
 
 from .models import Route, Station
 
+MAX_ROUTE_FILTER_STATIONS = 200
+
 
 class ConfigError(ValueError):
     """Raised when the local configuration is incomplete or invalid."""
@@ -213,9 +215,39 @@ def _route_from_raw(route: Any, section: str) -> Route:
     if not line or (not destination and not line_id):
         raise ConfigError(f"{section}.destination oder line_id muss gesetzt sein")
     product = route.get("product")
+    filter_mode = route.get("filter_mode")
+    filter_mode = str(filter_mode).strip() if filter_mode is not None else None
+    if filter_mode == "":
+        filter_mode = None
+    if filter_mode not in (None, "direction", "destination"):
+        raise ConfigError(
+            f"{section}.filter_mode muss direction oder destination sein"
+        )
+    raw_filter_station_ids = route.get("filter_station_ids", [])
+    if not isinstance(raw_filter_station_ids, (list, tuple)):
+        raise ConfigError(f"{section}.filter_station_ids muss eine Liste sein")
+    if len(raw_filter_station_ids) > MAX_ROUTE_FILTER_STATIONS:
+        raise ConfigError(
+            f"{section}.filter_station_ids enthält zu viele Haltestellen"
+        )
+    filter_station_ids = tuple(
+        str(station_id).strip()
+        for station_id in raw_filter_station_ids
+        if str(station_id).strip()
+    )
+    if filter_mode and not filter_station_ids:
+        raise ConfigError(
+            f"{section}.filter_station_ids muss für einen Filter gesetzt sein"
+        )
+    if filter_station_ids and not filter_mode:
+        raise ConfigError(
+            f"{section}.filter_mode muss für filter_station_ids gesetzt sein"
+        )
     return Route(
         line=line,
         destination=destination,
         line_id=line_id or None,
         product=str(product).strip() if product is not None else None,
+        filter_mode=filter_mode,
+        filter_station_ids=filter_station_ids,
     )

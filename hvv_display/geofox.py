@@ -19,13 +19,15 @@ from typing import Any
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
-from .models import Departure, LineOption, Route, Station
+from .models import Departure, LineOption, LineRouteOption, Route, Station
 
 LOG = logging.getLogger(__name__)
 HAMBURG_TZ = ZoneInfo("Europe/Berlin")
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_RETRY_AFTER_SECONDS = 3600
 MAX_LINE_OPTIONS = 200
+MAX_ROUTE_STATIONS = 200
+MAX_ROUTE_STATION_SUGGESTIONS = 80
 _VEHICLE_LABELS = {
     "UBAHN": "U-Bahn",
     "SBAHN": "S-Bahn",
@@ -98,12 +100,21 @@ def normalize(value: str) -> str:
     )
 
 
-def route_matches(line_name: str, direction: str, routes: tuple[Route, ...]) -> bool:
+def route_matches(
+    line_name: str,
+    direction: str,
+    routes: tuple[Route, ...],
+    line_id: str | None = None,
+) -> bool:
     normalized_direction = normalize(direction)
     for route in routes:
         expected = normalize(route.destination)
+        if route.line_id and line_id and route.line_id != line_id:
+            continue
         if normalize(line_name) != normalize(route.line):
             continue
+        if route.filter_station_ids:
+            return True
         if not expected or (
             expected in normalized_direction or normalized_direction in expected
         ):
@@ -210,6 +221,91 @@ def line_options_for_station(
             )
             break
     return tuple(options)
+
+
+def line_route_options_for_station(
+    lines: Any, line_id: str, station_id: str
+) -> tuple[LineRouteOption, ...]:
+    """Return each downstream line branch available from a station."""
+    raw_lines = lines if isinstance(lines, list) else []
+    matching_line = next(
+        (
+            raw_line
+            for raw_line in raw_lines
+            if isinstance(raw_line, dict)
+            and raw_line.get("exists") is not False
+            and _safe_external_text(raw_line.get("id"), 160) == line_id
+        ),
+        None,
+    )
+    if matching_line is None:
+        return ()
+    options: list[LineRouteOption] = []
+    seen: set[tuple[str, ...]] = set()
+    sublines = matching_line.get("sublines")
+    if not isinstance(sublines, list):
+        return ()
+    for subline in sublines:
+        if not isinstance(subline, dict):
+            continue
+        sequence = subline.get("stationSequence")
+        if not isinstance(sequence, list):
+            continue
+        stops = [
+            (
+                _safe_external_text(stop.get("id"), 160),
+                _safe_external_text(stop.get("name"), 120),
+            )
+            for stop in sequence
+            if isinstance(stop, dict) and stop.get("id")
+        ]
+        for index, (stop_id, _stop_name) in enumerate(stops):
+            if stop_id != station_id:
+                continue
+            # Geofox evaluates stationIDs against the downstream direction.
+            # Keeping the source station here would make every departure match.
+            downstream = stops[index + 1 : index + 1 + MAX_ROUTE_STATIONS]
+            downstream_ids = tuple(stop[0] for stop in downstream)
+            if not downstream_ids or downstream_ids in seen:
+                continue
+            seen.add(downstream_ids)
+            end_name = downstream[-1][1] or downstream[-1][0]
+            options.append(
+                LineRouteOption(
+                    line_id=line_id,
+                    label=f"Richtung {end_name}",
+                    station_ids=downstream_ids,
+                    stations=tuple(downstream),
+                )
+            )
+            if len(options) >= MAX_LINE_OPTIONS:
+                LOG.warning(
+                    "Richtungsoptionen für Linie %s auf %d Einträge begrenzt",
+                    line_id,
+                    MAX_LINE_OPTIONS,
+                )
+                return tuple(options)
+    return tuple(options)
+
+
+def line_route_stations(
+    options: tuple[LineRouteOption, ...], query: str = ""
+) -> tuple[dict[str, str], ...]:
+    """Return bounded, deduplicated downstream station suggestions."""
+    normalized_query = normalize(query) if query else ""
+    suggestions: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for option in options:
+        for station_id, name in option.stations:
+            if station_id in seen or (
+                normalized_query and normalized_query not in normalize(name)
+            ):
+                continue
+            seen.add(station_id)
+            suggestions.append({"id": station_id, "name": name})
+            if len(suggestions) >= MAX_ROUTE_STATION_SUGGESTIONS:
+                return tuple(suggestions)
+    return tuple(suggestions)
 
 
 def _return_code_error(result: dict[str, Any]) -> GeofoxError:
@@ -466,6 +562,17 @@ class GeofoxClient:
     def line_options(self, station_id: str) -> tuple[LineOption, ...]:
         return line_options_for_station(self.list_lines(), station_id)
 
+    def line_route_options(
+        self, station_id: str, line_id: str
+    ) -> tuple[LineRouteOption, ...]:
+        return line_route_options_for_station(self.list_lines(), line_id, station_id)
+
+    def line_route_stations(
+        self, station_id: str, line_id: str, query: str = ""
+    ) -> tuple[dict[str, str], ...]:
+        options = self.line_route_options(station_id, line_id)
+        return line_route_stations(options, query)
+
     def departure_list(
         self,
         stations: tuple[Station, ...],
@@ -488,15 +595,24 @@ class GeofoxClient:
             "maxTimeOffset": max_time_offset,
             "useRealtime": True,
         }
-        filters = [
-            {
-                "serviceID": route.line_id,
-                "serviceName": route.line,
-            }
-            for station in stations
-            for route in station.routes
-            if route.line_id
-        ]
+        filters = []
+        seen_filter_keys: set[tuple[str, tuple[str, ...]]] = set()
+        for station in stations:
+            for route in station.routes:
+                if not route.line_id:
+                    continue
+                station_ids = tuple(route.filter_station_ids)
+                filter_key = (route.line_id, station_ids)
+                if filter_key in seen_filter_keys:
+                    continue
+                seen_filter_keys.add(filter_key)
+                entry: dict[str, Any] = {
+                    "serviceID": route.line_id,
+                    "serviceName": route.line,
+                }
+                if station_ids:
+                    entry["stationIDs"] = list(station_ids)
+                filters.append(entry)
         if filters:
             payload["filter"] = filters
         if len(station_names) == 1:
@@ -522,6 +638,11 @@ class GeofoxClient:
                 continue
             line_name = str(line.get("name", ""))
             direction = str(line.get("direction", ""))
+            response_line_id = (
+                _safe_external_text(line.get("id"), 160)
+                if line.get("id")
+                else None
+            )
             product = _safe_vehicle_product(
                 line.get("type") or line.get("vehicleType")
             )
@@ -535,14 +656,21 @@ class GeofoxClient:
             if selected_station:
                 matching_stations = (
                     [selected_station]
-                    if route_matches(line_name, direction, selected_station.routes)
+                    if route_matches(
+                        line_name,
+                        direction,
+                        selected_station.routes,
+                        response_line_id,
+                    )
                     else []
                 )
             else:
                 matching_stations = [
                     station
                     for station in stations
-                    if route_matches(line_name, direction, station.routes)
+                    if route_matches(
+                        line_name, direction, station.routes, response_line_id
+                    )
                 ]
             if not matching_stations:
                 continue

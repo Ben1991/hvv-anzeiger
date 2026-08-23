@@ -10,6 +10,8 @@ class Route:
     destination: str
     line_id: str | None = None
     product: str | None = None
+    filter_mode: str | None = None
+    filter_station_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,14 @@ class LineOption:
     product: str
     product_label: str
     carrier: str = ""
+
+
+@dataclass(frozen=True)
+class LineRouteOption:
+    line_id: str
+    label: str
+    station_ids: tuple[str, ...]
+    stations: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True)

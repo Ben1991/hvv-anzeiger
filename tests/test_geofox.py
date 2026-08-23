@@ -13,6 +13,8 @@ from hvv_display.geofox import (
     GeofoxClient,
     GeofoxError,
     line_options_for_station,
+    line_route_options_for_station,
+    line_route_stations,
     normalize,
     route_matches,
     vehicle_type_label,
@@ -147,6 +149,50 @@ class GeofoxClientTest(unittest.TestCase):
         ]
         self.assertEqual(
             len(line_options_for_station(limited, "Master:1")), MAX_LINE_OPTIONS
+        )
+
+    def test_line_route_options_build_direction_branches_and_station_suggestions(
+        self,
+    ) -> None:
+        lines = [
+            {
+                "id": "line:U2",
+                "name": "U2",
+                "sublines": [
+                    {
+                        "stationSequence": [
+                            {"id": "Master:1", "name": "Jungfernstieg"},
+                            {"id": "Master:2", "name": "Niendorf Markt"},
+                            {"id": "Master:3", "name": "Niendorf Nord"},
+                        ]
+                    },
+                    {
+                        "stationSequence": [
+                            {"id": "Master:1", "name": "Jungfernstieg"},
+                            {"id": "Master:4", "name": "Mümmelmannsberg"},
+                        ]
+                    },
+                ],
+            }
+        ]
+        options = line_route_options_for_station(lines, "line:U2", "Master:1")
+        self.assertEqual(
+            [option.label for option in options],
+            ["Richtung Niendorf Nord", "Richtung Mümmelmannsberg"],
+        )
+        self.assertEqual(
+            options[0].station_ids,
+            ("Master:2", "Master:3"),
+        )
+        self.assertEqual(
+            line_route_stations(options, "Nord"),
+            ({"id": "Master:3", "name": "Niendorf Nord"},),
+        )
+        self.assertEqual(
+            line_route_options_for_station(lines, "missing", "Master:1"), ()
+        )
+        self.assertEqual(
+            line_route_options_for_station(None, "line:U2", "Master:1"), ()
         )
 
     def test_list_lines_requests_all_sublines(self) -> None:
@@ -385,6 +431,67 @@ class GeofoxClientTest(unittest.TestCase):
             [
                 {"serviceID": "line:U2", "serviceName": "U2"},
                 {"serviceID": "line:5", "serviceName": "5"},
+            ],
+        )
+
+    def test_departures_serialize_direction_and_destination_filters(self) -> None:
+        response = FakeResponse(
+            b'{"returnCode":"OK","departures":[{"line":{"id":"line:U2",'
+            b'"name":"U2","direction":"Niendorf Markt"},"timeOffset":4}]}'
+        )
+        requests = []
+
+        def urlopen(request, **_kwargs):
+            requests.append(json.loads(request.data.decode("utf-8")))
+            return response
+
+        client = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",
+            min_request_interval=0,
+            urlopen=urlopen,
+        )
+        station = Station(
+            "Jungfernstieg",
+            "Hamburg",
+            (
+                Route(
+                    "U2",
+                    "Richtung Niendorf Nord",
+                    "line:U2",
+                    "UBAHN",
+                    "direction",
+                    ("Master:2", "Master:3"),
+                ),
+                Route(
+                    "U2",
+                    "Niendorf Markt",
+                    "line:U2",
+                    "UBAHN",
+                    "destination",
+                    ("Master:2",),
+                ),
+            ),
+            "Master:1",
+        )
+        result = client.departure_list(
+            (station,), now=datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        )
+        self.assertEqual([departure.line for departure in result], ["U2"])
+        self.assertEqual(
+            requests[0]["filter"],
+            [
+                {
+                    "serviceID": "line:U2",
+                    "serviceName": "U2",
+                    "stationIDs": ["Master:2", "Master:3"],
+                },
+                {
+                    "serviceID": "line:U2",
+                    "serviceName": "U2",
+                    "stationIDs": ["Master:2"],
+                },
             ],
         )
 
