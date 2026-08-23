@@ -111,6 +111,17 @@ class WebApplicationTest(unittest.TestCase):
                 credentials=str(self.credentials),
             )
 
+    def test_remote_access_requires_tls(self) -> None:
+        from hvv_display.web import run
+
+        with self.assertRaisesRegex(ValueError, "TLS"):
+            run(
+                host="0.0.0.0",  # noqa: S104
+                config=str(self.config),
+                credentials=str(self.credentials),
+                access_token=hash_web_password("test-web-password"),
+            )
+
     def test_remote_access_accepts_browser_basic_auth_with_web_token(self) -> None:
         from hvv_display.web import WebApplication
 

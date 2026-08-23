@@ -333,7 +333,8 @@ def _return_code_error(result: dict[str, Any]) -> GeofoxError:
 class GeofoxClient:
     # Geofox rate limits apply to the application, not to a Python object. The
     # web UI creates clients for different operations, therefore all instances
-    # share one serialization lock and one request timestamp.
+    # share one request lock and one request timestamp.
+    _global_request_lock = threading.Lock()
     _global_rate_lock = threading.Lock()
     _global_last_request_at = 0.0
     _global_retry_until = 0.0
@@ -388,9 +389,10 @@ class GeofoxClient:
     @classmethod
     def _apply_retry_after(cls, seconds: int | None) -> None:
         if seconds:
-            cls._global_retry_until = max(
-                cls._global_retry_until, time.monotonic() + seconds
-            )
+            with cls._global_rate_lock:
+                cls._global_retry_until = max(
+                    cls._global_retry_until, time.monotonic() + seconds
+                )
 
     def _post(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
         body = self.encode_body(payload)
@@ -410,41 +412,45 @@ class GeofoxClient:
                 "User-Agent": "hvv-anzeiger/0.1",
             },
         )
-        self._wait_for_rate_limit()
-        try:
-            with self._urlopen(request, timeout=self.timeout) as response:
-                raw = response.read(MAX_RESPONSE_BYTES + 1)
-        except urllib.error.HTTPError as exc:
-            LOG.error("Geofox HTTP %s, Trace-ID %s", exc.code, trace_id)
-            retry_after = _retry_after_seconds(exc.headers.get("Retry-After"))
-            if exc.code == 429:
-                self._apply_retry_after(retry_after)
+        # Waiting and the actual request must be one critical section. Waiting
+        # alone leaves a gap in which another client can send concurrently
+        # while the first request is still in flight.
+        with type(self)._global_request_lock:
+            self._wait_for_rate_limit()
+            try:
+                with self._urlopen(request, timeout=self.timeout) as response:
+                    raw = response.read(MAX_RESPONSE_BYTES + 1)
+            except urllib.error.HTTPError as exc:
+                LOG.error("Geofox HTTP %s, Trace-ID %s", exc.code, trace_id)
+                retry_after = _retry_after_seconds(exc.headers.get("Retry-After"))
+                if exc.code == 429:
+                    self._apply_retry_after(retry_after)
+                    raise GeofoxError(
+                        "Geofox-Anfragelimit erreicht – bitte später erneut versuchen.",
+                        retry_after_seconds=retry_after,
+                        kind="rate_limit",
+                        http_status=429,
+                    ) from exc
+                if exc.code in (401, 403):
+                    raise GeofoxError(
+                        "Geofox-Zugangsdaten oder Berechtigungen wurden abgelehnt.",
+                        kind="credentials",
+                        http_status=exc.code,
+                    ) from exc
+                if exc.code in (500, 503):
+                    raise GeofoxError(
+                        "Geofox ist aktuell nicht erreichbar.",
+                        kind="temporary",
+                        http_status=exc.code,
+                    ) from exc
                 raise GeofoxError(
-                    "Geofox-Anfragelimit erreicht – bitte später erneut versuchen.",
-                    retry_after_seconds=retry_after,
-                    kind="rate_limit",
-                    http_status=429,
+                    f"Geofox antwortet mit HTTP {exc.code}", http_status=exc.code
                 ) from exc
-            if exc.code in (401, 403):
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                LOG.error("Geofox nicht erreichbar, Trace-ID %s", trace_id)
                 raise GeofoxError(
-                    "Geofox-Zugangsdaten oder Berechtigungen wurden abgelehnt.",
-                    kind="credentials",
-                    http_status=exc.code,
+                    "Geofox ist aktuell nicht erreichbar.", kind="temporary"
                 ) from exc
-            if exc.code in (500, 503):
-                raise GeofoxError(
-                    "Geofox ist aktuell nicht erreichbar.",
-                    kind="temporary",
-                    http_status=exc.code,
-                ) from exc
-            raise GeofoxError(
-                f"Geofox antwortet mit HTTP {exc.code}", http_status=exc.code
-            ) from exc
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            LOG.error("Geofox nicht erreichbar, Trace-ID %s", trace_id)
-            raise GeofoxError(
-                "Geofox ist aktuell nicht erreichbar.", kind="temporary"
-            ) from exc
 
         if len(raw) > MAX_RESPONSE_BYTES:
             LOG.error("Geofox-Antwort zu groß, Trace-ID %s", trace_id)

@@ -13,6 +13,7 @@ import logging
 import os
 import secrets
 import shutil
+import ssl
 import subprocess
 import tempfile
 from datetime import datetime
@@ -1041,10 +1042,19 @@ def run(
     credentials: str | None = None,
     cache: str = "var/stations.json",
     access_token: str | None = None,
+    tls_certfile: str | None = None,
+    tls_keyfile: str | None = None,
 ) -> None:
-    if host not in {"127.0.0.1", "localhost", "::1"} and not access_token:
+    local_host = host in {"127.0.0.1", "localhost", "::1"}
+    if not local_host and not access_token:
         raise ValueError(
             "Für einen nicht-lokalen Webhost muss HVV_WEB_PASSWORD_HASH gesetzt sein"
+        )
+    if (tls_certfile is None) != (tls_keyfile is None):
+        raise ValueError("TLS-Zertifikat und TLS-Schlüssel müssen gemeinsam gesetzt sein")
+    if not local_host and not tls_certfile:
+        raise ValueError(
+            "Für einen nicht-lokalen Webhost muss TLS mit Zertifikat und Schlüssel aktiviert sein"
         )
     application = WebApplication(
         Path(config),
@@ -1056,8 +1066,13 @@ def run(
         web_env_path=Path(os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")),
     )
     server = ThreadingHTTPServer((host, port), make_handler(application))
+    if tls_certfile:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(tls_certfile, tls_keyfile)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
     server.application = application  # type: ignore[attr-defined]
-    LOG.info("Lokale Weboberfläche erreichbar unter http://%s:%d", host, port)
+    scheme = "https" if tls_certfile else "http"
+    LOG.info("Lokale Weboberfläche erreichbar unter %s://%s:%d", scheme, host, port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -1087,6 +1102,16 @@ def main() -> None:
         default=os.environ.get("HVV_WEB_PASSWORD_HASH"),
         help="Gesalzener Passwort-Hash für nicht-lokale Zugriffe",
     )
+    parser.add_argument(
+        "--tls-certfile",
+        default=os.environ.get("HVV_WEB_TLS_CERTFILE"),
+        help="TLS-Zertifikat für nicht-lokale Zugriffe",
+    )
+    parser.add_argument(
+        "--tls-keyfile",
+        default=os.environ.get("HVV_WEB_TLS_KEYFILE"),
+        help="Privater TLS-Schlüssel für nicht-lokale Zugriffe",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
     run(
@@ -1096,6 +1121,8 @@ def main() -> None:
         credentials=args.credentials,
         cache=args.cache,
         access_token=args.access_token,
+        tls_certfile=args.tls_certfile,
+        tls_keyfile=args.tls_keyfile,
     )
 
 
