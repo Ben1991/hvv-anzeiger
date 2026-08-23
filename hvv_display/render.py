@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import os
 import re
 from dataclasses import dataclass
@@ -11,6 +10,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from .models import Departure
+from .time_display import format_departure_time
 
 WIDTH = 320
 HEIGHT = 240
@@ -250,6 +250,8 @@ def board_state_key(
     wifi_is_connected: bool | None,
     max_rows: int,
     time_is_synchronized: bool | None = True,
+    time_mode: str = "countdown",
+    minute_unit: str = "min",
 ) -> tuple[object, ...]:
     """Describe only visible state so unchanged frames need not be redrawn."""
     visible_departures = tuple(
@@ -259,15 +261,13 @@ def board_state_key(
             departure.station_label,
             departure.product,
             departure.cancelled,
-            (
-                "AUS"
-                if departure.cancelled
-                else max(
-                    0,
-                    math.ceil((departure.departure_time - now).total_seconds() / 60),
-                )
+            format_departure_time(
+                departure.departure_time,
+                now,
+                time_mode=time_mode,
+                minute_unit=minute_unit,
+                cancelled=departure.cancelled,
             ),
-            departure.departure_time.strftime("%H:%M"),
         )
         for departure in departures[:max_rows]
     )
@@ -294,6 +294,8 @@ def render_board(
     wifi_is_connected: bool | None = None,
     max_rows: int = 5,
     time_is_synchronized: bool | None = True,
+    time_mode: str = "countdown",
+    minute_unit: str = "min",
 ) -> Image.Image:
     image = Image.new("RGB", (WIDTH, HEIGHT), BLACK)
     draw = ImageDraw.Draw(image)
@@ -354,10 +356,12 @@ def render_board(
                 right_font = _font(18, bold=True)
                 right_color = RED
             else:
-                minutes = max(
-                    0, math.ceil((departure.departure_time - now).total_seconds() / 60)
+                right_text = format_departure_time(
+                    departure.departure_time,
+                    now,
+                    time_mode=time_mode,
+                    minute_unit=minute_unit,
                 )
-                right_text = "sofort" if minutes == 0 else f"{minutes} min"
                 right_font = _font(17, bold=True)
                 right_color = WHITE
             right_width = draw.textbbox((0, 0), right_text, font=right_font)[2]
@@ -367,15 +371,16 @@ def render_board(
                 font=right_font,
                 fill=right_color,
             )
-            absolute = departure.departure_time.strftime("%H:%M")
-            absolute_font = _font(10)
-            absolute_width = draw.textbbox((0, 0), absolute, font=absolute_font)[2]
-            draw.text(
-                (WIDTH - absolute_width - 8, y + 25),
-                absolute,
-                font=absolute_font,
-                fill=MUTED,
-            )
+            if time_mode != "departure_time":
+                absolute = departure.departure_time.strftime("%H:%M")
+                absolute_font = _font(10)
+                absolute_width = draw.textbbox((0, 0), absolute, font=absolute_font)[2]
+                draw.text(
+                    (WIDTH - absolute_width - 8, y + 25),
+                    absolute,
+                    font=absolute_font,
+                    fill=MUTED,
+                )
 
     status_label = _status_text(
         wifi_is_connected=wifi_is_connected,

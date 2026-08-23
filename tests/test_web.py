@@ -13,6 +13,7 @@ from hvv_display.geofox import HAMBURG_TZ
 from hvv_display.models import Departure
 from hvv_display.web import (
     WebApplication,
+    _departure_payload,
     hardware_status,
     hash_web_password,
     load_credentials,
@@ -129,6 +130,25 @@ class WebApplicationTest(unittest.TestCase):
             self.assertIn(section, settings)
         self.assertIn("Bedienbare Felder", settings)
         self.assertIn("Sekunden zwischen Abfragen", settings)
+
+    def test_settings_exposes_one_global_time_display_configuration(self) -> None:
+        settings = self.app.settings().decode("utf-8")
+        self.assertIn('id="display.time_mode"', settings)
+        self.assertIn('value="departure_time"', settings)
+        self.assertIn('id="display.minute_unit"', settings)
+        self.assertIn("syncTimeDisplayControls", settings)
+
+    def test_departure_payload_uses_the_shared_time_formatter(self) -> None:
+        now = datetime(2026, 7, 27, 18, 35, tzinfo=HAMBURG_TZ)
+        departure = Departure("21", "Ziel", now + timedelta(minutes=7, seconds=30))
+        countdown = _departure_payload([departure], now, minute_unit="m")[0]
+        clock = _departure_payload(
+            [departure], now, time_mode="departure_time", minute_unit="none"
+        )[0]
+        self.assertEqual(countdown["display_time"], "8 m")
+        self.assertEqual(countdown["minutes"], 8)
+        self.assertEqual(clock["display_time"], "18:42")
+        self.assertEqual(clock["time_mode"], "departure_time")
 
     def test_dashboard_contains_departures_hardware_status_and_restart_action(
         self,

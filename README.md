@@ -684,6 +684,8 @@ ohne eingebettete Zugangsdaten, Query-Parameter oder Fragment sein.
 | `display.rotate` | `0` | Drehung; erlaubt sind 0, 1, 2 oder 3 |
 | `display.bus_speed_hz` | `16000000` | SPI-Takt; größer als 0 |
 | `display.bgr` | `false` | bei vertauschtem Rot und Blau auf `true` setzen |
+| `display.time_mode` | `countdown` | `countdown` für Minuten bis Abfahrt oder `departure_time` für die Uhrzeit |
+| `display.minute_unit` | `min` | Countdown-Einheit `min`, `m` oder `none`; bei `departure_time` nicht relevant |
 
 Für ein um 180 Grad gedrehtes Display üblicherweise `display.rotate` auf `2`
 setzen.

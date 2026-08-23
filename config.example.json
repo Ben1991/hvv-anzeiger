@@ -15,7 +15,9 @@
     "gpio_reset": 25,
     "rotate": 0,
     "bus_speed_hz": 16000000,
-    "bgr": false
+    "bgr": false,
+    "time_mode": "countdown",
+    "minute_unit": "min"
   },
   "night_shutdown": {
     "enabled": false,
