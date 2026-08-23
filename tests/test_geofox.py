@@ -10,14 +10,17 @@ from unittest.mock import patch
 from hvv_display.geofox import (
     HAMBURG_TZ,
     MAX_LINE_OPTIONS,
+    MAX_ROUTE_STATION_SUGGESTIONS,
     GeofoxClient,
     GeofoxError,
     line_options_for_station,
+    line_route_options_for_station,
+    line_route_stations,
     normalize,
     route_matches,
     vehicle_type_label,
 )
-from hvv_display.models import Route, Station
+from hvv_display.models import LineRouteOption, Route, Station
 
 
 class FakeResponse:
@@ -53,6 +56,11 @@ class GeofoxClientTest(unittest.TestCase):
         self.assertTrue(route_matches("384", "S Elbgaustraße", routes))
         self.assertFalse(route_matches("184", "S Elbgaustraße", routes))
         self.assertTrue(route_matches("U2", "Niendorf Nord", routes))
+        self.assertFalse(
+            route_matches(
+                "U2", "Niendorf Nord", (Route("U2", "", "line:U2"),), "line:5"
+            )
+        )
         self.assertEqual(normalize("Recknitzstraße"), "recknitzstrasse")
 
     def test_line_options_filter_by_station_and_expose_vehicle_metadata(self) -> None:
@@ -149,6 +157,109 @@ class GeofoxClientTest(unittest.TestCase):
             len(line_options_for_station(limited, "Master:1")), MAX_LINE_OPTIONS
         )
 
+    def test_line_route_options_build_direction_branches_and_station_suggestions(
+        self,
+    ) -> None:
+        lines = [
+            {
+                "id": "line:U2",
+                "name": "U2",
+                "sublines": [
+                    {
+                        "stationSequence": [
+                            {"id": "Master:1", "name": "Jungfernstieg"},
+                            {"id": "Master:2", "name": "Niendorf Markt"},
+                            {"id": "Master:3", "name": "Niendorf Nord"},
+                        ]
+                    },
+                    {
+                        "stationSequence": [
+                            {"id": "Master:1", "name": "Jungfernstieg"},
+                            {"id": "Master:4", "name": "Mümmelmannsberg"},
+                        ]
+                    },
+                    {
+                        "stationSequence": [
+                            {"id": "Master:1", "name": "Jungfernstieg"},
+                            {"id": "Master:2", "name": "Niendorf Markt"},
+                            {"id": "Master:3", "name": "Niendorf Nord"},
+                        ]
+                    },
+                    {"stationSequence": [{"id": "Master:1", "name": "Endstation"}]},
+                ],
+            }
+        ]
+        options = line_route_options_for_station(lines, "line:U2", "Master:1")
+        self.assertEqual(
+            [option.label for option in options],
+            ["Richtung Niendorf Nord", "Richtung Mümmelmannsberg"],
+        )
+        self.assertEqual(
+            options[0].station_ids,
+            ("Master:2", "Master:3"),
+        )
+        self.assertEqual(
+            line_route_stations(options, "Nord"),
+            ({"id": "Master:3", "name": "Niendorf Nord"},),
+        )
+        self.assertEqual(
+            line_route_options_for_station(lines, "missing", "Master:1"), ()
+        )
+        self.assertEqual(
+            line_route_options_for_station(None, "line:U2", "Master:1"), ()
+        )
+        self.assertEqual(
+            line_route_options_for_station(
+                [{"id": "line:bad", "sublines": {}}], "line:bad", "Master:1"
+            ),
+            (),
+        )
+        self.assertEqual(
+            line_route_options_for_station(
+                [{"id": "line:bad", "sublines": [None, {"stationSequence": {}}]}],
+                "line:bad",
+                "Master:1",
+            ),
+            (),
+        )
+
+        many = [
+            {
+                "stationSequence": [
+                    {"id": "Master:1"},
+                    {"id": f"Master:{index + 10}"},
+                ]
+            }
+            for index in range(MAX_LINE_OPTIONS + 1)
+        ]
+        self.assertEqual(
+            len(
+                line_route_options_for_station(
+                    [{"id": "line:many", "sublines": many}],
+                    "line:many",
+                    "Master:1",
+                )
+            ),
+            MAX_LINE_OPTIONS,
+        )
+        suggestions = line_route_stations(
+            (
+                LineRouteOption(
+                    "line:U2",
+                    "Richtung Ende",
+                    tuple(
+                        f"Master:{index}"
+                        for index in range(MAX_ROUTE_STATION_SUGGESTIONS)
+                    ),
+                    tuple(
+                        (f"Master:{index}", f"Station {index}")
+                        for index in range(MAX_ROUTE_STATION_SUGGESTIONS)
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(len(suggestions), MAX_ROUTE_STATION_SUGGESTIONS)
+
     def test_list_lines_requests_all_sublines(self) -> None:
         response = FakeResponse(
             b'{"returnCode":"OK","dataReleaseID":"release-1",'
@@ -205,6 +316,12 @@ class GeofoxClientTest(unittest.TestCase):
             ),
         )
         self.assertEqual(line_options.line_options("Master:1"), ())
+        self.assertEqual(
+            line_options.line_route_options("Master:1", "line:5"), ()
+        )
+        self.assertEqual(
+            line_options.line_route_stations("Master:1", "line:5"), ()
+        )
 
     def test_find_stations_returns_service_types_for_follow_up_flow(self) -> None:
         response = FakeResponse(
@@ -385,6 +502,75 @@ class GeofoxClientTest(unittest.TestCase):
             [
                 {"serviceID": "line:U2", "serviceName": "U2"},
                 {"serviceID": "line:5", "serviceName": "5"},
+            ],
+        )
+
+    def test_departures_serialize_direction_and_destination_filters(self) -> None:
+        response = FakeResponse(
+            b'{"returnCode":"OK","departures":[{"line":{"id":"line:U2",'
+            b'"name":"U2","direction":"Niendorf Markt"},"timeOffset":4}]}'
+        )
+        requests = []
+
+        def urlopen(request, **_kwargs):
+            requests.append(json.loads(request.data.decode("utf-8")))
+            return response
+
+        client = GeofoxClient(
+            "https://example.test",
+            "user",
+            "secret",
+            min_request_interval=0,
+            urlopen=urlopen,
+        )
+        station = Station(
+            "Jungfernstieg",
+            "Hamburg",
+            (
+                Route(
+                    "U2",
+                    "Richtung Niendorf Nord",
+                    "line:U2",
+                    "UBAHN",
+                    "direction",
+                    ("Master:2", "Master:3"),
+                ),
+                Route(
+                    "U2",
+                    "Niendorf Markt",
+                    "line:U2",
+                    "UBAHN",
+                    "destination",
+                    ("Master:2",),
+                ),
+                Route(
+                    "U2",
+                    "Richtung Niendorf Nord",
+                    "line:U2",
+                    "UBAHN",
+                    "direction",
+                    ("Master:2", "Master:3"),
+                ),
+            ),
+            "Master:1",
+        )
+        result = client.departure_list(
+            (station,), now=datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        )
+        self.assertEqual([departure.line for departure in result], ["U2"])
+        self.assertEqual(
+            requests[0]["filter"],
+            [
+                {
+                    "serviceID": "line:U2",
+                    "serviceName": "U2",
+                    "stationIDs": ["Master:2", "Master:3"],
+                },
+                {
+                    "serviceID": "line:U2",
+                    "serviceName": "U2",
+                    "stationIDs": ["Master:2"],
+                },
             ],
         )
 

@@ -40,7 +40,10 @@ class StationManagementTest(unittest.TestCase):
         self.assertIn("Richtung oder Zielstation?", page)
         self.assertIn("Verfügbare Linien laden", page)
         self.assertIn("data-line-options", page)
-        self.assertIn("Mehrere Verkehrsmittel werden gemeinsam angeboten", page)
+        self.assertIn("data-route-configs", page)
+        self.assertIn("/api/line-routes?station_id=", page)
+        self.assertIn("Zu Zielstation", page)
+        self.assertIn("Richtung oder Zielstation festlegen", page)
 
     def test_station_search_validates_lengths_before_geofox_request(self) -> None:
         with self.assertRaisesRegex(ValueError, "zu lang"):
@@ -85,6 +88,36 @@ class StationManagementTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ungültig"):
             self.app.line_suggestions("bad\nstation")
 
+    def test_line_route_suggestions_and_target_stations_use_cached_catalog(
+        self,
+    ) -> None:
+        lines = [
+            {
+                "id": "line:U2",
+                "name": "U2",
+                "type": "TRAIN",
+                "sublines": [
+                    {
+                        "vehicleType": "UBAHN",
+                        "stationSequence": [
+                            {"id": "Master:1", "name": "Jungfernstieg"},
+                            {"id": "Master:2", "name": "Niendorf Markt"},
+                            {"id": "Master:3", "name": "Niendorf Nord"},
+                        ],
+                    }
+                ],
+            }
+        ]
+        with patch.object(self.app, "_client") as client:
+            client.return_value.list_lines.return_value = lines
+            routes = self.app.line_route_suggestions("Master:1", "line:U2")
+            stations = self.app.line_station_suggestions(
+                "Master:1", "line:U2", "Nord"
+            )
+        self.assertEqual(routes[0]["label"], "Richtung Niendorf Nord")
+        self.assertEqual(stations, [{"id": "Master:3", "name": "Niendorf Nord"}])
+        client.return_value.list_lines.assert_called_once_with()
+
     def test_station_config_is_revalidated_and_enriched_before_save(self) -> None:
         raw = json.loads(self.config.read_text(encoding="utf-8"))
         raw["stations"] = [
@@ -125,7 +158,14 @@ class StationManagementTest(unittest.TestCase):
                 "city": "Hamburg",
                 "id": "Master:1",
                 "label": "J",
-                "routes": [{"line_id": "line:U2", "line": "untrusted"}],
+                "routes": [
+                    {
+                        "line_id": "line:U2",
+                        "line": "untrusted",
+                        "filter_mode": "destination",
+                        "filter_station_ids": ["Master:2"],
+                    }
+                ],
             }
         ]
         matches = [{"name": "Jungfernstieg", "city": "Hamburg", "id": "Master:1"}]
@@ -136,7 +176,10 @@ class StationManagementTest(unittest.TestCase):
                 "sublines": [
                     {
                         "vehicleType": "UBAHN",
-                        "stationSequence": [{"id": "Master:1"}],
+                        "stationSequence": [
+                            {"id": "Master:1", "name": "Jungfernstieg"},
+                            {"id": "Master:2", "name": "Niendorf Markt"},
+                        ],
                     }
                 ],
             }
@@ -152,7 +195,9 @@ class StationManagementTest(unittest.TestCase):
             "line_id": "line:U2",
             "line": "U2",
             "product": "UBAHN",
-            "destination": "",
+            "filter_mode": "destination",
+            "filter_station_ids": ["Master:2"],
+            "destination": "Niendorf Markt",
         })
 
         raw["stations"][0]["routes"][0]["line_id"] = "line:missing"
