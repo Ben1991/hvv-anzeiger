@@ -24,6 +24,10 @@ from .models import Departure, LineOption, LineRouteOption, Route, Station
 LOG = logging.getLogger(__name__)
 HAMBURG_TZ = ZoneInfo("Europe/Berlin")
 MAX_RESPONSE_BYTES = 1024 * 1024
+# listLines contains every line and, for the station picker, every subline
+# sequence. It is substantially larger than normal Geofox responses, but it
+# remains bounded to avoid turning the cache request into an unbounded read.
+MAX_LINE_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_RETRY_AFTER_SECONDS = 3600
 MAX_LINE_OPTIONS = 200
 MAX_ROUTE_STATIONS = 200
@@ -411,7 +415,13 @@ class GeofoxClient:
                     cls._global_retry_until, time.monotonic() + seconds
                 )
 
-    def _post(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _post(
+        self,
+        method: str,
+        payload: dict[str, Any],
+        *,
+        max_response_bytes: int = MAX_RESPONSE_BYTES,
+    ) -> dict[str, Any]:
         body = self.encode_body(payload)
         trace_id = str(uuid.uuid4())
         request = urllib.request.Request(  # noqa: S310
@@ -436,7 +446,7 @@ class GeofoxClient:
             self._wait_for_rate_limit()
             try:
                 with self._urlopen(request, timeout=self.timeout) as response:
-                    raw = response.read(MAX_RESPONSE_BYTES + 1)
+                    raw = response.read(max_response_bytes + 1)
             except urllib.error.HTTPError as exc:
                 LOG.error("Geofox HTTP %s, Trace-ID %s", exc.code, trace_id)
                 retry_after = _retry_after_seconds(exc.headers.get("Retry-After"))
@@ -480,7 +490,7 @@ class GeofoxClient:
                     "Geofox ist aktuell nicht erreichbar.", kind="temporary"
                 ) from exc
 
-        if len(raw) > MAX_RESPONSE_BYTES:
+        if len(raw) > max_response_bytes:
             LOG.error("Geofox-Antwort zu groß, Trace-ID %s", trace_id)
             raise GeofoxError("Geofox liefert eine zu große Antwort")
 
@@ -585,6 +595,7 @@ class GeofoxClient:
                 "modificationTypes": ["MAIN", "SEQUENCE"],
                 "withSublines": True,
             },
+            max_response_bytes=MAX_LINE_RESPONSE_BYTES,
         )
         lines = result.get("lines")
         if lines is None:

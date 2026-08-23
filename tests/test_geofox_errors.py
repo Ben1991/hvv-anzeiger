@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from hvv_display.geofox import (
     HAMBURG_TZ,
+    MAX_LINE_RESPONSE_BYTES,
     MAX_RESPONSE_BYTES,
     MAX_RETRY_AFTER_SECONDS,
     GeofoxClient,
@@ -224,6 +225,20 @@ class GeofoxErrorTest(unittest.TestCase):
         client = self.client_for(b"x" * (MAX_RESPONSE_BYTES + 1))
         with self.assertRaisesRegex(GeofoxError, "zu große Antwort"):
             client._post("departureList", {})
+
+    def test_line_catalog_allows_a_bounded_large_response(self) -> None:
+        response = (
+            b'{"returnCode":"OK","lines":[],"padding":"'
+            + b"x" * MAX_RESPONSE_BYTES
+            + b'"}'
+        )
+        client = self.client_for(response)
+        self.assertEqual(client.list_lines(), [])
+
+    def test_line_catalog_still_rejects_an_unbounded_response(self) -> None:
+        client = self.client_for(b"x" * (MAX_LINE_RESPONSE_BYTES + 1))
+        with self.assertRaisesRegex(GeofoxError, "zu große Antwort"):
+            client.list_lines()
 
     def test_invalid_departure_collection_is_rejected(self) -> None:
         client = self.client_for(
