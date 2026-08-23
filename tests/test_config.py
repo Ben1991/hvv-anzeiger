@@ -29,6 +29,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.night_shutdown.end.strftime("%H:%M"), "06:30")
         self.assertEqual(config.display.time_mode, "countdown")
         self.assertEqual(config.display.minute_unit, "min")
+        self.assertTrue(config.display.show_station_label)
 
     def test_refresh_below_limit_is_rejected(self) -> None:
         raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
@@ -90,6 +91,12 @@ class ConfigTest(unittest.TestCase):
     def test_string_boolean_is_rejected(self) -> None:
         raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
         raw["display"]["bgr"] = "false"
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ConfigError, "true oder false"):
+                load_config(self.write_config(raw, directory))
+
+        raw = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
+        raw["display"]["show_station_label"] = "false"
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ConfigError, "true oder false"):
                 load_config(self.write_config(raw, directory))
@@ -255,6 +262,7 @@ class ConfigTest(unittest.TestCase):
             "rotate",
             "bus_speed_hz",
             "bgr",
+            "show_station_label",
             "time_mode",
             "minute_unit",
         ):
@@ -269,6 +277,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.display.bus_speed_hz, 16_000_000)
         self.assertEqual(config.display.time_mode, "countdown")
         self.assertEqual(config.display.minute_unit, "min")
+        self.assertTrue(config.display.show_station_label)
         self.assertEqual(config.stations[0].label, "W")
         self.assertEqual(config.stations[0].city, "Hamburg")
         self.assertFalse(config.night_shutdown.enabled)

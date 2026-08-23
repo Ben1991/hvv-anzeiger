@@ -218,6 +218,11 @@ def _station_badge(draw: ImageDraw.ImageDraw, x: int, y: int, label: str) -> Non
     )
 
 
+def station_label_for_display(label: str, *, show_station_label: bool) -> str:
+    """Keep station identity internal while applying the global display choice."""
+    return label if show_station_label else ""
+
+
 def _status_text(
     *,
     wifi_is_connected: bool | None,
@@ -252,13 +257,17 @@ def board_state_key(
     time_is_synchronized: bool | None = True,
     time_mode: str = "countdown",
     minute_unit: str = "min",
+    show_station_label: bool = True,
 ) -> tuple[object, ...]:
     """Describe only visible state so unchanged frames need not be redrawn."""
     visible_departures = tuple(
         (
             departure.line,
             departure.destination,
-            departure.station_label,
+            station_label_for_display(
+                departure.station_label,
+                show_station_label=show_station_label,
+            ),
             departure.product,
             departure.cancelled,
             format_departure_time(
@@ -281,6 +290,7 @@ def board_state_key(
             stale=stale,
             last_updated=last_updated,
         ),
+        show_station_label,
     )
 
 
@@ -296,6 +306,7 @@ def render_board(
     time_is_synchronized: bool | None = True,
     time_mode: str = "countdown",
     minute_unit: str = "min",
+    show_station_label: bool = True,
 ) -> Image.Image:
     image = Image.new("RGB", (WIDTH, HEIGHT), BLACK)
     draw = ImageDraw.Draw(image)
@@ -334,16 +345,20 @@ def render_board(
                 fill=ROW_LINE,
             )
             _line_badge(draw, 9, y + 6, 58, 27, departure.line, departure.product)
-            _station_badge(draw, 75, y + 10, departure.station_label)
+            station_label = station_label_for_display(
+                departure.station_label,
+                show_station_label=show_station_label,
+            )
+            _station_badge(draw, 75, y + 10, station_label)
 
             destination, destination_font = _fit_text(
                 draw,
                 departure.destination,
-                143 if departure.station_label else 164,
+                143 if station_label else 164,
                 start_size=18,
                 min_size=13,
             )
-            destination_x = 99 if departure.station_label else 76
+            destination_x = 99 if station_label else 76
             draw.text(
                 (destination_x, y + 7),
                 destination,
