@@ -61,6 +61,9 @@ class WebApplicationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "keine Zeilenumbrüche"):
             save_credentials(self.credentials, "application-id", "secret\nHTTPS_PROXY=http://attacker")
 
+    def test_web_password_verification_rejects_unknown_algorithm(self) -> None:
+        self.assertFalse(verify_web_password("secret", "bcrypt$1$salt$digest"))
+
     def test_config_save_falls_back_when_systemd_blocks_temporary_sibling(self) -> None:
         raw_config = {
             "api": {"base_url": "https://gti.geofox.de/gti/public/v1", "version": 63},
