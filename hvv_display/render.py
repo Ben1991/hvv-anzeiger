@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 import os
+import re
+from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
@@ -19,6 +21,97 @@ WHITE = "#ffffff"
 MUTED = "#b9c0c7"
 ROW_LINE = "#48515a"
 BLACK = "#090b0d"
+
+
+@dataclass(frozen=True)
+class LineStyle:
+    """Allowlisted visual style shared by the display and web renderer."""
+
+    token: str
+    shape: str
+    background: str
+    foreground: str
+
+
+_LINE_STYLES = {
+    "bus": LineStyle("bus", "pointed", RED, WHITE),
+    "u1": LineStyle("u1", "rectangle", "#1d75b8", WHITE),
+    "u2": LineStyle("u2", "rectangle", RED, WHITE),
+    "u3": LineStyle("u3", "rectangle", "#f4c20d", BLACK),
+    "u4": LineStyle("u4", "rectangle", "#00a6d6", WHITE),
+    "sbahn": LineStyle("sbahn", "circle", "#168447", WHITE),
+    "s2": LineStyle("s2", "circle", "#c2188b", WHITE),
+    "s3": LineStyle("s3", "circle", "#7b3f98", WHITE),
+    "s5": LineStyle("s5", "circle", "#154273", WHITE),
+    "s7": LineStyle("s7", "circle", "#e87511", WHITE),
+    "akn": LineStyle("akn", "circle", "#e87511", WHITE),
+    "regional": LineStyle("regional", "rectangle", "#59636e", WHITE),
+    "xpress": LineStyle("xpress", "pointed", "#006a9b", WHITE),
+    "night": LineStyle("night", "pointed", "#473b8f", WHITE),
+    "ferry": LineStyle("ferry", "pointed", "#007c91", WHITE),
+    "neutral": LineStyle("neutral", "rounded", "#59636e", WHITE),
+}
+
+
+def _style_input(value: object) -> str:
+    return "".join(
+        character for character in str(value or "").upper() if character.isalnum()
+    )
+
+
+def get_line_style(line_name: str, product: str | None = None) -> LineStyle:
+    """Return a fixed, safe style for an external line/product value."""
+    line = _style_input(line_name)
+    mode = _style_input(product)
+    if not line:
+        return _LINE_STYLES["neutral"]
+
+    exact_lines = {"U1": "u1", "U2": "u2", "U3": "u3", "U4": "u4"}
+    if line in exact_lines:
+        return _LINE_STYLES[line.lower()]
+    if line in {"S2", "S3", "S5", "S7"}:
+        return _LINE_STYLES[line.lower()]
+    if re.fullmatch(r"U\d+", line) or mode in {"U", "UBAHN", "SUBWAY"}:
+        return _LINE_STYLES["u1"]
+    if re.fullmatch(r"S\d+", line) or mode in {"S", "SBAHN", "SBAN"}:
+        return _LINE_STYLES["sbahn"]
+    if re.fullmatch(r"A\d+", line) or mode in {"A", "AKN"}:
+        return _LINE_STYLES["akn"]
+    if re.fullmatch(r"(?:RE|RB)\d*", line) or mode in {
+        "RE",
+        "RB",
+        "REGIONAL",
+        "REGIONALBAHN",
+    }:
+        return _LINE_STYLES["regional"]
+    if mode in {"FAEHRE", "FAHRE", "FERRY", "HAFENFAEHRE"}:
+        return _LINE_STYLES["ferry"]
+    if mode in {"XPRESS", "XPRESSBUS", "XBUS"} or re.fullmatch(r"X\d+", line):
+        return _LINE_STYLES["xpress"]
+    if mode in {"NACHT", "NACHTBUS", "NIGHTBUS"} or re.fullmatch(r"N\d+", line):
+        return _LINE_STYLES["night"]
+    if mode in {"BUS", "METROBUS"} or re.fullmatch(r"M?\d{1,4}[A-Z]?", line):
+        return _LINE_STYLES["bus"]
+    return _LINE_STYLES["neutral"]
+
+
+# Keep the issue/API wording available while Python callers use snake_case.
+getLineStyle = get_line_style
+
+
+def line_style_css() -> str:
+    """Generate web CSS from the same allowlisted style catalog."""
+    shape_css = {
+        "pointed": "clip-path:polygon(12% 0,100% 0,88% 100%,0 100%);",
+        "circle": "border-radius:999px;",
+        "rectangle": "border-radius:3px;",
+        "rounded": "border-radius:7px;",
+    }
+    return "".join(
+        f".line-badge-{style.token}{{background:{style.background};"
+        f"color:{style.foreground};{shape_css[style.shape]}}}"
+        for style in _LINE_STYLES.values()
+    )
 
 
 @lru_cache(maxsize=32)
@@ -63,25 +156,48 @@ def _fit_text(
 
 
 def _line_badge(
-    draw: ImageDraw.ImageDraw, x: int, y: int, width: int, height: int, line: str
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    line: str,
+    product: str | None = None,
 ) -> None:
-    point = min(8, width // 5)
-    draw.polygon(
-        [
-            (x + point, y),
-            (x + width, y),
-            (x + width - point, y + height),
-            (x, y + height),
-        ],
-        fill=RED,
+    style = get_line_style(line, product)
+    bounds = (x, y, x + width, y + height)
+    if style.shape == "pointed":
+        point = min(8, width // 5)
+        draw.polygon(
+            [
+                (x + point, y),
+                (x + width, y),
+                (x + width - point, y + height),
+                (x, y + height),
+            ],
+            fill=style.background,
+        )
+    elif style.shape == "circle":
+        draw.ellipse(bounds, fill=style.background)
+    elif style.shape == "rectangle":
+        draw.rectangle(bounds, fill=style.background)
+    else:
+        draw.rounded_rectangle(bounds, radius=5, fill=style.background)
+    line_text = str(line or "?")[:32]
+    text, font = _fit_text(
+        draw,
+        line_text,
+        width - 10,
+        start_size=18 if len(line_text) <= 3 else 15,
+        min_size=10,
+        bold=True,
     )
-    font = _font(18 if len(line) <= 3 else 15, bold=True)
-    box = draw.textbbox((0, 0), line, font=font)
+    box = draw.textbbox((0, 0), text, font=font)
     draw.text(
         (x + (width - (box[2] - box[0])) / 2, y + (height - (box[3] - box[1])) / 2 - 2),
-        line,
+        text,
         font=font,
-        fill=WHITE,
+        fill=style.foreground,
     )
 
 
@@ -141,6 +257,7 @@ def board_state_key(
             departure.line,
             departure.destination,
             departure.station_label,
+            departure.product,
             departure.cancelled,
             (
                 "AUS"
@@ -214,7 +331,7 @@ def render_board(
                 (8, y + row_height - 1, WIDTH - 8, y + row_height - 1),
                 fill=ROW_LINE,
             )
-            _line_badge(draw, 9, y + 6, 58, 27, departure.line)
+            _line_badge(draw, 9, y + 6, 58, 27, departure.line, departure.product)
             _station_badge(draw, 75, y + 10, departure.station_label)
 
             destination, destination_font = _fit_text(
