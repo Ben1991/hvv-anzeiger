@@ -5,6 +5,12 @@
 [![CI](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml)
 [![Lizenz: GPL-3.0-only](https://img.shields.io/badge/Lizenz-GPL--3.0--only-blue.svg)](LICENSE)
 
+## Wieso gibt es dieses Projekt?
+
+Ich möchte morgens möglichst schnell sehen, wann ich los muss, um meinen Bus oder meine Bahn zu bekommen - ohne auf mein Handy gucken zu müssen.
+
+## Und wie funktioniert es?
+
 Eine kompakte Abfahrtsanzeige für einen Raspberry Pi Zero 2 W oder ein
 kompatibles Raspberry-Pi-Modell mit 40-Pin-GPIO und ein
 2,2-Zoll-ILI9341-SPI-Display. Sie läuft ohne grafische Oberfläche auf
