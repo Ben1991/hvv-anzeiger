@@ -21,7 +21,7 @@ class TimeDisplayTest(unittest.TestCase):
             "7 min",
         )
 
-    def test_all_countdown_units_and_zero_are_supported(self) -> None:
+    def test_all_countdown_units_are_supported(self) -> None:
         departure = self.now + timedelta(seconds=1)
         self.assertEqual(
             format_departure_time(departure, self.now, minute_unit="min"), "1 min"
@@ -32,9 +32,38 @@ class TimeDisplayTest(unittest.TestCase):
         self.assertEqual(
             format_departure_time(departure, self.now, minute_unit="none"), "1"
         )
-        self.assertEqual(
-            format_departure_time(self.now, self.now, minute_unit="none"), "0"
-        )
+
+    def test_zero_countdown_is_sofort_for_every_unit(self) -> None:
+        for unit in ("min", "m", "none"):
+            for offset in (0, -1, -60):
+                with self.subTest(unit=unit, offset=offset):
+                    self.assertEqual(
+                        format_departure_time(
+                            self.now + timedelta(seconds=offset),
+                            self.now,
+                            minute_unit=unit,
+                        ),
+                        "sofort",
+                    )
+
+    def test_due_departure_keeps_clock_and_cancellation_labels(self) -> None:
+        for unit in ("min", "m", "none"):
+            with self.subTest(unit=unit):
+                self.assertEqual(
+                    format_departure_time(
+                        self.now,
+                        self.now,
+                        time_mode="departure_time",
+                        minute_unit=unit,
+                    ),
+                    "18:35",
+                )
+                self.assertEqual(
+                    format_departure_time(
+                        self.now, self.now, minute_unit=unit, cancelled=True
+                    ),
+                    "AUS",
+                )
 
     def test_departure_time_and_cancelled_variants_use_same_effective_time(
         self,
