@@ -19,6 +19,31 @@ from hvv_display.render import (
 
 
 class RenderTest(unittest.TestCase):
+    def test_due_departure_is_rendered_as_sofort_for_every_unit(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        departure = Departure("21", "Ziel", now)
+        for unit in ("min", "m", "none"):
+            with self.subTest(unit=unit):
+                with patch.object(
+                    ImageDraw.ImageDraw,
+                    "text",
+                    autospec=True,
+                    side_effect=ImageDraw.ImageDraw.text,
+                ) as text:
+                    render_board([departure], now=now, minute_unit=unit)
+                self.assertIn("sofort", [call.args[2] for call in text.call_args_list])
+                state = board_state_key(
+                    [departure],
+                    now=now,
+                    last_updated=now,
+                    stale=False,
+                    error_message=None,
+                    wifi_is_connected=True,
+                    max_rows=5,
+                    minute_unit=unit,
+                )
+                self.assertIn("sofort", state[1][0])
+
     def test_render_has_display_dimensions(self) -> None:
         now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
         image = render_board(
