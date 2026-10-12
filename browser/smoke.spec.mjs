@@ -1,5 +1,22 @@
 import { expect, test } from "@playwright/test";
 
+test("diagnostics is reachable from the dashboard and readable on mobile", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Gesundheit & Diagnose" }).click();
+  await expect(page.getByRole("heading", { name: "Gesundheit & Diagnose" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Diagnosedaten" })).toContainText("Datenalter");
+  await expect(page.getByRole("region", { name: "Diagnosedaten" })).toContainText("Rate-Limit aktiv");
+  await expect(page.getByRole("heading", { name: "Support-Diagnose" })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const response = await page.request.get("/api/health");
+  expect(response.status()).toBe(500);
+  expect(await response.json()).toMatchObject({ schema_version: 1, status: "unavailable", snapshot_available: false });
+  await page.getByRole("link", { name: "← Abfahrten" }).click();
+  await expect(page.getByRole("heading", { name: "Abfahrten" })).toBeVisible();
+});
+
 test("dashboard, display mode, and settings have stable product surfaces", async ({
   page,
 }) => {

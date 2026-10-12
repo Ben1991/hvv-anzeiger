@@ -5,7 +5,7 @@ import os
 import stat
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
@@ -14,6 +14,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from hvv_display.geofox import HAMBURG_TZ
+from hvv_display.health import HealthPublisher
 from hvv_display.models import Departure
 from hvv_display.web import (
     WebApplication,
@@ -31,6 +32,98 @@ from hvv_display.web import (
 
 
 class WebApplicationTest(unittest.TestCase):
+    def test_diagnostics_reads_service_status_without_geofox_or_configuration(self):
+        publisher = HealthPublisher(self.app.health_file)
+        publisher.publish(configuration_valid=True, network_connected=False)
+        with patch.object(self.app, "_client", side_effect=AssertionError("No API")):
+            page = self.app.diagnostics().decode()
+        self.assertIn("Gesundheit &amp; Diagnose", page)
+        self.assertIn("Veraltet / eingeschränkt", page)
+        self.assertIn("Letzter erfolgreicher Geofox-Abruf", page)
+        self.assertIn("Rate-Limit aktiv", page)
+        self.assertIn('href="/api/health"', page)
+        self.assertNotIn(str(self.app.health_file), page)
+
+    def test_health_routes_require_authentication_and_return_distinct_http_codes(self):
+        self.app.access_token = hash_web_password("test-web-password")
+        publisher = HealthPublisher(self.app.health_file)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.app))
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        auth = "Basic " + base64.b64encode(b"hvv-anzeiger:test-web-password").decode()
+        try:
+            for path in ("/api/health", "/diagnostics"):
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(base_url + path)  # noqa: S310
+                self.assertEqual(denied.exception.code, 401)
+            for changes, status, expected in (
+                ({"network_connected": True}, 200, "healthy"),
+                ({"network_connected": False}, 503, "degraded"),
+                ({"configuration_valid": False}, 500, "unavailable"),
+            ):
+                publisher.publish(
+                    **(
+                        {
+                            "configuration_valid": True,
+                            "network_connected": True,
+                            "clock_synchronized": True,
+                            "display_available": True,
+                            "last_successful_fetch": datetime.now(HAMBURG_TZ),
+                        }
+                        | changes
+                    )
+                )
+                request = Request(  # noqa: S310
+                    base_url + "/api/health", headers={"Authorization": auth}
+                )
+                try:
+                    response = urlopen(request)  # noqa: S310
+                except HTTPError as error:
+                    response = error
+                with response:
+                    self.assertEqual(response.code, status)
+                    self.assertEqual(response.headers["Cache-Control"], "no-store")
+                    data = response.read()
+                    self.assertLess(len(data), 8192)
+                    self.assertEqual(json.loads(data)["status"], expected)
+            request = Request(  # noqa: S310
+                base_url + "/diagnostics", headers={"Authorization": auth}
+            )
+            with urlopen(request) as response:  # noqa: S310
+                self.assertIn(b"Support-Diagnose", response.read())
+            with patch.object(self.app, "allow_health_request", return_value=False):
+                with self.assertRaises(HTTPError) as limited:
+                    urlopen(request)  # noqa: S310
+                self.assertEqual(limited.exception.code, 429)
+                self.assertEqual(limited.exception.headers["Retry-After"], "1")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_health_rate_limit_is_bounded_and_recovers(self):
+        with patch("hvv_display.web.time.monotonic", return_value=100):
+            self.assertTrue(all(self.app.allow_health_request() for _ in range(20)))
+            self.assertFalse(self.app.allow_health_request())
+        with patch("hvv_display.web.time.monotonic", return_value=101):
+            self.assertTrue(self.app.allow_health_request())
+        self.assertEqual(len(self.app._health_requests), 20)
+
+    def test_diagnostics_formats_timestamps_and_durations_for_readability(self):
+        now = datetime.now(HAMBURG_TZ)
+        publisher = HealthPublisher(self.app.health_file)
+        publisher.started_at = now - timedelta(days=2, hours=3)
+        publisher.publish(
+            configuration_valid=True, last_successful_fetch=now,
+            retry_seconds=75, rate_limit_seconds=3600,
+        )
+        page = self.app.diagnostics().decode()
+        self.assertIn("2 Tage 3 Std.", page)
+        self.assertIn("1 Min. 15 Sek.", page)
+        self.assertIn("1 Std. 0 Min.", page)
+        self.assertIn(now.astimezone(timezone.utc).strftime("%d.%m.%Y"), page)
+
     def test_due_departure_shows_sofort_for_every_countdown_unit(self) -> None:
         now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
         departure = Departure("21", "Ziel", now)
@@ -40,7 +133,7 @@ class WebApplicationTest(unittest.TestCase):
                 self.assertEqual(payload[0]["display_time"], "sofort")
                 self.assertEqual(payload[0]["minutes"], 0)
                 rows = _departure_rows(payload)
-                self.assertIn('>sofort</div>', rows)
+                self.assertIn(">sofort</div>", rows)
                 self.assertNotIn("in 0 min", rows)
 
     def setUp(self) -> None:

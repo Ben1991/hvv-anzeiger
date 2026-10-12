@@ -277,8 +277,47 @@ class MainTest(unittest.TestCase):
                 "hvv_display.main.load_config",
                 side_effect=ConfigError("invalid"),
             ),
+            patch("hvv_display.main.HealthPublisher") as health,
         ):
             self.assertEqual(run(), 2)
+        health.return_value.publish.assert_called_once_with(
+            configuration_valid=False, service_running=False
+        )
+
+    def test_runtime_publishes_429_without_raw_error_or_credentials(self):
+        config = load_config("config.example.json")
+        with TemporaryDirectory() as directory:
+            args = Namespace(
+                config="config.example.json",
+                cache=str(Path(directory) / "stations.json"),
+                once=True,
+                output=str(Path(directory) / "board.png"),
+            )
+            with (
+                patch("hvv_display.main._arguments", return_value=args),
+                patch("hvv_display.main.HealthPublisher") as health,
+                patch("hvv_display.main.GeofoxClient") as client,
+                patch(
+                    "hvv_display.main.resolve_stations", return_value=config.stations
+                ),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch("hvv_display.main.wifi_connected", return_value=False),
+                patch("hvv_display.main.signal.signal"),
+            ):
+                client.return_value.departure_list.side_effect = GeofoxError(
+                    "secret-path-and-credentials",
+                    http_status=429,
+                    kind="rate_limit",
+                    retry_after_seconds=120,
+                )
+                self.assertEqual(run(), 1)
+            state = health.return_value.publish.call_args_list[0].kwargs
+            self.assertEqual(state["error_kind"], "rate_limit")
+            self.assertEqual(state["rate_limit_seconds"], 120)
+            self.assertEqual(state["retry_seconds"], 120)
+            self.assertEqual(state["consecutive_failures"], 1)
+            self.assertFalse(state["network_connected"])
+            self.assertNotIn("secret-path-and-credentials", str(state))
 
     def test_update_board_skips_unchanged_frame(self) -> None:
         now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)

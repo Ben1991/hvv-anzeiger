@@ -17,10 +17,13 @@ import shutil
 import ssl
 import subprocess
 import tempfile
+import time
+from collections import deque
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -34,6 +37,7 @@ from .geofox import (
     line_route_options_for_station,
     line_route_stations,
 )
+from .health import STATUS_CODES, health_path, read_health
 from .render import get_line_style, line_style_css, station_label_for_display
 from .stations import resolve_stations
 from .time_display import format_departure_time, minutes_until
@@ -312,16 +316,78 @@ class WebApplication:
         *,
         access_token: str | None = None,
         web_env_path: Path | None = None,
+        health_file: Path | None = None,
     ) -> None:
         self.config_path = config_path
         self.credentials_path = credentials_path
         self.cache_path = cache_path
+        self.health_file = health_file or health_path(cache_path)
         self.access_token = access_token
         self.web_env_path = web_env_path or Path(
             os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")
         )
         self.csrf_token = secrets.token_urlsafe(32)
         self._line_catalog: list[dict[str, Any]] | None = None
+        self._health_requests: deque[float] = deque(maxlen=20)
+        self._health_lock = Lock()
+
+    def allow_health_request(self) -> bool:
+        with self._health_lock:
+            now = time.monotonic()
+            if len(self._health_requests) == 20 and now - self._health_requests[0] < 1:
+                return False
+            self._health_requests.append(now)
+            return True
+
+    def health(self) -> dict[str, Any]:
+        return read_health(self.health_file)
+
+    def diagnostics(self) -> bytes:
+        data = self.health()
+        labels = {"healthy": "Gesund", "degraded": "Veraltet / eingeschränkt", "unavailable": "Nicht funktionsfähig"}
+        def flag(value: Any) -> str:
+            return "Unbekannt" if value is None else "Ja" if value else "Nein"
+
+        def duration(value: Any) -> str:
+            if value is None:
+                return "Unbekannt"
+            minutes, seconds = divmod(value, 60)
+            hours, minutes = divmod(minutes, 60)
+            days, hours = divmod(hours, 24)
+            if days:
+                return f"{days} {'Tag' if days == 1 else 'Tage'} {hours} Std."
+            if hours:
+                return f"{hours} Std. {minutes} Min."
+            if minutes:
+                return f"{minutes} Min. {seconds} Sek."
+            return f"{seconds} Sekunden"
+
+        last_fetch = data["last_successful_fetch"]
+        last_fetch_label = datetime.fromisoformat(last_fetch).strftime("%d.%m.%Y, %H:%M:%S") if last_fetch else "Noch kein Abruf bekannt"
+
+        fields = [
+            ("Version", data["version"]),
+            ("Anzeigedienst läuft", flag(data["service_running"])),
+            ("Laufzeit des Dienstes", duration(data["uptime_seconds"])),
+            ("Konfiguration gültig", flag(data["configuration_valid"])),
+            ("WLAN verbunden", flag(data["network_connected"])),
+            ("Systemzeit synchronisiert", flag(data["clock_synchronized"])),
+            ("Display / Bildausgabe verfügbar", flag(data["display_available"])),
+            ("Nachtruhe aktiv", flag(data["night_shutdown"])),
+            ("Letzter erfolgreicher Geofox-Abruf (UTC)", last_fetch_label),
+            ("Datenalter", duration(data["data_age_seconds"])),
+            ("Daten veraltet", flag(data["stale"])),
+            ("Fehlgeschlagene Abrufe in Folge", str(data["consecutive_failures"])),
+            ("Letzter Abruffehler", {"none": "Keiner", "technical": "Technischer Fehler", "temporary": "Vorübergehend nicht erreichbar", "rate_limit": "Anfragelimit erreicht", "authentication": "Anmeldung abgelehnt"}[data["error_kind"]]),
+            ("Nächster Abruf / Wiederholungsversuch", duration(data["retry_in_seconds"])),
+            ("Rate-Limit aktiv", flag(data["rate_limit_active"])),
+            ("Verbleibende Rate-Limit-Pause", duration(data["rate_limit_remaining_seconds"])),
+            ("Alter des letzten Lebenszeichens", duration(data["heartbeat_age_seconds"])),
+        ]
+        cards = "".join(f'<div>{html.escape(label)}<strong style="overflow-wrap:anywhere">{html.escape(value)}</strong></div>' for label, value in fields)
+        status = labels[data["status"]]
+        notice = "" if data["snapshot_available"] else '<p class="notice">Kein gültiger Status des Anzeigedienstes verfügbar. Dienst starten und Schreibrechte im Laufzeitverzeichnis prüfen.</p>'
+        return _page("Gesundheit & Diagnose", f'''<div class="toolbar"><div><h1>Gesundheit &amp; Diagnose</h1><p class="subtle">Status des Anzeigedienstes · ohne neuen Geofox-Abruf</p></div><div><a href="/">← Abfahrten</a> · <a href="/diagnostics">Aktualisieren</a></div></div><section class="card" aria-label="Gesundheitsstatus"><h2>{status}</h2>{notice}<p>Unbekannt bedeutet: Die Information ist auf diesem System nicht verfügbar. Nachtruhe pausiert Abrufe planmäßig; alte Daten sind dann kein Dienstausfall.</p></section><section class="status" aria-label="Diagnosedaten">{cards}</section><section class="card"><h2>Support-Diagnose</h2><p>Diese JSON-Ausgabe enthält nur Statuswerte, keine Zugangsdaten, API-Antworten oder internen Pfade.</p><a href="/api/health">JSON öffnen</a><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{html.escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></section>''')
 
     def authorize(self, headers: Any) -> bool:
         if self.access_token is None:
@@ -634,7 +700,7 @@ class WebApplication:
         rows = _departure_rows(departures)
         message = f'<div class="notice">{html.escape(error)}</div>' if error else ""
         status = hardware_status()
-        content = f'''<div class="toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lokale HVV-Anzeige · aktualisiert beim Öffnen</div></div><div><a href="/display">Displaymodus</a> · <a href="/settings">Einstellungen</a> · <a href="/">Aktualisieren</a></div></div>{message}<section class="board" aria-label="Abfahrtsanzeige">{rows}</section><section class="status" aria-label="Hardware-Status"><div>CPU<strong>{html.escape(status["cpu"])}</strong></div><div>RAM<strong>{html.escape(status["ram"])}</strong></div><div>SD-Speicher<strong>{html.escape(status["storage"])}</strong></div></section><form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">System neu starten</button></form>'''
+        content = f'''<div class="toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lokale HVV-Anzeige · aktualisiert beim Öffnen</div></div><div><a href="/display">Displaymodus</a> · <a href="/settings">Einstellungen</a> · <a href="/diagnostics">Gesundheit &amp; Diagnose</a> · <a href="/">Aktualisieren</a></div></div>{message}<section class="board" aria-label="Abfahrtsanzeige">{rows}</section><section class="status" aria-label="Hardware-Status"><div>CPU<strong>{html.escape(status["cpu"])}</strong></div><div>RAM<strong>{html.escape(status["ram"])}</strong></div><div>SD-Speicher<strong>{html.escape(status["storage"])}</strong></div></section><form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">System neu starten</button></form>'''
         return _page("Abfahrten", content)
 
     def display(self) -> bytes:
@@ -966,6 +1032,16 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 self._unauthorized()
                 return
             path = urlsplit(self.path).path
+            if path in {"/api/health", "/diagnostics"}:
+                self.connection.settimeout(2)
+                if not application.allow_health_request():
+                    self._send_json({"error": "Zu viele Statusabfragen"}, HTTPStatus.TOO_MANY_REQUESTS, retry_after=1)
+                elif path == "/diagnostics":
+                    self._send(application.diagnostics())
+                else:
+                    data = application.health()
+                    self._send_json(data, HTTPStatus(STATUS_CODES[data["status"]][0]))
+                return
             if path == "/":
                 self._send(application.dashboard())
                 return
@@ -1161,6 +1237,8 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 )
 
         def log_message(self, format: str, *args: object) -> None:
+            if urlsplit(getattr(self, "path", "")).path in {"/api/health", "/diagnostics"}:
+                return
             LOG.info("web %s", format % args)
 
     return Handler

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import os
 import signal
 import sys
@@ -17,6 +18,7 @@ from .config import ConfigError, load_config
 from .credentials import load_credentials
 from .geofox import HAMBURG_TZ, GeofoxClient, GeofoxError
 from .hardware import Ili9341Display
+from .health import HealthPublisher, health_path
 from .models import Departure
 from .network import wifi_connected
 from .render import HEIGHT, WIDTH, board_state_key, render_board
@@ -97,6 +99,7 @@ def _arguments() -> argparse.Namespace:
         help="Pfad zur Geofox-EnvironmentFile",
     )
     parser.add_argument("--once", action="store_true", help="Nur einmal aktualisieren")
+    parser.add_argument("--health-file", help="Datei für den lokalen Gesundheitsstatus")
     parser.add_argument(
         "--output",
         help="PNG schreiben statt Hardware anzusteuern (hilfreich zur Diagnose)",
@@ -173,6 +176,12 @@ def update_board(
 def run() -> int:
     args = _arguments()
     notifier = SystemdNotifier()
+    publisher = HealthPublisher(
+        Path(args.health_file)
+        if getattr(args, "health_file", None)
+        else health_path(args.cache)
+    )
+    configuration_valid = False
     try:
         config_path = Path(args.config)
         credentials_path = Path(
@@ -183,6 +192,7 @@ def run() -> int:
             )
         )
         config = load_config(config_path)
+        configuration_valid = True
         credentials = load_credentials(credentials_path)
         client = GeofoxClient(
             config.api.base_url,
@@ -196,7 +206,10 @@ def run() -> int:
         credentials_mtime_ns = (
             credentials_path.stat().st_mtime_ns if credentials_path.exists() else None
         )
-    except (ConfigError, GeofoxError, RuntimeError) as exc:
+    except (ConfigError, GeofoxError, RuntimeError, OSError) as exc:
+        publisher.publish(
+            configuration_valid=configuration_valid, service_running=False
+        )
         LOG.error("%s", exc)
         return 2
 
@@ -219,10 +232,15 @@ def run() -> int:
     last_board_state: tuple[object, ...] | None = None
     last_success_heartbeat_at: float | None = None
     clock_confirmed = False
+    configuration_valid = True
+    error_kind = "none"
+    rate_limit_until = 0.0
+    health_values = {"configuration_valid": True}
     notifier.ready()
     while not stopped:
         now = datetime.now(HAMBURG_TZ)
         current_monotonic = time.monotonic()
+        status_monotonic = current_monotonic
         notifier.ping_if_due(current_monotonic)
         try:
             current_config_mtime_ns = config_path.stat().st_mtime_ns
@@ -259,6 +277,9 @@ def run() -> int:
                 consecutive_failures = 0
                 next_api_attempt_at = 0.0
                 last_board_state = None
+                configuration_valid = True
+                error_kind = "none"
+                rate_limit_until = 0.0
                 if display_changed and not args.output:
                     display = None
                 LOG.info(
@@ -266,6 +287,7 @@ def run() -> int:
                     "; Display wird neu initialisiert" if display_changed else "",
                 )
             except (ConfigError, OSError) as exc:
+                configuration_valid = False
                 LOG.warning(
                     "Neue Konfiguration konnte nicht übernommen werden; "
                     "bisherige Werte bleiben aktiv: %s",
@@ -298,6 +320,7 @@ def run() -> int:
             and not night_active
             and current_monotonic >= next_api_attempt_at
         ):
+            new_rate_limit_seconds = None
             try:
                 if stations is None:
                     stations = resolve_stations(
@@ -314,6 +337,8 @@ def run() -> int:
                 last_updated = now
                 last_error = None
                 consecutive_failures = 0
+                error_kind = "none"
+                rate_limit_until = 0.0
                 last_success_heartbeat_at = log_success(
                     len(latest),
                     now_monotonic=current_monotonic,
@@ -323,6 +348,14 @@ def run() -> int:
                 last_error = str(exc)
                 consecutive_failures += 1
                 retry_after_seconds = exc.retry_after_seconds
+                error_kind = (
+                    "authentication" if exc.http_status in (401, 403) else exc.kind
+                )
+                if exc.http_status == 429 or exc.kind == "rate_limit":
+                    error_kind = "rate_limit"
+                    new_rate_limit_seconds = (
+                        retry_after_seconds or config.api.refresh_seconds
+                    )
                 LOG.warning("Aktualisierung fehlgeschlagen: %s", exc)
             else:
                 retry_after_seconds = None
@@ -332,7 +365,10 @@ def run() -> int:
                 consecutive_failures,
                 retry_after_seconds,
             )
-            next_api_attempt_at = time.monotonic() + api_delay
+            status_monotonic = time.monotonic()
+            next_api_attempt_at = status_monotonic + api_delay
+            if new_rate_limit_seconds is not None:
+                rate_limit_until = status_monotonic + new_rate_limit_seconds
             if consecutive_failures:
                 LOG.info("Nächster Geofox-Versuch in %d Sekunden", api_delay)
 
@@ -347,6 +383,7 @@ def run() -> int:
             stale=visible_error is not None,
             max_stale_age_minutes=config.api.max_stale_age_minutes,
         )
+        display_available = False
         if args.output or display is not None:
             try:
                 last_board_state = update_board(
@@ -366,6 +403,7 @@ def run() -> int:
                     minute_unit=config.display.minute_unit,
                     show_station_label=config.display.show_station_label,
                 )
+                display_available = True
             except (OSError, RuntimeError) as exc:
                 LOG.warning(
                     "Displayübertragung fehlgeschlagen; erneuter Versuch folgt: %s",
@@ -374,7 +412,25 @@ def run() -> int:
                 display = None
                 last_board_state = None
 
+        health_values = {
+            "configuration_valid": configuration_valid,
+            "network_connected": wifi_state,
+            "clock_synchronized": clock_ready,
+            "display_available": display_available,
+            "night_shutdown": night_active,
+            "last_successful_fetch": last_updated,
+            "consecutive_failures": consecutive_failures,
+            "error_kind": error_kind,
+            "retry_seconds": max(0, math.ceil(next_api_attempt_at - status_monotonic)),
+            "rate_limit_seconds": max(
+                0, math.ceil(rate_limit_until - status_monotonic)
+            ),
+            "refresh_seconds": config.api.refresh_seconds,
+            "max_data_age_seconds": config.api.max_stale_age_minutes * 60,
+        }
+        publisher.publish(**health_values)
         if args.once:
+            publisher.publish(**health_values, service_running=False)
             return 0 if clock_ready and last_error is None else 1
         deadline = time.monotonic() + config.api.refresh_seconds
         while not stopped:
@@ -391,6 +447,7 @@ def run() -> int:
             except OSError:
                 pass
             time.sleep(min(1.0, deadline - sleep_now))
+    publisher.publish(**health_values, service_running=False)
     return 0
 
 
