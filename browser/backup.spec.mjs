@@ -50,7 +50,7 @@ test("configuration export, preview, cancel, import and restore work end to end"
     await page.locator("#config-file").setInputFiles(input);
     await page.getByRole("button", { name: "Import prüfen" }).click();
     await page.setViewportSize({ width: 390, height: 844 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.getByRole("button", { name: "Änderungen anwenden" }).click();
     await expect(page.getByRole("heading", { name: "Änderungen prüfen" })).toBeVisible();
     await page.getByRole("checkbox").check();
