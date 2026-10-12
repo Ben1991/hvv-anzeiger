@@ -268,7 +268,11 @@ def _departure_rows(
         display_time = html.escape(str(display_time_value))
         countdown = (
             ""
-            if absolute_time or item.get("time_mode") == "departure_time"
+            if (
+                absolute_time
+                or item.get("time_mode") == "departure_time"
+                or item.get("minutes") == 0
+            )
             else f'<br><small>in {html.escape(str(item.get("minutes", ""))) } min</small>'
         )
         rows.append(
