@@ -18,6 +18,7 @@ from hvv_display.models import Departure
 from hvv_display.web import (
     WebApplication,
     _departure_payload,
+    _departure_rows,
     _settings_field_errors,
     hardware_status,
     hash_web_password,
@@ -30,6 +31,18 @@ from hvv_display.web import (
 
 
 class WebApplicationTest(unittest.TestCase):
+    def test_due_departure_shows_sofort_for_every_countdown_unit(self) -> None:
+        now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)
+        departure = Departure("21", "Ziel", now)
+        for unit in ("min", "m", "none"):
+            with self.subTest(unit=unit):
+                payload = _departure_payload([departure], now, minute_unit=unit)
+                self.assertEqual(payload[0]["display_time"], "sofort")
+                self.assertEqual(payload[0]["minutes"], 0)
+                rows = _departure_rows(payload)
+                self.assertIn('>sofort</div>', rows)
+                self.assertNotIn("in 0 min", rows)
+
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
         root = Path(self.directory.name)

@@ -26,6 +26,8 @@ def format_departure_time(
     if time_mode == "departure_time":
         return departure_time.strftime("%H:%M")
     minutes = minutes_until(departure_time, now)
+    if minutes == 0:
+        return "sofort"
     if minute_unit == "none":
         return str(minutes)
     return f"{minutes} {minute_unit}"
