@@ -131,3 +131,13 @@ jobs:
       - name: Show web log on failure
         if: failure()
         run: cat /tmp/hvv-anzeiger-web.log
+
+      - name: Upload browser report and accessibility screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-accessibility-report
+          path: |
+            browser/playwright-report/
+            browser/test-results/
+          retention-days: 7

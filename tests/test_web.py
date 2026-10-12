@@ -133,7 +133,7 @@ class WebApplicationTest(unittest.TestCase):
                 self.assertEqual(payload[0]["display_time"], "sofort")
                 self.assertEqual(payload[0]["minutes"], 0)
                 rows = _departure_rows(payload)
-                self.assertIn(">sofort</div>", rows)
+                self.assertIn(">sofort</time>", rows)
                 self.assertNotIn("in 0 min", rows)
 
     def setUp(self) -> None:
@@ -416,7 +416,8 @@ class WebApplicationTest(unittest.TestCase):
             display = self.app.display().decode("utf-8")
         self.assertIn('<body class="display-page">', display)
         self.assertIn('data-display-mode', display)
-        self.assertIn('<meta http-equiv="refresh" content="15">', display)
+        self.assertNotIn('<meta http-equiv="refresh"', display)
+        self.assertIn("/api/display", display)
         self.assertIn("line-badge-bus", display)
         self.assertIn(">12:04", display)
         self.assertNotIn("4 m", display)
@@ -433,12 +434,12 @@ class WebApplicationTest(unittest.TestCase):
             self.app, "departures", return_value=([], "Geofox ist nicht erreichbar")
         ):
             error_display = self.app.display().decode("utf-8")
-        self.assertIn('class="notice"', error_display)
+        self.assertIn('id="display-state">Geofox ist nicht erreichbar', error_display)
         self.assertIn('class="empty"', error_display)
 
         with patch.object(self.app, "departures", return_value=([], None)):
             empty_display = self.app.display().decode("utf-8")
-        self.assertNotIn('class="notice"', empty_display)
+        self.assertIn('id="display-state">Daten aktuell.', empty_display)
         self.assertIn('class="empty"', empty_display)
 
     def test_display_route_requires_authentication_and_sets_security_headers(
