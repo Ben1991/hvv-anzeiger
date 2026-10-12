@@ -1159,6 +1159,73 @@ cd /opt/hvv-anzeiger
 journalctl -u hvv-anzeiger -n 100 --no-pager
 ```
 
+### Gesundheit, Monitoring und Support-Diagnose
+
+Im Webinterface öffnet **Gesundheit & Diagnose** den neuen Bereich
+`/diagnostics`. Er zeigt den Status des **Anzeigedienstes**, Version, Laufzeit,
+Konfigurationsstatus, WLAN-Verbindung, Zeitsynchronisierung, Displaystatus,
+letzten erfolgreichen Geofox-Abruf, Datenalter, veraltete Daten sowie
+Wiederholungsversuche und Rate-Limit-Pausen. Die Statuswerte und die JSON-Ausgabe
+sind dort direkt lesbar. **Aktualisieren** liest einen neuen Status, ohne eine
+Geofox-Anfrage auszulösen. Unbekannte Werte werden ausdrücklich als unbekannt
+angezeigt; der WLAN-Status beweist keine Internetverbindung.
+
+Beispielansicht mit simulierten Statuswerten, keine Messung eines Raspberry Pi:
+
+![Gesundheit und Diagnose im Webinterface](docs/health-diagnostics.png)
+
+Der Anzeigedienst schreibt einen kleinen, atomar ersetzten Status nach
+`var/health.json`. Die mitgelieferten systemd-Dienste verwenden gemeinsam
+`/opt/hvv-anzeiger/var/health.json`; `HVV_HEALTH_FILE` überschreibt den Pfad.
+Alternativ unterstützt der Anzeigedienst `--health-file DATEI`.
+Nach einem Update beide Dienste neu starten, damit der Anzeigedienst den Status
+bereitstellt und die Weboberfläche ihn liest. Die Datei hat die Rechte `0600`;
+lokales Monitoring liest sie als Dienstbenutzer oder als root.
+
+```bash
+cd /opt/hvv-anzeiger
+sudo -u hvv-anzeiger .venv/bin/python -m hvv_display.health \
+  --file /opt/hvv-anzeiger/var/health.json
+sudo -u hvv-anzeiger ./diagnose.sh --json
+```
+
+`diagnose.sh` ohne `--json` behält die bisherige ausführliche Diagnose.
+Der JSON-Modus liest ausschließlich den vorhandenen Dienststatus, führt keine
+Hardwaretests oder Geofox-Abrufe aus und benötigt keine Unix-Systemressourcen.
+
+| Zustand | JSON `status` | HTTP `/api/health` | CLI-Exit-Code |
+|---|---|---:|---:|
+| Gesund | `healthy` | 200 | 0 |
+| Veraltet / eingeschränkt, etwa offline, ohne Daten oder mit Rate-Limit | `degraded` | 503 | 1 |
+| Nicht funktionsfähig: Dienst fehlt/beendet, Konfiguration ungültig, Display ausgefallen oder API-Anmeldung abgelehnt | `unavailable` | 500 | 2 |
+
+Ein Lebenszeichen gilt nach `max(90, 3 × api.refresh_seconds)` Sekunden als
+abgelaufen. Daten gelten bei fehlendem/fehlgeschlagenem Abruf oder ab
+`api.max_stale_age_minutes` als veraltet. Die geplante Nachtruhe ist bei laufendem
+Dienst und gültiger Konfiguration kein Ausfall; das Datenalter bleibt sichtbar.
+Vor dem ersten Dienststatus oder bei fehlender/beschädigter Datei werden
+`snapshot_available: false` und unbekannte Werte ausgegeben. Eine gültige
+Konfiguration mit einem abgeschalteten Dienst meldet ausdrücklich einen Ausfall.
+
+`/api/health` liefert dieselben festen Schlüssel mit `schema_version: 1`.
+Zeitstempel sind UTC, Dauern ganze Sekunden; unbekannte Werte sind `null`.
+Der lokale Webserver bindet standardmäßig an `127.0.0.1`. Bei der eingerichteten
+LAN-Weboberfläche erfordern **auch Diagnose und Health-API** die bestehende
+Anmeldung und TLS. Es gibt keine Ausnahme für Loopback, Proxy-Header oder
+Statusabfragen. Für passwortfreies lokales Monitoring die Datei-CLI verwenden.
+
+Die Statusdatei wird auf 8 KiB begrenzt gelesen, unbekannte Felder werden
+verworfen. Sie enthält keine Zugangsdaten, Passwort-Hashes, API-Antworten,
+Haltestellen-/Personendaten, Fehlertexte oder internen Pfade. Webabfragen sind
+auf insgesamt 20 pro Sekunde begrenzt (danach HTTP 429 mit `Retry-After: 1`),
+haben ein Schreibtimeout von zwei Sekunden und erzeugen keine Zugriffslogs.
+Ein Schreibfehler der Statusdatei bricht den Anzeigedienst nicht ab und wird
+nur einmal pro Fehlerphase ohne Pfadangaben protokolliert.
+
+Ein [systemd-Monitoring-Beispiel](docs/health-monitoring.md) führt den lokalen
+Check jede Minute aus; ein fehlgeschlagener Check ist im Journal sichtbar.
+Es werden keine Diagnoseberichte automatisch übertragen.
+
 ## Ressourcen- und Stromverbrauch
 
 ### Erwarteter Ressourcenbedarf

@@ -12,6 +12,16 @@ FAILURES=0
 WARNINGS=0
 PREVIEW_FILE="/tmp/hvv-anzeiger-diagnose-preview.png"
 
+# Fast, credential-free monitoring path; do not run the interactive checks.
+if [[ "${1:-}" == "--json" ]]; then
+  if [[ ! -x "$APP_DIR/.venv/bin/python" ]]; then
+    printf '%s\n' '{"schema_version":1,"version":null,"status":"unavailable","service_running":false,"uptime_seconds":null,"configuration_valid":null,"network_connected":null,"clock_synchronized":null,"display_available":null,"night_shutdown":false,"last_successful_fetch":null,"data_age_seconds":null,"stale":true,"consecutive_failures":0,"error_kind":"none","retry_in_seconds":0,"rate_limit_active":false,"rate_limit_remaining_seconds":0,"heartbeat_age_seconds":null,"snapshot_available":false}'
+    exit 2
+  fi
+  exec "$APP_DIR/.venv/bin/python" -m hvv_display.health \
+    --file "${HVV_HEALTH_FILE:-$APP_DIR/var/health.json}"
+fi
+
 pass() {
   echo "OK: $*"
 }
