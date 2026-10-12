@@ -10,6 +10,7 @@ import hashlib
 import html
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -23,12 +24,13 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Lock
+from threading import Lock, RLock
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from .config import ConfigError, load_config
 from .credentials import load_credentials
+from .freshness import departures_for_display, refresh_delay
 from .geofox import (
     HAMBURG_TZ,
     GeofoxClient,
@@ -38,6 +40,8 @@ from .geofox import (
     line_route_stations,
 )
 from .health import STATUS_CODES, health_path, read_health
+from .kiosk import DISPLAY_CSS, DISPLAY_SCRIPT
+from .models import Departure
 from .render import get_line_style, line_style_css, station_label_for_display
 from .stations import resolve_stations
 from .time_display import format_departure_time, minutes_until
@@ -205,6 +209,7 @@ def _departure_payload(
                 show_station_label=show_station_label,
             ),
             "time": departure.departure_time.strftime("%H:%M"),
+            "departure_time": departure.departure_time.isoformat(),
             "display_time": format_departure_time(
                 departure.departure_time,
                 now,
@@ -260,7 +265,7 @@ def _departure_rows(
         except (TypeError, ValueError):
             delay_seconds = 0
         delay = (
-            f' <span class="delay">(+{delay_seconds // 60} min)</span>'
+            f' <span class="delay">Verspätung: +{max(1, math.ceil(delay_seconds / 60))} min</span>'
             if delay_seconds
             else ""
         )
@@ -279,15 +284,18 @@ def _departure_rows(
             )
             else f'<br><small>in {html.escape(str(item.get("minutes", ""))) } min</small>'
         )
+        status = '<span class="cancelled">Ausfall</span>' if item.get("cancelled") else (
+            f'<time datetime="{html.escape(str(item.get("departure_time", "")), quote=True)}">{display_time}</time>'
+        )
         rows.append(
-            f'<div class="row"><div><div class="line line-badge line-badge-{style}">'
-            f'{html.escape(line)}</div><div class="station">'
+            f'<li class="row"><div><div class="line line-badge line-badge-{style}">'
+            f'<span class="sr-only">Linie </span>{html.escape(line)}</div><div class="station">'
             f'{html.escape(str(item.get("station", "")))}</div></div>'
             f'<div class="destination">{html.escape(str(item.get("destination", "")))}'
-            f"{delay}</div><div class=\"time {cancelled}\">{display_time}"
-            f"{countdown}</div></div>"
+            f"{delay}</div><div class=\"time {cancelled}\">{status}"
+            f"{countdown if not item.get('cancelled') else ''}</div></li>"
         )
-    return "".join(rows) or '<div class="empty">Keine passende Abfahrt verfügbar.</div>'
+    return ('<ul class="departure-list">' + "".join(rows) + '</ul>') if rows else '<div class="empty">Keine passende Abfahrt verfügbar.</div>'
 
 
 def _page(
@@ -303,7 +311,7 @@ def _page(
     return f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{head}
 <title>{html.escape(title)} · HVV-Anzeiger</title><style>
 .field-error{{display:block;margin-top:6px;color:#ff9aa5;font-weight:600}}
-:root{{color-scheme:dark;font-family:system-ui,sans-serif;background:#0b1220;color:#f4f7fb}}body{{margin:0;background:linear-gradient(135deg,#0b1220,#17233b);min-height:100vh}}main{{max-width:980px;margin:auto;padding:24px 16px 48px}}a{{color:#8bd3ff}}h1{{margin:0 0 8px;font-size:clamp(2rem,6vw,4rem)}}.subtle{{color:#aab8cb}}.toolbar{{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:20px 0}}.board{{background:#05080e;border:1px solid #324057;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px #0006}}.row{{display:grid;grid-template-columns:76px minmax(0,1fr) 100px;gap:16px;align-items:center;padding:18px 22px;border-bottom:1px solid #202a3b}}.row:last-child{{border:0}}.line{{display:inline-block;min-width:42px;padding:2px 8px;text-align:center;font-size:1.35rem;font-weight:800;line-height:1.2}}.destination{{font-size:1.2rem;overflow-wrap:anywhere}}.time{{text-align:right;font-size:1.8rem;font-variant-numeric:tabular-nums}}.time small{{font-size:.65em;color:#aab8cb}}.station{{color:#8bd3ff;font-size:.8rem}}.delay{{color:#ff9d66;font-size:.85rem}}.cancelled{{color:#ff6b7a;text-decoration:line-through}}.status,.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:16px 0}}.status div,.card{{background:#121c2d;border:1px solid #324057;border-radius:14px;padding:20px}}.status strong{{display:block;font-size:1.15rem;margin-top:4px}}.setting{{min-width:0}}.control-row,.station-search{{display:flex;gap:8px;align-items:center;flex-wrap:wrap}}.control-row input,.control-row select{{flex:1;min-width:0}}.reset{{background:#26344a;border-color:#53627a;font-size:.85rem}}.station-card{{border:1px solid #53627a;border-radius:12px;padding:16px;margin:14px 0}}.station-heading{{display:flex;justify-content:space-between;align-items:center;gap:12px}}.route-row{{display:grid;grid-template-columns:1fr 2fr auto;gap:8px;margin:8px 0}}.station-search{{margin-top:10px}}.station-search select{{min-width:280px;flex:1}}button,input,textarea,select{{font:inherit;border-radius:9px;border:1px solid #53627a;padding:10px 12px;background:#101a2b;color:inherit}}button{{cursor:pointer;background:#207bb3;border-color:#65c6ff;font-weight:700}}button:disabled{{opacity:.55;cursor:wait}}label{{display:block;margin:14px 0 6px;font-weight:700}}.card{{margin-top:18px}}.danger{{background:#7e2632;border-color:#ff8793;margin-left:8px}}.notice{{padding:14px 16px;border-radius:10px;background:#3b2913;color:#ffdca6;margin:16px 0}}.ok{{color:#8ee6ad}}.error{{color:#ff9aa5}}.empty{{padding:42px 22px;text-align:center;color:#aab8cb}}.spinner{{display:inline-block;width:14px;height:14px;border:2px solid #53627a;border-top-color:#8bd3ff;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}}@keyframes spin{{to{{transform:rotate(360deg)}}}}details.help-box{{margin-top:12px}}code{{overflow-wrap:anywhere}}.display-page main{{max-width:1320px;min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;padding:clamp(16px,4vw,48px)}}.display-page .display-shell{{width:100%}}.display-page .display-toolbar{{margin:0 0 clamp(16px,3vw,28px)}}.display-page .display-toolbar h1{{font-size:clamp(2rem,5vw,4.5rem)}}.display-page .display-board{{border-radius:clamp(12px,2vw,22px)}}.display-page .row{{grid-template-columns:minmax(64px,8vw) minmax(0,1fr) minmax(96px,12vw);padding:clamp(14px,2.4vw,28px) clamp(16px,3vw,34px);gap:clamp(10px,2vw,28px)}}.display-page .line{{font-size:clamp(1.35rem,3vw,2.4rem);min-width:clamp(42px,5vw,72px)}}.display-page .destination{{font-size:clamp(1.15rem,2.7vw,2rem)}}.display-page .time{{font-size:clamp(1.5rem,3.4vw,3rem)}}.display-page .station{{font-size:clamp(.75rem,1.4vw,1rem)}}.display-page .display-refresh{{margin:16px 0 0;text-align:center;font-size:.85rem}}.display-exit{{font-size:clamp(.95rem,1.5vw,1.2rem)}}@media(max-width:600px){{.display-page main{{padding:12px 8px 24px;justify-content:flex-start}}.display-page .display-toolbar{{margin-bottom:14px}}.display-page .row{{grid-template-columns:minmax(48px,16vw) minmax(0,1fr) minmax(72px,22vw);gap:8px;padding:12px 10px}}.display-page .line{{min-width:32px;padding:2px 4px;font-size:1.05rem}}.display-page .destination{{font-size:1rem}}.display-page .time{{font-size:1.2rem}}.display-page .station{{font-size:.68rem}}.display-page .display-board{{border-radius:12px}}}}{line_style_css()}
+:root{{color-scheme:dark;font-family:system-ui,sans-serif;background:#0b1220;color:#f4f7fb}}body{{margin:0;background:linear-gradient(135deg,#0b1220,#17233b);min-height:100vh}}main{{max-width:980px;margin:auto;padding:24px 16px 48px}}a{{color:#8bd3ff}}h1{{margin:0 0 8px;font-size:clamp(2rem,6vw,4rem)}}.subtle{{color:#aab8cb}}.toolbar{{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:20px 0}}.board{{background:#05080e;border:1px solid #324057;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px #0006}}.row{{display:grid;grid-template-columns:76px minmax(0,1fr) 100px;gap:16px;align-items:center;padding:18px 22px;border-bottom:1px solid #202a3b}}.row:last-child{{border:0}}.line{{display:inline-block;min-width:42px;padding:2px 8px;text-align:center;font-size:1.35rem;font-weight:800;line-height:1.2}}.destination{{font-size:1.2rem;overflow-wrap:anywhere}}.time{{text-align:right;font-size:1.8rem;font-variant-numeric:tabular-nums}}.time small{{font-size:.65em;color:#aab8cb}}.station{{color:#8bd3ff;font-size:.8rem}}.delay{{color:#ff9d66;font-size:.85rem}}.cancelled{{color:#ff6b7a;text-decoration:line-through}}.status,.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:16px 0}}.status div,.card{{background:#121c2d;border:1px solid #324057;border-radius:14px;padding:20px}}.status strong{{display:block;font-size:1.15rem;margin-top:4px}}.setting{{min-width:0}}.control-row,.station-search{{display:flex;gap:8px;align-items:center;flex-wrap:wrap}}.control-row input,.control-row select{{flex:1;min-width:0}}.reset{{background:#26344a;border-color:#53627a;font-size:.85rem}}.station-card{{border:1px solid #53627a;border-radius:12px;padding:16px;margin:14px 0}}.station-heading{{display:flex;justify-content:space-between;align-items:center;gap:12px}}.route-row{{display:grid;grid-template-columns:1fr 2fr auto;gap:8px;margin:8px 0}}.station-search{{margin-top:10px}}.station-search select{{min-width:280px;flex:1}}button,input,textarea,select{{font:inherit;border-radius:9px;border:1px solid #53627a;padding:10px 12px;background:#101a2b;color:inherit}}button{{cursor:pointer;background:#207bb3;border-color:#65c6ff;font-weight:700}}button:disabled{{opacity:.55;cursor:wait}}label{{display:block;margin:14px 0 6px;font-weight:700}}.card{{margin-top:18px}}.danger{{background:#7e2632;border-color:#ff8793;margin-left:8px}}.notice{{padding:14px 16px;border-radius:10px;background:#3b2913;color:#ffdca6;margin:16px 0}}.ok{{color:#8ee6ad}}.error{{color:#ff9aa5}}.empty{{padding:42px 22px;text-align:center;color:#aab8cb}}.spinner{{display:inline-block;width:14px;height:14px;border:2px solid #53627a;border-top-color:#8bd3ff;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}}@keyframes spin{{to{{transform:rotate(360deg)}}}}details.help-box{{margin-top:12px}}code{{overflow-wrap:anywhere}}.display-page main{{max-width:1320px;min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;padding:clamp(16px,4vw,48px)}}.display-page .display-shell{{width:100%}}.display-page .display-toolbar{{margin:0 0 clamp(16px,3vw,28px)}}.display-page .display-toolbar h1{{font-size:clamp(2rem,5vw,4.5rem)}}.display-page .display-board{{border-radius:clamp(12px,2vw,22px)}}.display-page .row{{grid-template-columns:minmax(64px,8vw) minmax(0,1fr) minmax(96px,12vw);padding:clamp(14px,2.4vw,28px) clamp(16px,3vw,34px);gap:clamp(10px,2vw,28px)}}.display-page .line{{font-size:clamp(1.35rem,3vw,2.4rem);min-width:clamp(42px,5vw,72px)}}.display-page .destination{{font-size:clamp(1.15rem,2.7vw,2rem)}}.display-page .time{{font-size:clamp(1.5rem,3.4vw,3rem)}}.display-page .station{{font-size:clamp(.75rem,1.4vw,1rem)}}.display-page .display-refresh{{margin:16px 0 0;text-align:center;font-size:.85rem}}.display-exit{{font-size:clamp(.95rem,1.5vw,1.2rem)}}@media(max-width:600px){{.display-page main{{padding:12px 8px 24px;justify-content:flex-start}}.display-page .display-toolbar{{margin-bottom:14px}}.display-page .row{{grid-template-columns:minmax(48px,16vw) minmax(0,1fr) minmax(72px,22vw);gap:8px;padding:12px 10px}}.display-page .line{{min-width:32px;padding:2px 4px;font-size:1.05rem}}.display-page .destination{{font-size:1rem}}.display-page .time{{font-size:1.2rem}}.display-page .station{{font-size:.68rem}}.display-page .display-board{{border-radius:12px}}}}{line_style_css()}{DISPLAY_CSS}
  </style><style>@media(max-width:600px){{.route-row{{grid-template-columns:1fr}}.route-row button{{width:100%}}}}[hidden]{{display:none !important}}.station-search{{flex-direction:column;align-items:stretch}}.station-search select{{min-width:0;width:100%}}.setup-guide{{margin:12px 0 18px;padding:16px 18px;border:1px solid #385875;border-radius:12px;background:linear-gradient(135deg,#142b42,#102033)}}.setup-guide strong{{display:block;margin-bottom:8px}}.setup-guide ol{{margin:0;padding-left:22px;color:#c4d2e3}}.setup-guide li+li{{margin-top:6px}}.line-picker{{margin-top:16px;padding:16px;border:1px solid #385875;border-radius:12px;background:#0e192a}}.line-picker-header{{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}}.line-picker-header h4{{margin:0 0 4px}}.line-picker-help{{margin:0}}.step-pill{{display:inline-flex;align-items:center;white-space:nowrap;padding:6px 10px;border:1px solid #4b7190;border-radius:999px;background:#172b43;color:#bfe7ff;font-size:.82rem;font-weight:700}}.line-picker-actions{{margin:14px 0 0}}.line-filter-row{{display:flex;gap:8px;align-items:center;margin-top:12px}}.line-filter-row input{{flex:1;min-width:180px}}.line-count{{color:#aab8cb;font-size:.9rem}}.line-options{{display:grid;gap:12px;margin-top:14px}}.line-group{{padding:12px;border:1px solid #2e4058;border-radius:10px;background:#111f32}}.line-group-heading{{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#dbeeff;font-size:.9rem}}.line-group-options{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}}.line-option{{display:flex;align-items:center;gap:10px;margin:0;padding:10px 12px;border:1px solid #3a4b64;border-radius:9px;background:#101a2b;color:inherit;cursor:pointer;transition:border-color .15s,background .15s,transform .15s}}.line-option:hover{{border-color:#65c6ff;background:#14253a;transform:translateY(-1px)}}.line-option.is-selected{{border-color:#65c6ff;background:#173a58;box-shadow:0 0 0 1px #65c6ff33}}.line-option input{{flex:0 0 auto;width:18px;height:18px;accent-color:#65c6ff}}.line-option-main{{display:flex;flex-direction:column;gap:2px;min-width:0}}.line-option-name{{font-weight:800;overflow-wrap:anywhere}}.line-option-meta{{color:#aab8cb;font-size:.82rem;overflow-wrap:anywhere}}.route-config{{margin-top:12px;padding:12px;border:1px solid #385875;border-radius:10px;background:#14253a}}.route-config .subtle{{display:block;margin:4px 0 8px}}</style></head><body{body_attribute}><main>{content}</main></body></html>""".encode()
 
 
@@ -330,6 +338,14 @@ class WebApplication:
         self._line_catalog: list[dict[str, Any]] | None = None
         self._health_requests: deque[float] = deque(maxlen=20)
         self._health_lock = Lock()
+        self._departure_lock = RLock()
+        self._latest_departures: list[Departure] = []
+        self._last_updated: datetime | None = None
+        self._next_fetch = 0.0
+        self._departure_failures = 0
+        self._departure_error: str | None = None
+        self._departure_source: tuple | None = None
+        self._departure_metadata: dict[str, Any] = {}
 
     def allow_health_request(self) -> bool:
         with self._health_lock:
@@ -460,26 +476,102 @@ class WebApplication:
         )
 
     def departures(self) -> tuple[list[dict[str, Any]], str | None]:
-        now = datetime.now(HAMBURG_TZ).replace(second=0, microsecond=0)
-        config = load_config(self.config_path)
-        client = self._client()
-        stations = resolve_stations(client, config.stations, self.cache_path)
-        departures = client.departure_list(
-            stations,
-            now=now,
-            max_list=30,
-            max_time_offset=config.api.max_time_offset_minutes,
-        )
-        return (
-            _departure_payload(
-                departures[: config.api.max_departures],
-                now,
-                time_mode=config.display.time_mode,
-                minute_unit=config.display.minute_unit,
+        with self._departure_lock:
+            config = load_config(self.config_path)
+            def stamp(path):
+                try:
+                    info = path.stat()
+                    return (info.st_mtime_ns, info.st_size)
+                except FileNotFoundError:
+                    return None
+            source = (config, stamp(self.credentials_path))
+            if source != self._departure_source:
+                self._latest_departures = []
+                self._last_updated = None
+                self._next_fetch = 0.0
+                self._departure_failures = 0
+                self._departure_error = None
+                self._departure_source = source
+            monotonic = time.monotonic()
+            if monotonic >= self._next_fetch:
+                retry_after = None
+                try:
+                    client = self._client()
+                    stations = resolve_stations(client, config.stations, self.cache_path)
+                    self._latest_departures = client.departure_list(
+                        stations, now=datetime.now(HAMBURG_TZ), max_list=30,
+                        max_time_offset=config.api.max_time_offset_minutes,
+                    )[:30]
+                    self._last_updated = datetime.now(HAMBURG_TZ)
+                    self._departure_failures = 0
+                    self._departure_error = None
+                except (GeofoxError, OSError) as exc:
+                    self._departure_failures += 1
+                    retry_after = getattr(exc, "retry_after_seconds", None)
+                    self._departure_error = (
+                        "Geofox-Anmeldung fehlgeschlagen." if getattr(exc, "http_status", None) in (401, 403)
+                        else "Geofox begrenzt Anfragen; erneuter Versuch nach Wartezeit." if getattr(exc, "http_status", None) == 429
+                        else "Geofox ist nicht erreichbar – letzter Stand wird verwendet."
+                    )
+                self._next_fetch = time.monotonic() + refresh_delay(
+                    config.api.refresh_seconds, self._departure_failures, retry_after
+                )
+            now = datetime.now(HAMBURG_TZ)
+            age = max(0, int((now - self._last_updated).total_seconds())) if self._last_updated else None
+            stale = bool(self._departure_error) or (age is not None and age >= min(config.api.refresh_seconds * 2, config.api.max_stale_age_minutes * 60))
+            visible = departures_for_display(
+                self._latest_departures, now=now, last_updated=self._last_updated,
+                stale=stale, max_stale_age_minutes=config.api.max_stale_age_minutes,
+            )
+            expired = age is not None and age >= config.api.max_stale_age_minutes * 60
+            self._departure_metadata = {
+                "last_updated": self._last_updated.isoformat() if self._last_updated else None,
+                "last_updated_label": self._last_updated.strftime("%d.%m.%Y %H:%M:%S") if self._last_updated else "Noch kein erfolgreicher Abruf",
+                "data_age_seconds": age, "stale": stale, "expired": expired,
+                "max_age_seconds": config.api.max_stale_age_minutes * 60,
+                "retry_in_seconds": max(1, math.ceil(self._next_fetch - time.monotonic())),
+            }
+            return _departure_payload(
+                visible[:config.api.max_departures], now.replace(second=0, microsecond=0),
+                time_mode=config.display.time_mode, minute_unit=config.display.minute_unit,
                 show_station_label=config.display.show_station_label,
-            ),
-            None,
-        )
+            ), self._departure_error
+
+    def departure_view(self) -> dict[str, Any]:
+        try:
+            with self._departure_lock:
+                departures, error = self.departures()
+                metadata = dict(self._departure_metadata)
+        except (ConfigError, GeofoxError, OSError):
+            with self._departure_lock:
+                self._departure_source = None
+                self._latest_departures = []
+                self._last_updated = None
+            departures, error = [], "Konfiguration oder Datenquelle nicht verfügbar."
+            metadata = {"last_updated": None, "last_updated_label": "Kein gültiger Datenstand",
+                        "data_age_seconds": None, "stale": True, "expired": False,
+                        "max_age_seconds": 300, "retry_in_seconds": 60}
+        # Also works for callers supplying a custom/mock departure source.
+        metadata = {"data_age_seconds": None, "last_updated_label": "Noch kein erfolgreicher Abruf",
+                    "max_age_seconds": 300, "retry_in_seconds": 15, "expired": False,
+                    "stale": bool(error), **metadata}
+        service = self.health()
+        state = error or ("Veraltete Daten." if metadata["stale"] else "Daten aktuell.")
+        if metadata["expired"]:
+            state = "Veraltete Daten – letzter Stand zu alt; Abfahrten ausgeblendet."
+        if service["snapshot_available"]:
+            if service["night_shutdown"]:
+                state += " Hardwareanzeige in Nachtabschaltung."
+            if service["clock_synchronized"] is not True:
+                state += " Gerätezeit nicht bestätigt."
+        cancellations = sum(bool(item.get("cancelled")) for item in departures)
+        delayed = sum(bool(item.get("delay_seconds")) for item in departures)
+        signal = json.dumps([(item.get("line"), item.get("destination"), item.get("time"),
+                              item.get("delay_seconds"), item.get("cancelled"))
+                             for item in departures if item.get("cancelled") or item.get("delay_seconds")])
+        return {"departures": departures, "error": error, **metadata, "state": state,
+                "board_html": _departure_rows(departures, absolute_time=True) if not metadata["expired"] else '<p class="empty">Letzter Stand zu alt; Abfahrten ausgeblendet.</p>',
+                "signal": signal, "change_summary": f"Abfahrtsstatus geändert: {cancellations} Ausfälle, {delayed} Verspätungen."}
 
     def station_suggestions(self, query: str, city: str) -> list[dict[str, Any]]:
         query = query.strip()
@@ -693,30 +785,38 @@ class WebApplication:
         return raw_config
 
     def dashboard(self) -> bytes:
-        try:
-            departures, error = self.departures()
-        except (ConfigError, GeofoxError, OSError) as exc:
-            departures, error = [], str(exc)
+        data = self.departure_view()
+        departures, error = data["departures"], data["error"]
         rows = _departure_rows(departures)
         message = f'<div class="notice">{html.escape(error)}</div>' if error else ""
         status = hardware_status()
+        message += f'<p class="subtle">{html.escape(data["state"])} Letzter Abruf: {html.escape(data["last_updated_label"])} · Datenalter: {data["data_age_seconds"] if data["data_age_seconds"] is not None else "unbekannt"} Sekunden</p>'
         content = f'''<div class="toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lokale HVV-Anzeige · aktualisiert beim Öffnen</div></div><div><a href="/display">Displaymodus</a> · <a href="/settings">Einstellungen</a> · <a href="/diagnostics">Gesundheit &amp; Diagnose</a> · <a href="/">Aktualisieren</a></div></div>{message}<section class="board" aria-label="Abfahrtsanzeige">{rows}</section><section class="status" aria-label="Hardware-Status"><div>CPU<strong>{html.escape(status["cpu"])}</strong></div><div>RAM<strong>{html.escape(status["ram"])}</strong></div><div>SD-Speicher<strong>{html.escape(status["storage"])}</strong></div></section><form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">System neu starten</button></form>'''
         return _page("Abfahrten", content)
 
     def display(self) -> bytes:
-        try:
-            departures, error = self.departures()
-        except (ConfigError, GeofoxError, OSError) as exc:
-            departures, error = [], str(exc)
-        rows = _departure_rows(departures, absolute_time=True)
-        message = f'<div class="notice">{html.escape(error)}</div>' if error else ""
-        content = f'''<div class="display-shell" data-display-mode><div class="toolbar display-toolbar"><div><h1>Abfahrten</h1><div class="subtle">Reiner Displaymodus · automatische Aktualisierung</div></div><a class="display-exit" href="/" aria-label="Displaymodus verlassen">Standardansicht</a></div>{message}<section class="board display-board" aria-label="Abfahrtsanzeige">{rows}</section><p class="display-refresh subtle">Aktualisierung alle 15 Sekunden · <a href="/">Displaymodus verlassen</a></p></div>'''
-        return _page(
-            "Displaymodus",
-            content,
-            body_class="display-page",
-            head='<meta http-equiv="refresh" content="15">',
-        )
+        data = self.departure_view()
+        attrs = ' '.join(f'data-{key}="{html.escape(str(value), quote=True)}"' for key, value in {
+            "retry": data["retry_in_seconds"], "age": data["data_age_seconds"] if data["data_age_seconds"] is not None else "",
+            "max-age": data["max_age_seconds"], "expired": str(data["expired"]).lower(), "signal": data["signal"],
+        }.items())
+        content = f'''<div class="display-shell" data-display-mode {attrs}>
+<div class="toolbar display-toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lesende Anzeige · automatische Aktualisierung</div></div>
+<nav class="display-controls" aria-label="Anzeigesteuerung"><a class="display-exit" href="/">Standardansicht</a>
+<button id="display-fullscreen" type="button" aria-pressed="false" hidden>Vollbild</button>
+<button id="display-pause" type="button" aria-pressed="false" hidden>Aktualisierung pausieren</button></nav></div>
+<section class="display-status" aria-labelledby="status-heading"><h2 id="status-heading">Datenstatus</h2>
+<p id="display-state">{html.escape(data["state"])}</p>
+<p>Letzter erfolgreicher Abruf: <span id="display-updated">{html.escape(data["last_updated_label"])}</span><br>
+Datenalter: <span id="display-age">{str(data["data_age_seconds"]) + " Sekunden" if data["data_age_seconds"] is not None else "unbekannt"}</span><br>
+<span id="display-retry">Nächster Versuch in {data["retry_in_seconds"]} Sekunden.</span></p></section>
+<section class="board display-board" aria-labelledby="departures-heading"><h2 id="departures-heading" class="sr-only">Nächste Abfahrten</h2>
+<div id="display-board">{data["board_html"]}</div></section>
+<p id="display-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+<p class="display-refresh subtle">Vollbild verlassen: Esc oder F11. Rückkehr über „Standardansicht“.</p>
+<noscript><p class="notice">Automatische Aktualisierung benötigt JavaScript. Diese Ansicht bleibt statisch; zum Aktualisieren die Seite neu laden.</p></noscript>
+</div><script>{DISPLAY_SCRIPT}</script>'''
+        return _page("Displaymodus", content, body_class="display-page")
 
     def settings(
         self,
@@ -1059,14 +1159,12 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 )
                 return
             if path == "/api/departures":
-                try:
-                    departures, error = application.departures()
-                    self._send_json({"departures": departures, "error": error})
-                except (ConfigError, GeofoxError, OSError) as exc:
-                    self._send_json(
-                        {"departures": [], "error": str(exc)},
-                        HTTPStatus.SERVICE_UNAVAILABLE,
-                    )
+                data = application.departure_view()
+                data.pop("board_html", None)
+                self._send_json(data)
+                return
+            if path == "/api/display":
+                self._send_json(application.departure_view())
                 return
             if path == "/api/stations":
                 query = parse_qs(urlsplit(self.path).query)

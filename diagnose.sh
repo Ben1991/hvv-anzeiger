@@ -173,8 +173,7 @@ else
   fail "Der Anwendungscode unter ${APP_DIR} muss root:root gehören."
 fi
 
-if [[ "$(stat -c '%U:%G' "$APP_DIR/var" 2>/dev/null)" ==
-  "${EXPECTED_SERVICE_USER}:${EXPECTED_SERVICE_USER}" ]]; then
+if [[ "$(stat -c '%U:%G' "$APP_DIR/var" 2>/dev/null)" == "${EXPECTED_SERVICE_USER}:${EXPECTED_SERVICE_USER}" ]]; then
   pass "Nur das Laufzeitverzeichnis gehört dem Dienstbenutzer."
 else
   fail "Das Laufzeitverzeichnis ${APP_DIR}/var hat einen falschen Eigentümer."

@@ -7,7 +7,7 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 
 from PIL import Image
@@ -16,6 +16,13 @@ from .clock import in_night_shutdown
 from .clock import time_is_synchronized as clock_is_synchronized
 from .config import ConfigError, load_config
 from .credentials import load_credentials
+from .freshness import (
+    MAX_REFRESH_BACKOFF_SECONDS as MAX_REFRESH_BACKOFF_SECONDS,
+)
+from .freshness import (
+    departures_for_display,
+    refresh_delay,
+)
 from .geofox import HAMBURG_TZ, GeofoxClient, GeofoxError
 from .hardware import Ili9341Display
 from .health import HealthPublisher, health_path
@@ -26,23 +33,7 @@ from .service import SystemdNotifier
 from .stations import resolve_stations
 
 LOG = logging.getLogger(__name__)
-MAX_REFRESH_BACKOFF_SECONDS = 300
 SUCCESS_HEARTBEAT_SECONDS = 3600
-
-
-def refresh_delay(
-    refresh_seconds: int,
-    consecutive_failures: int,
-    retry_after_seconds: int | None = None,
-) -> int:
-    """Return a bounded retry delay; the first failure doubles the normal interval."""
-    if consecutive_failures <= 0:
-        return refresh_seconds
-    backoff = min(
-        MAX_REFRESH_BACKOFF_SECONDS,
-        refresh_seconds * (2 ** min(consecutive_failures, 5)),
-    )
-    return max(backoff, retry_after_seconds or 0)
 
 
 def log_success(
@@ -60,25 +51,6 @@ def log_success(
         return now_monotonic
     LOG.debug("%d passende Abfahrten geladen", departure_count)
     return previous_heartbeat_at
-
-
-def departures_for_display(
-    departures: list[Departure],
-    *,
-    now: datetime,
-    last_updated: datetime | None,
-    stale: bool,
-    max_stale_age_minutes: int,
-) -> list[Departure]:
-    """Hide departures once their last successful data snapshot is too old."""
-    if not stale:
-        return departures
-    if last_updated is None:
-        return []
-    age = now.astimezone(timezone.utc) - last_updated.astimezone(timezone.utc)
-    if age >= timedelta(minutes=max_stale_age_minutes):
-        return []
-    return departures
 
 
 def _arguments() -> argparse.Namespace:
