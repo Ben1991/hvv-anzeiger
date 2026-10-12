@@ -1,0 +1,9 @@
+{
+  "format": "hvv-anzeiger-config",
+  "schema_version": 1,
+  "config": {
+    "api": {"base_url": "https://gti.geofox.de/gti/public"},
+    "display": {},
+    "stations": [{"name": "Historische Haltestelle", "routes": [{"line": "21", "destination": "U Niendorf Nord"}]}]
+  }
+}

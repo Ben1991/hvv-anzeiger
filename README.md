@@ -543,9 +543,11 @@ sudo systemctl daemon-reload
 sudo systemctl restart hvv-anzeiger-web
 ```
 
-Die aktuelle Version behandelt diese systemd-Einschränkung beim Speichern
-automatisch und schreibt die bereits freigegebene `config.json` direkt, wenn
-keine temporäre Nachbardatei angelegt werden darf.
+Der aktuelle Installer legt die aktive Datei unter `var/config.json` ab und
+erhält `config.json` als symbolischen Verweis darauf. Dadurch können temporäre
+Nachbardateien im beschreibbaren Laufzeitverzeichnis angelegt und atomar
+ersetzt werden. Ohne diese Schreibmöglichkeit wird abgebrochen; die aktive
+Datei wird niemals als Fallback direkt überschrieben.
 
 Die neue Installation wird in einem separaten Verzeichnis vorbereitet und
 geprüft, bevor sie die laufende Version ersetzt. Startet der neue Dienst nicht,
@@ -687,9 +689,10 @@ unverschlüsseltes Basic Auth über HTTP wird nicht unterstützt.
 
 </details>
 
-Der Installer gibt `config.json` dem Dienstbenutzer `hvv-anzeiger` mit den
-Rechten `0640`, damit die Weboberfläche die validierte Datei atomar speichern
-kann, ohne Schreibrechte auf den Anwendungscode zu erhalten.
+Der Installer gibt `var/config.json` dem Dienstbenutzer `hvv-anzeiger` mit den
+Rechten `0640`. `config.json` verweist darauf. Nach einer Konfigurationsänderung
+hat die neue Datei die restriktiveren Rechte `0600`. Die Weboberfläche benötigt
+nur Schreibrechte im Laufzeitverzeichnis, nicht auf den Anwendungscode.
 
 Beispielansicht der lokalen Oberfläche:
 
@@ -720,6 +723,103 @@ Haltestellenkürzel),
 und Ziele). Vor dem Speichern wird die gesamte Konfiguration mit denselben
 Regeln wie beim Displaystart geprüft. Zugangsdaten werden nicht in
 `config.json` geschrieben und niemals in der Abfahrtsansicht ausgegeben.
+
+#### Sicherung und Wiederherstellung
+
+Auf der Einstellungsseite öffnet **Sicherung & Wiederherstellung** den Bereich
+`/config-backup`. Dort kann die aktive Konfiguration redigiert heruntergeladen,
+eine lokale Sicherung angelegt, eine Exportdatei importiert oder ein früherer
+Stand wiederhergestellt werden.
+
+Beispielansichten aus der lokalen Entwicklung:
+
+![Konfigurationssicherung im Webinterface](docs/config-backup.png)
+![Änderungsvorschau vor der Wiederherstellung](docs/config-preview.png)
+
+Der Import läuft in zwei Schritten: **Import prüfen** validiert die gesamte
+Konfiguration mit denselben Regeln wie beim Start und zeigt die alten und neuen
+Werte. Erst nach Setzen der Bestätigungs-Checkbox und **Änderungen anwenden**
+wird geschrieben. **Abbrechen** verändert nichts. Die Vorschau gilt zehn
+Minuten; höchstens 20 offene Vorschauen werden gehalten. Ändert sich der aktive
+Stand zwischen Vorschau und Bestätigung, wird die Wiederherstellung abgelehnt
+und muss erneut geprüft werden. Die Prüfung arbeitet offline; sie bestätigt
+die Konfigurationsregeln, nicht die Erreichbarkeit einer Haltestelle oder die
+angeschlossene Hardware.
+
+Exports enthalten ausschließlich API-Einstellungen, Anzeige, Nachtruhe und
+Haltestellen. Geofox-Anwendungs-ID, API-Passwort, Webpasswort-Hash, Environment-
+Dateien und unbekannte Zusatzfelder werden nicht exportiert. Haltestellen
+können persönliche Orte erkennen lassen; vor dem Weitergeben prüfen.
+JSON-Exporte tragen `format: "hvv-anzeiger-config"` und aktuell
+`schema_version: 1`, höchstens 256 KiB. Neue HVV-Anzeiger-Versionen müssen alle
+bisher veröffentlichten Backup-Schemata weiterhin lesen und vor der Vorschau
+migrieren. Die Schema-Version ist unabhängig von der App-Version. Historische
+Standardwerte werden explizit übernommen, damit eine Sicherung ihr Verhalten
+auch bei geänderten Defaults behält. Auch interne Sicherungen speichern ihre
+Schema- und Erzeuger-Version; frühere vollständige `config.json`-/`.bak`-Dateien
+ohne Versionshülle können direkt importiert werden und werden als Legacy-V1
+gelesen. Unbekannte neuere Schemata, fremde Formate, unbekannte Felder,
+falsche Datentypen, doppelte JSON-Schlüssel und ungültige Einstellungen werden
+abgelehnt. Zugangsdaten müssen auf einem neuen Pi separat eingerichtet werden.
+
+Vor Änderungen über Webeinstellungen, Import/Restore, die Konfigurations-CLI
+und das Haltestellenskript wird das Original unter `var/config-backups`
+gesichert. Es bleiben höchstens zehn Dateien erhalten (maximal 512 KiB je
+Datei einschließlich Versionshülle), mit Verzeichnisrechten `0700` und
+Dateirechten `0600`. Interne Backups
+bewahren auch einen beschädigten Ausgangsstand und möglicherweise früher
+versehentlich eingetragene Zusatzfelder auf. **Diese internen Dateien nicht
+direkt teilen:** Für Support ausschließlich **Redigiert exportieren** oder den
+CLI-Export verwenden. Ein beschädigtes Backup kann nicht exportiert oder
+automatisch wiederhergestellt werden; ein gültiger älterer Stand kann eine
+beschädigte aktive Konfiguration reparieren.
+
+Abweichende Konfigurationsdateinamen verwenden ein eigenes
+`var/config-backups-…`-Verzeichnis, damit ihre Historie nicht mit der aktiven
+Standardkonfiguration vermischt wird.
+
+Dateisperren schützen parallele Web-/CLI-Schreibvorgänge. Kandidat und Backup
+werden vor dem atomaren Ersetzen auf Datenträger synchronisiert. Scheitert
+Validierung, Sicherung oder Ersetzen, bleibt die aktive Datei erhalten.
+Eigene temporäre Dateien eines abgebrochenen Vorgangs werden beim nächsten
+Schreibvorgang bereinigt. Auf Unix bleiben Eigentümer und Gruppe der aktiven
+Konfiguration auch bei einem CLI-Aufruf mit `sudo` erhalten.
+
+CLI-Beispiel auf dem installierten Pi:
+
+```bash
+cd /opt/hvv-anzeiger
+sudo -u hvv-anzeiger .venv/bin/python -m hvv_display.config_backup \
+  --config config.json export --output /tmp/hvv-sicherung.json
+sudo -u hvv-anzeiger .venv/bin/python -m hvv_display.config_backup \
+  --config config.json preview --file /tmp/hvv-sicherung.json
+```
+
+Der Export legt eine neue Datei mit `0600` an und überschreibt keine bestehende
+Datei. Die Vorschau gibt `base_revision`, `candidate_revision` und `changes`
+aus. Nach Prüfung der Änderungen beide Revisionswerte unverändert übernehmen:
+
+```bash
+sudo -u hvv-anzeiger .venv/bin/python -m hvv_display.config_backup \
+  --config config.json apply --file /tmp/hvv-sicherung.json \
+  --base-revision WERT_AUS_DER_VORSCHAU \
+  --candidate-revision WERT_AUS_DER_VORSCHAU --confirm
+```
+
+Für eine vorhandene Sicherung statt `--file` die von `backups` ausgegebene ID
+mit `--backup ID` bei `preview` und `apply` verwenden. `export --backup ID`
+erzeugt einen redigierten Export dieser Sicherung. Der Befehl `backup` sichert
+ohne Änderung und empfiehlt sich **vor manuellen Dateiedits**. CLI-Exit-Code
+0 bedeutet Erfolg, 2 ungültige Eingabe/Dateizugriff und 3 einen Konflikt.
+Web und CLI verändern bei Import/Restore keine Zugangsdaten und übertragen
+keine Konfiguration an Dritte. Der Displaydienst übernimmt erfolgreiche
+Änderungen bei der nächsten Aktualisierung.
+
+Bestehende Installationen einmal mit `./update.sh` aktualisieren, damit die
+Konfiguration in das beschreibbare Laufzeitverzeichnis migriert wird. Der
+bisherige Pfad `/opt/hvv-anzeiger/config.json` bleibt nutzbar; der Installer
+bewahrt bestehende Konfiguration und Sicherungen und verwendet weiterhin
+seinen Rollback bei fehlgeschlagenem Update.
 
 #### Werte in der Weboberfläche
 

@@ -93,13 +93,20 @@ class StationSkillScriptTest(unittest.TestCase):
                 "--write",
             )
 
-            backups = list(Path(directory).glob("config.json.bak-*"))
+            backups = list(
+                (Path(directory) / "var" / "config-backups").glob("backup-*.json")
+            )
             updated = json.loads(config_path.read_text(encoding="utf-8"))
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Konfiguration aktualisiert", result.stdout)
         self.assertEqual(len(backups), 1)
-        self.assertEqual(updated["stations"], replacement["stations"])
+        station = updated["stations"][0]
+        self.assertEqual(station["name"], "Neue Haltestelle")
+        self.assertEqual(station["label"], "NH")
+        self.assertEqual(station["city"], "Hamburg")
+        self.assertEqual(station["routes"][0]["line"], "2")
+        self.assertEqual(station["routes"][0]["destination"], "Neues Ziel")
 
     def test_invalid_station_input_is_rejected_without_writing(self) -> None:
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
@@ -118,7 +125,9 @@ class StationSkillScriptTest(unittest.TestCase):
             )
 
             unchanged = config_path.read_text(encoding="utf-8")
-            backups = list(Path(directory).glob("config.json.bak-*"))
+            backups = list(
+                (Path(directory) / "var" / "config-backups").glob("backup-*.json")
+            )
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("nicht leeres JSON-Array", result.stderr)

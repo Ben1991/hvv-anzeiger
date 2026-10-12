@@ -170,21 +170,17 @@ class WebApplicationTest(unittest.TestCase):
     def test_web_password_verification_rejects_unknown_algorithm(self) -> None:
         self.assertFalse(verify_web_password("secret", "bcrypt$1$salt$digest"))
 
-    def test_config_save_falls_back_when_systemd_blocks_temporary_sibling(self) -> None:
-        raw_config = {
-            "api": {"base_url": "https://gti.geofox.de/gti/public/v1", "version": 63},
-            "display": {"rotate": 2},
-            "stations": [],
-        }
+    def test_config_save_preserves_active_file_if_atomic_write_is_blocked(self) -> None:
+        original = self.config.read_bytes()
+        raw_config = json.loads(original)
+        raw_config["display"]["rotate"] = 2
         with patch(
-            "hvv_display.web.tempfile.NamedTemporaryFile",
+            "hvv_display.config_backup.tempfile.mkstemp",
             side_effect=OSError(errno.EROFS, "Read-only file system"),
         ):
-            save_config(self.config, raw_config)
-        self.assertEqual(
-            self.config.read_text(encoding="utf-8"),
-            json.dumps(raw_config, ensure_ascii=False, indent=2) + "\n",
-        )
+            with self.assertRaises(OSError):
+                save_config(self.config, raw_config)
+        self.assertEqual(self.config.read_bytes(), original)
 
     def test_settings_and_dashboard_include_csrf_tokens(self) -> None:
         settings = self.app.settings().decode("utf-8")
