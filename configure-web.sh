@@ -89,20 +89,50 @@ certificate_contains_ip() {
 }
 
 ensure_web_password() {
-  if sudo test -s "$WEB_ENV_FILE" &&
-    sudo awk -F= '
-      $1 == "HVV_WEB_PASSWORD_HASH" && $2 != "" { found = 1 }
-      END { exit found ? 0 : 1 }
-    ' "$WEB_ENV_FILE"; then
-    return 0
-  fi
-
   [[ -x "$APP_DIR/.venv/bin/python" ]] ||
     fail "Die Python-Umgebung fehlt unter $APP_DIR/.venv."
 
+  # Keep individual hashes, but migrate the previously shared initial password.
+  if sudo "$APP_DIR/.venv/bin/python" -c '
+import sys
+from pathlib import Path
+from hvv_display.web import verify_web_password
+path = Path(sys.argv[1])
+encoded = ""
+if path.is_file():
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key.strip() == "HVV_WEB_PASSWORD_HASH":
+            encoded = value.strip().strip("\"\x27")
+raise SystemExit(not encoded or verify_web_password("hvv-anzeiger", encoded))
+' "$WEB_ENV_FILE"; then
+    return 0
+  fi
+
+  local web_password confirmation
+  echo "Individuelles Webpasswort einrichten (mindestens 12 Zeichen)."
+  while true; do
+    IFS= read -r -s -p "Neues Webpasswort: " web_password ||
+      fail "Webpasswort-Eingabe wurde abgebrochen."
+    echo
+    if ((${#web_password} < 12)) || [[ "$web_password" != *[![:space:]]* ]] ||
+      [[ "$web_password" == *$'\r'* ]]; then
+      echo "Mindestens 12 Zeichen ohne Zeilenumbruch eingeben." >&2
+      continue
+    fi
+    IFS= read -r -s -p "Webpasswort bestätigen: " confirmation ||
+      fail "Webpasswort-Eingabe wurde abgebrochen."
+    echo
+    if [[ "$web_password" == "$confirmation" ]]; then
+      break
+    fi
+    echo "Die Webpasswörter stimmen nicht überein." >&2
+  done
+
   local password_hash
-  password_hash="$(sudo "$APP_DIR/.venv/bin/python" -c \
-    'from hvv_display.web import hash_web_password; print(hash_web_password("hvv-anzeiger"))')"
+  password_hash="$(printf '%s' "$web_password" | sudo "$APP_DIR/.venv/bin/python" -c \
+    'import sys; from hvv_display.web import hash_web_password; print(hash_web_password(sys.stdin.read()))')"
+  unset web_password confirmation
   [[ -n "$password_hash" ]] || fail "Der Webpasswort-Hash konnte nicht erzeugt werden."
 
   local temp_env
@@ -166,7 +196,7 @@ echo "Weboberfläche ist für den LAN-Zugriff eingerichtet."
 printf '  Adresse: https://%s:8080/\n' "$LOCAL_IP"
 printf '  Zertifikat: %s\n' "$CERT_FILE"
 if ((WEB_PASSWORD_INITIALIZED == 1)); then
-  echo "  Erstanmeldung: hvv-anzeiger / hvv-anzeiger"
-  echo "  Das Webpasswort nach der ersten Anmeldung ändern."
+  echo "  Benutzername: hvv-anzeiger"
+  echo "  Anmeldung mit dem soeben eingerichteten individuellen Webpasswort."
 fi
 echo "  Bei der ersten HTTPS-Verbindung die Warnung für das selbst signierte Zertifikat bestätigen."

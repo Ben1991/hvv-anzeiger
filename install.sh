@@ -20,6 +20,7 @@ STAGING_DIR=""
 UNIT_BACKUP_DIR=""
 ENV_BACKUP_DIR=""
 WEB_CERT_BACKUP_DIR=""
+PREVIEW_DIR=""
 SERVICE_WAS_ACTIVE=0
 SWITCHED=0
 INSTALL_SUCCEEDED=0
@@ -127,6 +128,9 @@ cleanup() {
   if [[ -n "$WEB_CERT_BACKUP_DIR" && -e "$WEB_CERT_BACKUP_DIR" ]]; then
     safe_remove_tree "$WEB_CERT_BACKUP_DIR"
   fi
+  if [[ -n "$PREVIEW_DIR" && -e "$PREVIEW_DIR" ]]; then
+    safe_remove_tree "$PREVIEW_DIR"
+  fi
   exit "$exit_code"
 }
 trap cleanup EXIT
@@ -220,22 +224,15 @@ sudo install -m 0755 \
   "$SOURCE_DIR/install.sh" \
   "$STAGING_DIR/"
 sudo install -d -m 0750 "$STAGING_DIR/var"
-if [[ -d "$APP_DIR/var" ]]; then
-  sudo cp -a "$APP_DIR/var/." "$STAGING_DIR/var/"
-fi
-if [[ -f "$APP_DIR/config.json" ]]; then
-  sudo cp -p "$APP_DIR/config.json" "$STAGING_DIR/config.json"
-else
-  sudo install -m 0644 \
-    "$STAGING_DIR/config.example.json" "$STAGING_DIR/config.json"
-fi
+sudo install -m 0640 \
+  "$STAGING_DIR/config.example.json" "$STAGING_DIR/config.json"
+sudo python3 "$STAGING_DIR/hvv_display/install_state.py" "$APP_DIR" "$STAGING_DIR"
 sudo chown -R root:root "$STAGING_DIR"
 sudo chown -R "$APP_USER:$APP_GROUP" "$STAGING_DIR/var"
-sudo chmod 0755 "$STAGING_DIR"
 sudo chmod 0750 "$STAGING_DIR/var"
 sudo chown "$APP_USER:$APP_GROUP" "$STAGING_DIR/config.json"
 sudo chmod 0640 "$STAGING_DIR/config.json"
-sudo mv "$STAGING_DIR/config.json" "$STAGING_DIR/var/config.json"
+sudo mv -T "$STAGING_DIR/config.json" "$STAGING_DIR/var/config.json"
 sudo ln -s var/config.json "$STAGING_DIR/config.json"
 
 echo "[6/10] Python-Umgebung installieren und lokal prüfen"
@@ -247,9 +244,10 @@ sudo -H "$STAGING_DIR/.venv/bin/pip" install \
   --no-build-isolation \
   --no-deps \
   "$STAGING_DIR"
-sudo "$STAGING_DIR/.venv/bin/python" -m hvv_display.preview \
-  "$STAGING_DIR/var/install-preview.png"
-sudo rm -f "$STAGING_DIR/var/install-preview.png"
+PREVIEW_DIR="$(sudo mktemp -d "${TMPDIR:-/tmp}/hvv-install-preview.XXXXXX")"
+sudo "$STAGING_DIR/.venv/bin/python" -m hvv_display.preview "$PREVIEW_DIR/preview.png"
+safe_remove_tree "$PREVIEW_DIR"
+PREVIEW_DIR=""
 
 echo "[7/10] Geofox-Zugangsdaten einrichten"
 ENV_BACKUP_DIR="$(sudo mktemp -d "${TMPDIR:-/tmp}/hvv-credentials.XXXXXX")"
@@ -297,9 +295,10 @@ sudo -H "$APP_DIR/.venv/bin/python" -m pip install \
   --no-build-isolation \
   --no-deps \
   "$APP_DIR"
-sudo "$APP_DIR/.venv/bin/python" -m hvv_display.preview \
-  "$APP_DIR/var/install-preview.png"
-sudo rm -f "$APP_DIR/var/install-preview.png"
+PREVIEW_DIR="$(sudo mktemp -d "${TMPDIR:-/tmp}/hvv-install-preview.XXXXXX")"
+sudo "$APP_DIR/.venv/bin/python" -m hvv_display.preview "$PREVIEW_DIR/preview.png"
+safe_remove_tree "$PREVIEW_DIR"
+PREVIEW_DIR=""
 
 echo "[9/10] Webzugriff und aktuelle LAN-Adresse einrichten"
 "$APP_DIR/configure-web.sh"

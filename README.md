@@ -557,6 +557,13 @@ vorherigen Stand zurück.
 Vorhandene vollständige Zugangsdaten und eine vorhandene `config.json` bleiben
 bei erneuter Installation erhalten.
 
+Die Datenübernahme akzeptiert reguläre Dateien und den vorgesehenen
+Konfigurationsverweis auf `var/config.json`. Andere symbolische Verweise,
+Hardlinks und Spezialdateien im Datenbereich führen zum Abbruch, bevor die
+laufende Version ersetzt wird. Die Vorbereitung bleibt bis zum Versionswechsel
+root-privat; Installationsvorschauen entstehen außerhalb des Datenbereichs in
+privaten temporären Verzeichnissen.
+
 ### Erster Neustart und Prüfung
 
 Nach der ersten Installation:
@@ -654,16 +661,24 @@ CI-Berichte enthalten axe-Ergebnisse sowie Desktop-/Mobil-Screenshots.
 ![Displaymodus auf Mobilgerät](docs/kiosk-mobile.png)
 
 Der Webdienst läuft als lokaler Dienst auf dem Raspberry Pi und ist durch eine
-Anmeldung geschützt. Die Standarddaten sind:
+Anmeldung geschützt. Der Benutzername lautet:
 
 ```text
 Benutzername: hvv-anzeiger
-Passwort:    hvv-anzeiger
 ```
 
-Beim ersten Aufruf fragt der Browser nach den Zugangsdaten. Ändere das
-Standardpasswort anschließend in der Einstellungsseite unter „Weboberfläche“.
+Der Installer verlangt vor der LAN-Freigabe ein individuelles Webpasswort mit
+mindestens 12 Zeichen und eine Bestätigung; die Eingabe bleibt unsichtbar.
+Vorhandene individuelle Passwörter bleiben bei Updates erhalten. Das frühere
+gemeinsame Erstpasswort muss bei einem Update ersetzt werden. Bei abgebrochener
+Eingabe bleibt die vorhandene Datei unverändert. Beim ersten Aufruf fragt der
+Browser nach diesen Zugangsdaten. Weitere Passwortänderungen sind auf der
+Einstellungsseite unter „Weboberfläche“ möglich.
 Gespeichert wird nur ein gesalzener Passwort-Hash mit restriktiven Dateirechten.
+
+Der Webserver verarbeitet den TLS-Verbindungsaufbau in separaten, auf höchstens
+32 gleichzeitige Verbindungen begrenzten Threads mit fünf Sekunden Zeitgrenze.
+Unvollständige Verbindungen blockieren dadurch nicht die Verbindungsannahme.
 
 <details>
 <summary>Manuellen Webstart und TLS-Konfiguration anzeigen</summary>

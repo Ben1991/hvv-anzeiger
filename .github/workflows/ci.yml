@@ -61,10 +61,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Check Bash syntax
-        run: bash -n install.sh configure-credentials.sh diagnose.sh
+        run: bash -n install.sh configure-credentials.sh configure-web.sh diagnose.sh
 
       - name: Run ShellCheck
-        run: shellcheck install.sh configure-credentials.sh diagnose.sh tests/install-smoke.sh
+        run: shellcheck install.sh configure-credentials.sh configure-web.sh diagnose.sh tests/install-smoke.sh
 
       - name: Run transactional installer smoke test
         run: tests/install-smoke.sh

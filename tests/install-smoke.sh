@@ -56,6 +56,12 @@ if [[ "${1:-}" == "install" ]]; then
   done
   exec install "${args[@]}"
 fi
+if [[ "${1:-}" == "$HVV_APP_DIR/.venv/bin/python" &&
+  "${2:-}" == "-m" && "${3:-}" == "pip" ]]; then
+  # Simulate the service changing its data after the version switch. The final
+  # privileged preview must never use this old, service-controlled output path.
+  ln -sf "$HVV_FAKE_PROTECTED_FILE" "$HVV_APP_DIR/var/install-preview.png"
+fi
 exec "$@"
 EOF
 chmod 0755 "$FAKE_BIN/sudo"
@@ -105,8 +111,13 @@ export HVV_ENV_FILE="$ENV_FILE"
 export HVV_SYSTEMD_DIR="$SYSTEMD_DIR"
 export HVV_WEB_CERT_DIR="$ROOT/etc/hvv-anzeiger"
 export HVV_FAKE_SYSTEMCTL_STATE="$SYSTEMCTL_STATE"
+export HVV_FAKE_PROTECTED_FILE="$ROOT/protected-file"
+printf 'protected-original\n' >"$HVV_FAKE_PROTECTED_FILE"
+chmod 0600 "$HVV_FAKE_PROTECTED_FILE"
+protected_checksum="$(sha256sum "$HVV_FAKE_PROTECTED_FILE")"
 
-printf 'smoke-application\nsmoke-password\n' | "$SOURCE_DIR/install.sh"
+printf 'smoke-application\nsmoke-password\nsmoke-web-password\nsmoke-web-password\n' |
+  "$SOURCE_DIR/install.sh"
 
 test -x "$APP_DIR/.venv/bin/hvv-anzeiger"
 test -x "$APP_DIR/.venv/bin/hvv-preview"
@@ -135,6 +146,17 @@ grep -q '^GEOFOX_USER="smoke-application"$' "$ENV_FILE"
 grep -q '^GEOFOX_PASSWORD="smoke-password"$' "$ENV_FILE"
 test ! -e "${APP_DIR}.previous"
 test -e "$SYSTEMCTL_STATE"
+test "$protected_checksum" = "$(sha256sum "$HVV_FAKE_PROTECTED_FILE")"
+test -L "$APP_DIR/var/install-preview.png"
+
+# Source links are rejected before preparing/publishing any copied contents.
+if "$SOURCE_DIR/install.sh" </dev/null; then
+  echo "expected unsafe runtime link to abort the update" >&2
+  exit 1
+fi
+test "$protected_checksum" = "$(sha256sum "$HVV_FAKE_PROTECTED_FILE")"
+test ! -e "${APP_DIR}.previous"
+rm "$APP_DIR/var/install-preview.png"
 
 touch "$APP_DIR/rollback-marker"
 printf '\n# rollback-unit-marker\n' >>"$SYSTEMD_DIR/hvv-anzeiger.service"
@@ -155,5 +177,7 @@ test "$web_certificate_checksum" = "$(sha256sum "$HVV_WEB_CERT_DIR/web.crt")"
 test ! -e "${APP_DIR}.previous"
 test -z "$(find "$(dirname "$APP_DIR")" -maxdepth 1 -name 'hvv-anzeiger.install.*' -print -quit)"
 test -e "$SYSTEMCTL_STATE"
+test "$protected_checksum" = "$(sha256sum "$HVV_FAKE_PROTECTED_FILE")"
+test -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'hvv-install-preview.*' -print -quit)"
 
 echo "Installer smoke test passed"
