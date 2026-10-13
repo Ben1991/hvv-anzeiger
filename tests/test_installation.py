@@ -223,7 +223,7 @@ exec "$@"
         encoded = hash_web_password("hvv-anzeiger")
         self.env_file.write_text(f'HVV_WEB_PASSWORD_HASH="{encoded}"\n')
         result = self.run_configure(
-            "\nshort\nnew-individual-password\nmismatch\n"
+            "\nshort\nhvv-anzeiger\nnew-individual-password\nmismatch\n"
             "new-individual-password\nnew-individual-password\n"
         )
         self.assertEqual(result.returncode, 0, result.stderr)

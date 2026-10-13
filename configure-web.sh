@@ -116,8 +116,8 @@ raise SystemExit(not encoded or verify_web_password("hvv-anzeiger", encoded))
       fail "Webpasswort-Eingabe wurde abgebrochen."
     echo
     if ((${#web_password} < 12)) || [[ "$web_password" != *[![:space:]]* ]] ||
-      [[ "$web_password" == *$'\r'* ]]; then
-      echo "Mindestens 12 Zeichen ohne Zeilenumbruch eingeben." >&2
+      [[ "$web_password" == *$'\r'* || "$web_password" == "hvv-anzeiger" ]]; then
+      echo "Mindestens 12 Zeichen ohne Zeilenumbruch; das frühere Erstpasswort ist nicht zulässig." >&2
       continue
     fi
     IFS= read -r -s -p "Webpasswort bestätigen: " confirmation ||

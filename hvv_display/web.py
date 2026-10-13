@@ -454,6 +454,8 @@ class WebApplication:
             raise PermissionError("Ungültige Sitzungsbestätigung")
 
     def save_web_password(self, password: str) -> None:
+        if password == "hvv-anzeiger":  # noqa: S105 - reject the public legacy default
+            raise ValueError("Ein individuelles Webpasswort statt des früheren Erstpassworts wählen")
         if not password or any(
             character in password for character in ("\r", "\n", "\x00", '"', "\\")
         ):

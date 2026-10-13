@@ -32,6 +32,13 @@ from hvv_display.web import (
 
 
 class WebApplicationTest(unittest.TestCase):
+    def test_shared_initial_password_cannot_be_restored_through_settings(self):
+        original = self.app.access_token
+        with self.assertRaisesRegex(ValueError, "individuelles Webpasswort"):
+            self.app.save_web_password("hvv-anzeiger")
+        self.assertEqual(self.app.access_token, original)
+        self.assertFalse(self.app.web_env_path.exists())
+
     def test_diagnostics_reads_service_status_without_geofox_or_configuration(self):
         publisher = HealthPublisher(self.app.health_file)
         publisher.publish(configuration_valid=True, network_connected=False)
