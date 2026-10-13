@@ -235,6 +235,8 @@ sudo chmod 0755 "$STAGING_DIR"
 sudo chmod 0750 "$STAGING_DIR/var"
 sudo chown "$APP_USER:$APP_GROUP" "$STAGING_DIR/config.json"
 sudo chmod 0640 "$STAGING_DIR/config.json"
+sudo mv "$STAGING_DIR/config.json" "$STAGING_DIR/var/config.json"
+sudo ln -s var/config.json "$STAGING_DIR/config.json"
 
 echo "[6/10] Python-Umgebung installieren und lokal prüfen"
 sudo python3 -m venv "$STAGING_DIR/.venv"

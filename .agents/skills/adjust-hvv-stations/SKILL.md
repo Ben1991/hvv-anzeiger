@@ -41,7 +41,9 @@ API-, Display- und Nachtmodus-Einstellungen sowie Geofox-Zugangsdaten.
    ```
 
    Bei einer installierten Konfiguration `sudo` verwenden. Das Skript legt vor
-   dem Überschreiben eine datierte Sicherung neben der Konfiguration an.
+   dem Überschreiben eine datierte Sicherung im gemeinsamen Verzeichnis
+   `var/config-backups` an und behält die zehn neuesten Sicherungen. Hat sich
+   die Ausgangsdatei während der Prüfung verändert, wird nicht geschrieben.
 8. `python3 -m json.tool <config>` und die Projekt-Tests ausführen. Bei einer
    installierten Konfiguration zusätzlich eine Vorschau rendern.
 9. Nur auf ausdrücklichen Nutzerwunsch den laufenden Dienst neu starten:

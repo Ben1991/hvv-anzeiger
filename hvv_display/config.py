@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from datetime import time
@@ -109,6 +110,22 @@ def load_config(path: str | Path) -> AppConfig:
     except json.JSONDecodeError as exc:
         raise ConfigError(f"Ungültiges JSON in {config_path}: {exc}") from exc
 
+    return config_from_dict(raw)
+
+
+def config_from_dict(raw: Any) -> AppConfig:
+    """Use the same complete validation for startup, imports and previews."""
+    try:
+        return _config_from_dict(raw)
+    except ConfigError:
+        raise
+    except (ValueError, TypeError, AttributeError, OverflowError) as exc:
+        raise ConfigError(
+            "Konfiguration enthält ungültige Werte oder Datentypen"
+        ) from exc
+
+
+def _config_from_dict(raw: Any) -> AppConfig:
     try:
         api_raw = raw["api"]
         display_raw = raw["display"]
@@ -116,6 +133,12 @@ def load_config(path: str | Path) -> AppConfig:
         stations_raw = raw["stations"]
     except (KeyError, TypeError) as exc:
         raise ConfigError("Konfiguration benötigt api, display und stations") from exc
+
+    for section in ("api", "display", "night_shutdown"):
+        if section in raw and not isinstance(raw[section], dict):
+            raise ConfigError(f"{section} muss ein JSON-Objekt sein")
+    if not isinstance(stations_raw, list):
+        raise ConfigError("stations muss eine Liste sein")
 
     api = ApiConfig(
         base_url=_geofox_base_url(_required(api_raw, "base_url", "api")),
@@ -130,7 +153,10 @@ def load_config(path: str | Path) -> AppConfig:
         raise ConfigError("api.refresh_seconds muss mindestens 15 sein")
     if not 1 <= api.max_departures <= 5:
         raise ConfigError("api.max_departures muss zwischen 1 und 5 liegen")
-    if api.request_timeout_seconds <= 0:
+    if (
+        not math.isfinite(api.request_timeout_seconds)
+        or api.request_timeout_seconds <= 0
+    ):
         raise ConfigError("api.request_timeout_seconds muss größer als 0 sein")
     if api.max_time_offset_minutes <= 0:
         raise ConfigError("api.max_time_offset_minutes muss größer als 0 sein")
@@ -157,9 +183,7 @@ def load_config(path: str | Path) -> AppConfig:
     if display.bus_speed_hz <= 0:
         raise ConfigError("display.bus_speed_hz muss größer als 0 sein")
     if display.time_mode not in TIME_MODES:
-        raise ConfigError(
-            "display.time_mode muss countdown oder departure_time sein"
-        )
+        raise ConfigError("display.time_mode muss countdown oder departure_time sein")
     if display.minute_unit not in MINUTE_UNITS:
         raise ConfigError("display.minute_unit muss min, m oder none sein")
 
@@ -184,6 +208,8 @@ def load_config(path: str | Path) -> AppConfig:
 
     stations: list[Station] = []
     for index, station_raw in enumerate(stations_raw):
+        if not isinstance(station_raw, dict):
+            raise ConfigError(f"stations[{index}] muss ein JSON-Objekt sein")
         station_name = str(_required(station_raw, "name", f"stations[{index}]"))
         label = str(station_raw.get("label") or station_name[:1]).strip().upper()
         if not 1 <= len(label) <= 3:
@@ -236,16 +262,12 @@ def _route_from_raw(route: Any, section: str) -> Route:
     if filter_mode == "":
         filter_mode = None
     if filter_mode not in (None, "direction", "destination"):
-        raise ConfigError(
-            f"{section}.filter_mode muss direction oder destination sein"
-        )
+        raise ConfigError(f"{section}.filter_mode muss direction oder destination sein")
     raw_filter_station_ids = route.get("filter_station_ids", [])
     if not isinstance(raw_filter_station_ids, (list, tuple)):
         raise ConfigError(f"{section}.filter_station_ids muss eine Liste sein")
     if len(raw_filter_station_ids) > MAX_ROUTE_FILTER_STATIONS:
-        raise ConfigError(
-            f"{section}.filter_station_ids enthält zu viele Haltestellen"
-        )
+        raise ConfigError(f"{section}.filter_station_ids enthält zu viele Haltestellen")
     filter_station_ids = tuple(
         str(station_id).strip()
         for station_id in raw_filter_station_ids
