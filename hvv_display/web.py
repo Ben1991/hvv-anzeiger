@@ -14,6 +14,7 @@ import os
 import re
 import secrets
 import shutil
+import socket
 import ssl
 import subprocess
 import tempfile
@@ -24,7 +25,7 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Lock, RLock
+from threading import BoundedSemaphore, Lock, RLock
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -61,6 +62,48 @@ MAX_FORM_BYTES = 1_000_000
 MAX_QUERY_LENGTH = 120
 MAX_CITY_LENGTH = 80
 MAX_STATION_ID_LENGTH = 160
+
+
+class WebServer(ThreadingHTTPServer):
+    """Accept TCP first; bound TLS/HTTP work inside independent request threads."""
+
+    def __init__(
+        self, *args: Any, tls_context: ssl.SSLContext | None = None,
+        connection_timeout: float = 5.0, max_workers: int = 32, **kwargs: Any,
+    ) -> None:
+        self.tls_context = tls_context
+        self.connection_timeout = connection_timeout
+        self._workers = BoundedSemaphore(max_workers)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request: socket.socket, client_address: Any) -> None:
+        if not self._workers.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._workers.release()
+            raise
+
+    def process_request_thread(
+        self, request: socket.socket, client_address: Any
+    ) -> None:
+        try:
+            request.settimeout(self.connection_timeout)
+            if self.tls_context is not None:
+                # Never perform a TLS handshake on the listening/accepting socket.
+                try:
+                    request = self.tls_context.wrap_socket(
+                        request, server_side=True, do_handshake_on_connect=False
+                    )
+                    request.do_handshake()
+                except OSError:
+                    request.close()
+                    return
+            super().process_request_thread(request, client_address)
+        finally:
+            self._workers.release()
 
 
 def _settings_field_errors(message: str) -> dict[str, str]:
@@ -411,6 +454,8 @@ class WebApplication:
             raise PermissionError("Ungültige Sitzungsbestätigung")
 
     def save_web_password(self, password: str) -> None:
+        if password == "hvv-anzeiger":  # noqa: S105 - reject the public legacy default
+            raise ValueError("Ein individuelles Webpasswort statt des früheren Erstpassworts wählen")
         if not password or any(
             character in password for character in ("\r", "\n", "\x00", '"', "\\")
         ):
@@ -1460,6 +1505,8 @@ def run(
         raise ValueError(
             "Für einen nicht-lokalen Webhost muss HVV_WEB_PASSWORD_HASH gesetzt sein"
         )
+    if not local_host and access_token and verify_web_password("hvv-anzeiger", access_token):
+        raise ValueError("Vor dem LAN-Start ein individuelles Webpasswort einrichten")
     if (tls_certfile is None) != (tls_keyfile is None):
         raise ValueError("TLS-Zertifikat und TLS-Schlüssel müssen gemeinsam gesetzt sein")
     if not local_host and not tls_certfile:
@@ -1475,12 +1522,12 @@ def run(
         access_token=access_token,
         web_env_path=Path(os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")),
     )
-    server = ThreadingHTTPServer((host, port), make_handler(application))
+    context = None
     if tls_certfile:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(tls_certfile, tls_keyfile)
-        server.socket = context.wrap_socket(server.socket, server_side=True)
+    server = WebServer((host, port), make_handler(application), tls_context=context)
     server.application = application  # type: ignore[attr-defined]
     scheme = "https" if tls_certfile else "http"
     LOG.info("Lokale Weboberfläche erreichbar unter %s://%s:%d", scheme, host, port)
