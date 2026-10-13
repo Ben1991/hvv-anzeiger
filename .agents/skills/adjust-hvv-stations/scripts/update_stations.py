@@ -4,11 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-import shutil
 import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,9 +57,7 @@ def _project_root(config_path: Path) -> Path:
     for candidate in candidates:
         if (candidate / "hvv_display" / "config.py").is_file():
             return candidate
-    raise ValueError(
-        "Projektwurzel mit hvv_display/config.py wurde nicht gefunden."
-    )
+    raise ValueError("Projektwurzel mit hvv_display/config.py wurde nicht gefunden.")
 
 
 def _validate(config: dict[str, Any], root: Path) -> None:
@@ -79,54 +76,36 @@ def _validate(config: dict[str, Any], root: Path) -> None:
             raise ValueError(f"Konfiguration ist ungültig: {exc}") from exc
 
 
-def _backup_path(config_path: Path) -> Path:
-    timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
-    candidate = config_path.with_name(f"{config_path.name}.bak-{timestamp}")
-    counter = 1
-    while candidate.exists():
-        candidate = config_path.with_name(
-            f"{config_path.name}.bak-{timestamp}-{counter}"
-        )
-        counter += 1
-    return candidate
+def _write(
+    config_path: Path, config: dict[str, Any], expected_revision: str
+) -> Path | None:
+    from hvv_display.config_backup import ConfigStore
 
-
-def _write(config_path: Path, config: dict[str, Any]) -> Path:
-    backup = _backup_path(config_path)
-    shutil.copy2(config_path, backup)
-    payload = json.dumps(config, ensure_ascii=False, indent=2) + "\n"
-    temporary: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=config_path.parent,
-            prefix=f".{config_path.name}.",
-            delete=False,
-        ) as handle:
-            handle.write(payload)
-            temporary = Path(handle.name)
-        shutil.copymode(config_path, temporary)
-        temporary.replace(config_path)
-    except Exception:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
-        raise
-    return backup
+    store = ConfigStore(config_path)
+    backup = store.apply(config, expected_revision=expected_revision)
+    return store.backups / backup if backup else None
 
 
 def main() -> int:
     args = _parser().parse_args()
     try:
+        expected_revision = hashlib.sha256(args.config.read_bytes()).hexdigest()
         raw_config = _read_json(args.config)
         if not isinstance(raw_config, dict):
             raise ValueError("Die Konfiguration muss ein JSON-Objekt sein.")
         updated = dict(raw_config)
         updated["stations"] = _stations(_read_json(args.stations_file))
         _validate(updated, _project_root(args.config))
+        from hvv_display.config_backup import redact_config
+
+        updated = redact_config(updated, strict=True)
         if args.write:
-            backup = _write(args.config, updated)
-            print(f"Konfiguration aktualisiert. Sicherung: {backup}")
+            backup = _write(args.config, updated, expected_revision)
+            print(
+                f"Konfiguration aktualisiert. Sicherung: {backup}"
+                if backup
+                else "Konfiguration unverändert."
+            )
         else:
             print(json.dumps(updated, ensure_ascii=False, indent=2))
         return 0

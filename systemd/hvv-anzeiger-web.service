@@ -31,7 +31,7 @@ RestrictSUIDSGID=true
 RestrictRealtime=true
 LockPersonality=true
 SystemCallArchitectures=native
-ReadWritePaths=/opt/hvv-anzeiger/config.json /opt/hvv-anzeiger/var
+ReadWritePaths=/opt/hvv-anzeiger/var
 
 [Install]
 WantedBy=multi-user.target
