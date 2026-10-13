@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
-import errno
 import hashlib
 import html
 import json
@@ -20,6 +19,7 @@ import subprocess
 import tempfile
 import time
 from collections import deque
+from copy import deepcopy
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,6 +29,13 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from .config import ConfigError, load_config
+from .config_backup import (
+    MAX_CONFIG_BYTES,
+    ConfigConflict,
+    ConfigStore,
+    export_config,
+    import_config,
+)
 from .credentials import load_credentials
 from .freshness import departures_for_display, refresh_delay
 from .geofox import (
@@ -158,33 +165,7 @@ def save_credentials(path: Path, user: str, password: str) -> None:
 
 
 def save_config(path: Path, raw_config: dict[str, Any]) -> None:
-    payload = json.dumps(raw_config, ensure_ascii=False, indent=2) + "\n"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            delete=False,
-        ) as handle:
-            handle.write(payload)
-            temporary = Path(handle.name)
-        try:
-            temporary.chmod(mode)
-            temporary.replace(path)
-        except Exception:
-            temporary.unlink(missing_ok=True)
-            raise
-    except OSError as exc:
-        if exc.errno not in (errno.EACCES, errno.EROFS):
-            raise
-        with path.open("w", encoding="utf-8") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        path.chmod(mode)
+    ConfigStore(path).apply(raw_config)
 
 
 def _minutes_until(departure: Any, now: datetime) -> int:
@@ -335,6 +316,9 @@ class WebApplication:
             os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")
         )
         self.csrf_token = secrets.token_urlsafe(32)
+        self.config_store = ConfigStore(config_path)
+        self._config_plans: dict[str, tuple[float, dict, dict]] = {}
+        self._config_plan_lock = Lock()
         self._line_catalog: list[dict[str, Any]] | None = None
         self._health_requests: deque[float] = deque(maxlen=20)
         self._health_lock = Lock()
@@ -792,6 +776,7 @@ class WebApplication:
         status = hardware_status()
         message += f'<p class="subtle">{html.escape(data["state"])} Letzter Abruf: {html.escape(data["last_updated_label"])} · Datenalter: {data["data_age_seconds"] if data["data_age_seconds"] is not None else "unbekannt"} Sekunden</p>'
         content = f'''<div class="toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lokale HVV-Anzeige · aktualisiert beim Öffnen</div></div><div><a href="/display">Displaymodus</a> · <a href="/settings">Einstellungen</a> · <a href="/diagnostics">Gesundheit &amp; Diagnose</a> · <a href="/">Aktualisieren</a></div></div>{message}<section class="board" aria-label="Abfahrtsanzeige">{rows}</section><section class="status" aria-label="Hardware-Status"><div>CPU<strong>{html.escape(status["cpu"])}</strong></div><div>RAM<strong>{html.escape(status["ram"])}</strong></div><div>SD-Speicher<strong>{html.escape(status["storage"])}</strong></div></section><form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">System neu starten</button></form>'''
+        content += '<p><a href="/config-backup">Sicherung &amp; Wiederherstellung</a></p>'
         return _page("Abfahrten", content)
 
     def display(self) -> bytes:
@@ -818,13 +803,73 @@ Datenalter: <span id="display-age">{str(data["data_age_seconds"]) + " Sekunden" 
 </div><script>{DISPLAY_SCRIPT}</script>'''
         return _page("Displaymodus", content, body_class="display-page")
 
+    def config_backup_page(self, message: str = "") -> bytes:
+        token = html.escape(self.csrf_token, quote=True)
+        backups = "".join(
+            f'<li><strong>{datetime.strptime(name[7:29], "%Y%m%dT%H%M%S%fZ").strftime("%d.%m.%Y, %H:%M:%S")} UTC</strong> '
+            f'<a href="/config/export?backup_id={name}">Redigiert exportieren</a>'
+            f'<form method="post" action="/config/preview"><input type="hidden" name="csrf_token" value="{token}">'
+            f'<input type="hidden" name="backup_id" value="{name}"><button type="submit">Wiederherstellung prüfen</button></form></li>'
+            for name in self.config_store.list_backups()
+        ) or "<li>Noch keine Sicherungen vorhanden.</li>"
+        notice = f'<p class="notice">{html.escape(message)}</p>' if message else ""
+        content = f'''<div class="toolbar"><div><h1>Sicherung &amp; Wiederherstellung</h1><p class="subtle">Lokale Konfiguration sichern · Änderungen vor dem Anwenden prüfen</p></div><a href="/settings">← Einstellungen</a></div>{notice}
+<section class="card"><h2>Konfiguration exportieren</h2><p>Der Export enthält Anzeige, API-Einstellungen und Haltestellen. Geofox-Zugangsdaten und Webpasswort werden nicht exportiert. Haltestellen können persönliche Orte erkennen lassen; den Export vor dem Teilen prüfen.</p><a href="/config/export" download>Redigierte Konfiguration herunterladen</a><form method="post" action="/config/backup"><input type="hidden" name="csrf_token" value="{token}"><p><button type="submit">Jetzt Sicherung anlegen</button></p></form></section>
+<section class="card"><h2>Konfiguration importieren</h2><p>Eine exportierte HVV-Sicherung oder ältere vollständige config.json-Sicherung auswählen (JSON, höchstens 256 KiB). Zuerst erscheint die Vorschau. Die aktive Konfiguration bleibt bis zur Bestätigung unverändert.</p><form id="config-import" method="post" action="/config/preview"><input type="hidden" name="csrf_token" value="{token}"><input type="hidden" name="config_data" id="config-data"><label for="config-file">Sicherungsdatei</label><input id="config-file" type="file" required><p id="import-error" class="error" role="alert"></p><button type="submit">Import prüfen</button></form><noscript>Für den Dateiimport JavaScript aktivieren oder die dokumentierte CLI verwenden.</noscript></section>
+<section class="card"><h2>Gespeicherte Sicherungen</h2><p>Vor jeder Änderung wird der bisherige Stand gesichert. Die zehn neuesten Sicherungen bleiben erhalten. Wiederherstellung verändert keine Zugangsdaten.</p><ul style="padding-left:20px;overflow-wrap:anywhere">{backups}</ul></section>
+<script>document.getElementById('config-import').addEventListener('submit',async event=>{{event.preventDefault();const file=document.getElementById('config-file').files[0];const error=document.getElementById('import-error');if(!file||file.size>{MAX_CONFIG_BYTES}){{error.textContent='Eine JSON-Sicherung mit höchstens 256 KiB auswählen.';return}}try{{document.getElementById('config-data').value=new TextDecoder('utf-8',{{fatal:true}}).decode(await file.arrayBuffer());event.target.submit()}}catch{{error.textContent='Die Datei konnte nicht gelesen werden.'}}}});</script>'''
+        return _page("Sicherung & Wiederherstellung", content)
+
+    def prepare_config(self, candidate: dict) -> tuple[str, dict]:
+        candidate = deepcopy(candidate)
+        preview = self.config_store.preview(candidate)
+        with self._config_plan_lock:
+            now = time.monotonic()
+            self._config_plans = {key: value for key, value in self._config_plans.items() if value[0] > now}
+            if len(self._config_plans) >= 20:
+                raise ConfigError("Zu viele offene Vorschauen; eine Vorschau abbrechen oder zehn Minuten warten")
+            token = secrets.token_hex(32)
+            self._config_plans[token] = (now + 600, candidate, preview)
+        return token, preview
+
+    def config_preview_page(self, token: str, preview: dict) -> bytes:
+        labels = {"api": "API", "display": "Anzeige", "night_shutdown": "Nachtruhe", "stations": "Haltestellen", "base_url": "API-Adresse", "version": "API-Version", "refresh_seconds": "Abfrageabstand (Sekunden)", "request_timeout_seconds": "Anfrage-Timeout (Sekunden)", "max_departures": "Anzahl Abfahrten", "max_time_offset_minutes": "Vorschauzeit (Minuten)", "max_stale_age_minutes": "Maximales Datenalter (Minuten)", "spi_port": "SPI-Port", "spi_device": "SPI-Gerät", "gpio_dc": "GPIO DC", "gpio_reset": "GPIO Reset", "rotate": "Bilddrehung", "bus_speed_hz": "SPI-Takt (Hz)", "bgr": "BGR-Farben", "show_station_label": "Haltestellen-Label anzeigen", "time_mode": "Zeitdarstellung", "minute_unit": "Minuteneinheit", "enabled": "Aktiv", "start": "Beginn", "end": "Ende", "name": "Name", "city": "Stadt", "id": "Haltestellen-ID", "label": "Label", "routes": "Linien", "line": "Linie", "destination": "Ziel", "line_id": "Linien-ID", "product": "Verkehrsmittel", "filter_mode": "Filterart", "filter_station_ids": "Filter-Haltestellen", "serviceTypes": "Verkehrsmittel"}
+        def label(field):
+            pieces = re.findall(r"([^.\[\]]+)|\[(\d+)\]", field)
+            return " → ".join(labels.get(name, name) if name else str(int(index) + 1) for name, index in pieces)
+        def value(raw):
+            if raw is None:
+                return "Nicht gesetzt"
+            if isinstance(raw, bool):
+                return "Ja" if raw else "Nein"
+            return {"countdown": "Minuten bis Abfahrt", "departure_time": "Abfahrtszeit", "none": "Keine Einheit", "direction": "Richtung", "destination": "Zielstation"}.get(str(raw), str(raw))
+        rows = "".join(f'<tr><th scope="row">{html.escape(label(item["field"]))}</th><td>{html.escape(value(item["before"]))}</td><td>{html.escape(value(item["after"]))}</td></tr>' for item in preview["changes"])
+        csrf = html.escape(self.csrf_token, quote=True)
+        token = html.escape(token, quote=True)
+        damaged = '<p class="notice">Die aktive Konfiguration ist beschädigt. Ihr Original wird vor der Wiederherstellung nur lokal gesichert; ein beschädigtes Backup kann nicht exportiert oder automatisch zurückgespielt werden.</p>' if preview["current_invalid"] else ""
+        content = f'''<h1>Änderungen prüfen</h1><p>{len(preview["changes"])} geänderte Werte. Die vollständige Konfiguration wurde mit den Startregeln geprüft; es erfolgt kein Geofox-Abruf.</p>{damaged}<section class="card" style="overflow-x:auto"><table style="width:100%;border-spacing:12px;overflow-wrap:anywhere"><caption>Konfigurationsänderungen</caption><thead><tr><th>Bereich / Einstellung</th><th>Bisher</th><th>Neu</th></tr></thead><tbody>{rows or '<tr><td colspan="3">Keine geänderten Konfigurationswerte.</td></tr>'}</tbody></table></section><section class="card"><p>Beim Anwenden wird die aktive Konfiguration ersetzt und vorher gesichert. Zugangsdaten bleiben erhalten. Hat sich der aktive Stand inzwischen geändert, muss die Vorschau erneut geprüft werden. Diese Vorschau gilt zehn Minuten.</p><form method="post" action="/config/apply"><input type="hidden" name="csrf_token" value="{csrf}"><input type="hidden" name="token" value="{token}"><label><input type="checkbox" name="confirmed" value="yes" required> Ich habe die Änderungen geprüft und möchte sie anwenden.</label><button type="submit">Änderungen anwenden</button></form><form method="post" action="/config/cancel"><input type="hidden" name="csrf_token" value="{csrf}"><input type="hidden" name="token" value="{token}"><p><button type="submit" class="reset">Abbrechen</button></p></form></section>'''
+        return _page("Änderungen prüfen", content)
+
+    def apply_config_plan(self, token: str, confirmed: bool) -> None:
+        if not confirmed:
+            raise ConfigError("Die Änderungen müssen ausdrücklich bestätigt werden")
+        with self._config_plan_lock:
+            plan = self._config_plans.pop(token, None)
+        if plan is None or plan[0] <= time.monotonic():
+            raise ConfigConflict("Vorschau ist abgelaufen oder wurde bereits verwendet; erneut prüfen")
+        self.config_store.apply(plan[1], expected_revision=plan[2]["base_revision"])
+
+    def cancel_config_plan(self, token: str) -> None:
+        with self._config_plan_lock:
+            self._config_plans.pop(token, None)
+
     def settings(
         self,
         message: str = "",
         restart_required: bool = False,
         field_errors: dict[str, str] | None = None,
     ) -> bytes:
-        raw_config = self.raw_config()
+        raw_config, config_revision = self.config_store.current()
         credentials = load_credentials(self.credentials_path)
         field_errors = field_errors or {}
         notice = f'<div class="notice">{html.escape(message)}</div>' if message else ""
@@ -954,14 +999,14 @@ Datenalter: <span id="display-age">{str(data["data_age_seconds"]) + " Sekunden" 
             for index, station in enumerate(raw_config.get("stations", []))
         ) or station_card({"city": "Hamburg", "routes": []}, 0)
         raw = html.escape(json.dumps(raw_config, ensure_ascii=False))
-        content = f'''<div class="toolbar"><div><h1>Einstellungen</h1><div class="subtle">Bedienbare Felder · jede Änderung wird validiert</div></div><a href="/">← Abfahrten</a></div>{notice}
+        content = f'''<div class="toolbar"><div><h1>Einstellungen</h1><div class="subtle">Bedienbare Felder · jede Änderung wird validiert</div></div><div><a href="/config-backup">Sicherung &amp; Wiederherstellung</a> · <a href="/">← Abfahrten</a></div></div>{notice}
 <form method="post" action="/settings" accept-charset="UTF-8" onsubmit="return prepareConfig()"><section class="card"><h2>Weboberfläche</h2><p class="subtle">Benutzername: <code>hvv-anzeiger</code>. Ein leeres Passwortfeld lässt den bisherigen Wert unverändert.</p><label for="web_password">Neues Webpasswort</label><input id="web_password" name="web_password" type="password" autocomplete="new-password" placeholder="unverändert lassen">{f'<span class="field-error" data-field-error="web_password">{html.escape(field_errors["web_password"])}</span>' if field_errors.get("web_password") else ""}</section>
 <section class="card"><h2>Geofox-Zugang</h2><label for="user">Anwendungs-ID</label><input id="user" name="user" value="{html.escape(credentials.get("GEOFOX_USER", ""), quote=True)}" autocomplete="username">{f'<span class="field-error" data-field-error="user">{html.escape(field_errors["user"])}</span>' if field_errors.get("user") else ""}<label for="password">Passwort</label><input id="password" name="password" type="password" autocomplete="new-password" placeholder="unverändert lassen">{f'<span class="field-error" data-field-error="password">{html.escape(field_errors["password"])}</span>' if field_errors.get("password") else ""}</section>
 <section class="card"><h2>Geofox-API</h2><div class="grid">{scalar("api.base_url")}{scalar("api.version", "number")}{scalar("api.refresh_seconds", "number")}{scalar("api.request_timeout_seconds", "number")}{scalar("api.max_departures", "number")}{scalar("api.max_time_offset_minutes", "number")}{scalar("api.max_stale_age_minutes", "number")}</div></section>
 <section class="card"><h2>Display</h2><div class="grid">{scalar("display.spi_port", "number")}{scalar("display.spi_device", "number")}{scalar("display.gpio_dc", "number")}{scalar("display.gpio_reset", "number")}{scalar("display.rotate", "number")}{scalar("display.bus_speed_hz", "number")}{scalar("display.bgr")}{scalar("display.show_station_label")}{scalar("display.time_mode")}{scalar("display.minute_unit")}</div></section>
 <section class="card"><h2>Nachtabschaltung</h2><div class="grid">{scalar("night_shutdown.enabled")}{scalar("night_shutdown.start", "time")}{scalar("night_shutdown.end", "time")}</div></section>
 <section class="card"><div class="station-heading"><div><h2>Haltestellen und Linien</h2><p class="subtle">Haltestelle eintippen, Geofox-Vorschlag auswählen; Name, Stadt und ID werden automatisch übernommen.</p></div><button type="button" onclick="addStation()">Haltestelle hinzufügen</button></div><div class="setup-guide"><strong>So richtest du eine Haltestelle ein</strong><ol><li>Name eingeben und einen Geofox-Treffer auswählen. Stadt, Geofox-ID und Kürzel werden automatisch ergänzt.</li><li>Auf „Verfügbare Linien laden“ klicken und die gewünschten Linien markieren.</li><li>Bei Bedarf Richtung oder Zielstation festlegen und anschließend unten „Speichern und prüfen“ wählen.</li></ol></div><div id="stations">{stations}</div></section>
-<textarea id="config_json" name="config_json" hidden>{raw}</textarea><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><p><button id="save-settings" type="submit">Speichern und prüfen</button></p></form>
+<input type="hidden" name="config_revision" value="{config_revision}"><textarea id="config_json" name="config_json" hidden>{raw}</textarea><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><p><button id="save-settings" type="submit">Speichern und prüfen</button></p></form>
 <script>
 let requestSequence=0; let debounceTimers=new WeakMap(); let controllers=new WeakMap(); let lineControllers=new WeakMap(); let lineSequences=new WeakMap();
 function resetField(button){{const control=button.parentElement.querySelector('[data-path]');if(control.type==='checkbox'){{control.checked=control.dataset.default==='true'}}else{{control.value=control.dataset.default}}syncTimeDisplayControls()}}
@@ -1158,6 +1203,26 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                     )
                 )
                 return
+            if path == "/config-backup":
+                query = parse_qs(urlsplit(self.path).query)
+                self._send(application.config_backup_page("Gespeichert. Der Anzeigedienst übernimmt die Konfiguration bei der nächsten Aktualisierung." if query.get("saved") == ["1"] else ""))
+                return
+            if path == "/config/export":
+                try:
+                    query = parse_qs(urlsplit(self.path).query)
+                    name = query.get("backup_id", [""])[0]
+                    raw = application.config_store.backup_candidate(name) if name else application.config_store.current()[0]
+                    payload = export_config(raw)
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Content-Disposition", 'attachment; filename="hvv-konfiguration.json"')
+                    self.send_header("Content-Length", str(len(payload)))
+                    self._security_headers()
+                    self.end_headers()
+                    self.wfile.write(payload)
+                except (ConfigError, OSError):
+                    self._send(application.config_backup_page("Export nicht möglich: Konfiguration oder Sicherung ist ungültig oder nicht lesbar."), HTTPStatus.BAD_REQUEST)
+                return
             if path == "/api/departures":
                 data = application.departure_view()
                 data.pop("board_html", None)
@@ -1248,6 +1313,40 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 self._unauthorized()
                 return
             path = urlsplit(self.path).path
+            if path in {"/config/preview", "/config/apply", "/config/cancel", "/config/backup"}:
+                try:
+                    values = self._form_values(MAX_CONFIG_BYTES * 3 + 4096)
+                    application.validate_csrf(values.get("csrf_token", [""])[0])
+                    if path == "/config/preview":
+                        name = values.get("backup_id", [""])[0]
+                        payload = values.get("config_data", [""])[0]
+                        if bool(name) == bool(payload):
+                            raise ConfigError("Genau eine Sicherungsdatei oder gespeicherte Sicherung auswählen")
+                        candidate = application.config_store.backup_candidate(name) if name else import_config(payload.encode("utf-8"))
+                        token, preview = application.prepare_config(candidate)
+                        self._send(application.config_preview_page(token, preview))
+                        return
+                    if path == "/config/apply":
+                        application.apply_config_plan(values.get("token", [""])[0], values.get("confirmed", [""])[0] == "yes")
+                    elif path == "/config/cancel":
+                        application.cancel_config_plan(values.get("token", [""])[0])
+                    else:
+                        application.config_store.backup()
+                    self.send_response(HTTPStatus.SEE_OTHER)
+                    self.send_header("Location", "/config-backup?saved=1" if path == "/config/apply" else "/config-backup")
+                    self._security_headers()
+                    self.end_headers()
+                except ConfigConflict as exc:
+                    self._send(application.config_backup_page(str(exc)), HTTPStatus.CONFLICT)
+                except PermissionError:
+                    self._send(application.config_backup_page("Anfrage nicht autorisiert oder Dateizugriff verweigert; nicht angewendet."), HTTPStatus.FORBIDDEN)
+                except OverflowError:
+                    self._send(application.config_backup_page("Import ist zu groß; nicht angewendet."), HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+                except (ConfigError, ValueError) as exc:
+                    self._send(application.config_backup_page(str(exc)), HTTPStatus.BAD_REQUEST)
+                except OSError:
+                    self._send(application.config_backup_page("Dateizugriff fehlgeschlagen; bestehende Konfiguration bleibt erhalten."), HTTPStatus.BAD_REQUEST)
+                return
             if path == "/system/restart":
                 try:
                     values = self._form_values(4096)
@@ -1276,6 +1375,7 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
             try:
                 values = self._form_values(MAX_FORM_BYTES)
                 application.validate_csrf(values.get("csrf_token", [""])[0])
+                expected_revision = values.get("config_revision", [application.config_store.base_revision()])[0]
                 raw_config = json.loads(values.get("config_json", [""])[0])
                 if not isinstance(raw_config, dict):
                     raise ValueError("Konfiguration muss ein JSON-Objekt sein")
@@ -1298,7 +1398,7 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 web_password = values.get("web_password", [""])[0]
                 if web_password:
                     application.save_web_password(web_password)
-                save_config(application.config_path, raw_config)
+                application.config_store.apply(raw_config, expected_revision=expected_revision)
                 if supplied_password:
                     save_credentials(
                         application.credentials_path, user, supplied_password
@@ -1309,6 +1409,8 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 self.send_header("Location", "/settings?saved=1")
                 self._security_headers()
                 self.end_headers()
+            except ConfigConflict as exc:
+                self._send(application.settings(str(exc)), HTTPStatus.CONFLICT)
             except OverflowError as exc:
                 self._send(
                     application.settings(

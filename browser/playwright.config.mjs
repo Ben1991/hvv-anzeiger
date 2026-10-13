@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: ".",
-  testMatch: ["smoke.spec.mjs", "kiosk.spec.mjs"],
+  testMatch: ["smoke.spec.mjs", "backup.spec.mjs", "kiosk.spec.mjs"],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
