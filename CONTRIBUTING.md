@@ -74,6 +74,33 @@ Installer-Smoke-Test geprüft.
 
 ## Review und Merge
 
+### Verbindlicher Backup-Kompatibilitätsvertrag
+
+Neue HVV-Anzeiger-Versionen müssen alle bislang veröffentlichten Backup-Schemata
+weiterhin lesen und in das aktuelle Schema migrieren können. Die App-Version
+ist kein Grund, eine ältere Sicherung abzulehnen. Bestehende Schema-Reader,
+historische Standardwerte und die Fixtures unter
+`tests/fixtures/config-backups` dürfen weder entfernt noch nachträglich auf
+neue Defaults umgestellt werden. Der Schema-Zähler darf nicht zurückgesetzt
+werden.
+
+Bei einem neuen Schema `CURRENT_SCHEMA_VERSION` erhöhen, einen Reader und eine
+unveränderliche Fixture und Felddefinition in `SCHEMA_FIELDS` ergänzen und jede
+notwendige Migration zum nächsten
+Schema in `SCHEMA_UPGRADERS` registrieren. Ältere Reader bleiben erhalten.
+Migrationen müssen gültige Einstellungen und deren Bedeutung bewahren,
+offline arbeiten und vor der Vorschau stattfinden. Sie dürfen nichts in die
+aktive Datei schreiben und keine Geheimnisse hinzufügen. Eine umbenannte oder
+entfernte Einstellung benötigt eine explizite Übersetzung statt stiller
+Verwerfung. Für neue optionale Einstellungen sind sichere Defaults nötig.
+
+`tests/test_backup_compatibility.py` prüft alle veröffentlichten Reader und
+Upgrade-Schritte, eingefrorene historische Defaults, Legacy-Dateien und den
+Restore einer V1-Sicherung unter einer simulierten neuen App-/Schemaversion mit
+veränderten Defaults. Diese Tests gehören verpflichtend zu jeder Release-CI.
+Unbekannte neuere Formate und beschädigte Inhalte dürfen weiterhin sicher
+abgelehnt werden; gültige ältere Formate dürfen nicht verloren gehen.
+
 - Alle Änderungen an `main` müssen über einen Pull Request erfolgen.
 - Die vorgeschriebenen GitHub-Actions-Prüfungen müssen erfolgreich sein.
 - Der Code Owner `@Ben1991` muss die Änderung freigeben.
