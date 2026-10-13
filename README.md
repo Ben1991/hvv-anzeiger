@@ -39,6 +39,42 @@ Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
 
 ## Release Notes
 
+### Release V2.3.0 – Diagnose, Sicherungen, Kioskmodus und Sicherheit
+
+V2.3.0 ergänzt die Weboberfläche um Diagnose und sichere
+Konfigurationssicherungen, verbessert den Kioskmodus und behebt vier
+Security-Findings. Die Paketversion ist `0.3.0`.
+
+- neuer Bereich **Gesundheit und Diagnose** mit Dienstzustand, Version,
+  Laufzeit, Netzwerkstatus, Datenalter und Retry-/Rate-Limit-Informationen;
+  geschützter JSON-Endpunkt für Monitoring und Support
+- Konfigurationsexport und -import mit Vorschau und Bestätigung, privaten
+  Sicherungen vor Änderungen und geheimnisfreien öffentlichen Exporten
+- versionierte Backup-Leser und Kompatibilitätstests erhalten die Bedeutung
+  älterer Sicherungen auch bei neuen Versionen; vorhandene `config.json`-
+  und `.bak`-Sicherungen bleiben importierbar
+- barrierearmer `/display`-Modus mit Tastatur- und Screenreader-Unterstützung,
+  sichtbarem Fokus, reduzierter Bewegung, Vollbild und Pause
+- kontrollierte Aktualisierung bei Fehlern; Datenalter, Ausfälle und
+  Verspätungen bleiben sichtbar, zu alte Daten werden nicht als aktuell gezeigt
+- null Minuten werden unabhängig von `min`, `m` oder fehlender Einheit wieder
+  als **sofort** angezeigt – auf Hardware und im Web
+- individuelle Erstanmeldung vor dem LAN-Start; das frühere gemeinsame
+  Erstpasswort wird bei Updates ersetzt und bei Passwortänderungen abgelehnt
+- sichere Datenübernahme im Installer und private Vorschauausgabe außerhalb
+  des dienstschreibbaren Datenbereichs
+- TLS-Verbindungsaufbau mit Zeitgrenze und begrenzter Parallelität
+- aktualisierte Abhängigkeiten, GitHub Actions und Dokumentation; 254
+  Python-Tests, acht Browser-/Accessibility-Tests und Installer-/Rollback-Tests
+
+**Update-Hinweis:** Individuelle Webpasswörter und reguläre Konfigurationen
+bleiben erhalten. Bei Erstinstallation oder noch unverändertem früherem
+Erstpasswort ist eine verdeckte Passworteingabe mit Bestätigung erforderlich.
+Unerwartete Dateiverweise, Hardlinks oder Spezialdateien im Datenbereich führen
+zum sicheren Abbruch und müssen vor einem erneuten Update geprüft werden.
+
+[Vollständige Release Notes zu V2.3.0](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.3.0)
+
 ### Release V2.2.2 – einfachere Stations- und Linienauswahl
 
 V2.2.2 macht die Einrichtung von Haltestellen in der Weboberfläche klarer und
@@ -1210,7 +1246,7 @@ git checkout <versions-tag>
 ./install.sh
 ```
 
-Beispiel für eine veröffentlichte Version: `git checkout V2.2.2`. Ein
+Beispiel für eine veröffentlichte Version: `git checkout V2.3.0`. Ein
 Versions-Tag sollte nur verwendet werden, wenn er im Repository tatsächlich
 vorhanden ist.
 
