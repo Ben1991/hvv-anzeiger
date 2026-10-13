@@ -29,15 +29,7 @@ test("dashboard, display mode, and settings have stable product surfaces", async
   await page.getByRole("link", { name: "Displaymodus" }).click();
   await expect(page.locator("body")).toHaveClass(/display-page/);
   await expect(page.locator("a.display-exit")).toBeVisible();
-  await expect(page.locator('meta[http-equiv="refresh"]')).toHaveAttribute(
-    "content",
-    "15",
-  );
-  await expect(page).toHaveScreenshot("display-desktop.png", {
-    animations: "disabled",
-    caret: "hide",
-    maxDiffPixelRatio: 0.1,
-  });
+  await expect(page.locator('meta[http-equiv="refresh"]')).toHaveCount(0);
 
   await page.locator("a.display-exit").click();
   await page.getByRole("link", { name: "Einstellungen" }).click();

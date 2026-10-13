@@ -630,11 +630,28 @@ Neustartaktion gibt es den geschützten reinen Displaymodus:
 https://<raspberry-pi-ip>:8080/display
 ```
 
-Die URL bleibt beim automatischen Neuladen erhalten. Über „Standardansicht“
+Die Seite aktualisiert Abfahrten ohne vollständiges Neuladen. Über „Standardansicht“
 kommt man jederzeit zurück zum normalen Dashboard; auch dieser Wechsel bleibt
 durch die Web-Anmeldung geschützt. Der reine Displaymodus zeigt die absolute
 Abfahrtszeit wie das Hardware-Display; die Countdown-Einstellung betrifft das
 Dashboard und die konfigurierbare Darstellung des Hardware-Displays.
+
+Linien, Ziele, Uhrzeiten, Verspätungen und Ausfälle sind als lesbare Liste
+strukturiert. Datenalter und letzter erfolgreicher Abruf bleiben auch bei
+Netzproblemen sichtbar. Wiederholungen warten mit zunehmendem Backoff;
+zu alte Abfahrten werden nach derselben Altersgrenze wie auf der Hardware
+ausgeblendet. „Aktualisierung pausieren“ ermöglicht ungestörtes Lesen.
+Vollbild ist per Button oder F11 möglich und bleibt durch die Web-Anmeldung
+geschützt. Tastaturfokus, reduzierte Bewegung, Textvergrößerung und mobile
+Darstellung werden automatisch geprüft.
+
+Die [Kiosk- und Accessibility-Anleitung](docs/kiosk-accessibility.md) erklärt
+Chromium-Start, Rückkehr, Fehlerverhalten und die Grenzen der Prüfungen.
+CI-Berichte enthalten axe-Ergebnisse sowie Desktop-/Mobil-Screenshots.
+
+![Displaymodus auf Desktop](docs/kiosk-desktop.png)
+
+![Displaymodus auf Mobilgerät](docs/kiosk-mobile.png)
 
 Der Webdienst läuft als lokaler Dienst auf dem Raspberry Pi und ist durch eine
 Anmeldung geschützt. Die Standarddaten sind:
