@@ -48,7 +48,10 @@ test("configuration export, preview, cancel, import and restore work end to end"
     await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
     expect(JSON.parse(await readFile(config, "utf8")).display.rotate).toBe(oldRotate);
     await page.locator("#config-file").setInputFiles(input);
-    await page.getByRole("button", { name: "Import prüfen" }).click();
+    await Promise.all([
+      page.waitForURL("**/config/preview"),
+      page.getByRole("button", { name: "Import prüfen" }).click(),
+    ]);
     await page.setViewportSize({ width: 390, height: 844 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.getByRole("button", { name: "Änderungen anwenden" }).click();
