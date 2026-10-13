@@ -117,6 +117,9 @@ test -s "$ROOT/post-install-preview.png"
 "$APP_DIR/.venv/bin/hvv-anzeiger" --help >/dev/null
 test -x "$APP_DIR/configure-credentials.sh"
 test -f "$APP_DIR/config.json"
+test -L "$APP_DIR/config.json"
+test "$(readlink "$APP_DIR/config.json")" = "var/config.json"
+test -f "$APP_DIR/var/config.json"
 test -f "$SYSTEMD_DIR/hvv-anzeiger.service"
 grep -q -- '--host 0.0.0.0' "$SYSTEMD_DIR/hvv-anzeiger-web.service"
 grep -q -- '--tls-certfile /etc/hvv-anzeiger/web.crt' \

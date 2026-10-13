@@ -295,6 +295,7 @@ class MainTest(unittest.TestCase):
             )
             with (
                 patch("hvv_display.main._arguments", return_value=args),
+                patch("hvv_display.main.time.monotonic", return_value=100.0),
                 patch("hvv_display.main.HealthPublisher") as health,
                 patch("hvv_display.main.GeofoxClient") as client,
                 patch(
