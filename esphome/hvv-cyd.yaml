@@ -1,0 +1,12 @@
+# Sunton original micro-USB ESP32-2432S028 with ILI9341.
+# For the dual-USB ST7789/ILI9342 versions use the matching model below.
+substitutions:
+  name: hvv-cyd
+  friendly_name: HVV CYD
+  board_entity: sensor.hvv_board
+  display_model: ESP32-2432S028
+
+packages:
+  core: !include packages/core.yaml
+  transport: !include packages/home-assistant.yaml
+  hardware: !include boards/cyd.yaml

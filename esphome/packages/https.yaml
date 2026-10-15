@@ -1,0 +1,31 @@
+time:
+  - platform: sntp
+    id: hvv_clock
+    timezone: Europe/Berlin
+
+http_request:
+  verify_ssl: true
+  follow_redirects: false
+  timeout: 20s
+  # For a private CA, add ca_certificate_path: backend-ca.pem (copy its PEM).
+
+interval:
+  - interval: 15s
+    then:
+      - if:
+          condition:
+            lambda: return id(hvv_clock).now().is_valid();
+          then:
+            - http_request.get:
+                url: !secret backend_url
+                request_headers:
+                  Authorization: !secret backend_authorization
+                capture_response: true
+                max_response_buffer_size: 8192
+                on_response:
+                  then:
+                    - lambda: |-
+                        if (response->status_code != 200 || body.size() > 8192) return;
+                        json::parse_json(body, [](JsonObject root) -> bool {
+                          return hvv_board.accept(root, millis());
+                        });

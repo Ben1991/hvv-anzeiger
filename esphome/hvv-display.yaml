@@ -1,0 +1,9 @@
+substitutions:
+  name: hvv-display
+  friendly_name: HVV Display
+  board_entity: sensor.hvv_board
+
+packages:
+  core: !include packages/core.yaml
+  transport: !include packages/home-assistant.yaml
+  hardware: !include boards/esp32-ili9341.yaml

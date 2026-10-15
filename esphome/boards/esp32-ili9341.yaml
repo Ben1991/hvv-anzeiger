@@ -1,0 +1,49 @@
+# ESP32 DevKit + external ILI9341, 320x240 landscape. 3.3V logic only.
+substitutions:
+  esp32_board: esp32dev
+  display_model: ILI9341
+  spi_clk: GPIO18
+  spi_mosi: GPIO23
+  display_cs: GPIO21
+  display_dc: GPIO27
+  display_reset: GPIO33
+  backlight_pin: GPIO32
+  display_rotation: '90'
+
+esp32:
+  board: ${esp32_board}
+  framework:
+    type: esp-idf
+
+spi:
+  clk_pin: ${spi_clk}
+  mosi_pin: ${spi_mosi}
+
+output:
+  - platform: ledc
+    pin: ${backlight_pin}
+    id: hvv_backlight_output
+
+light:
+  - platform: monochromatic
+    name: Hintergrundbeleuchtung
+    id: hvv_backlight
+    output: hvv_backlight_output
+    restore_mode: ALWAYS_ON
+    default_transition_length: 0s
+
+display:
+  - platform: mipi_spi
+    id: hvv_screen
+    model: ${display_model}
+    cs_pin: ${display_cs}
+    dc_pin: ${display_dc}
+    reset_pin: ${display_reset}
+    rotation: ${display_rotation}
+    color_depth: 8
+    buffer_size: 25%
+    data_rate: 20MHz
+    update_interval: 1s
+    lambda: |-
+      hvv_board.draw(it, id(hvv_font), id(hvv_small_font), millis(),
+                     id(hvv_display_enabled));

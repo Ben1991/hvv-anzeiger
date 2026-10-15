@@ -29,6 +29,7 @@ from threading import BoundedSemaphore, Lock, RLock
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+from .clock import in_night_shutdown
 from .config import ConfigError, load_config
 from .config_backup import (
     MAX_CONFIG_BYTES,
@@ -51,6 +52,7 @@ from .health import STATUS_CODES, health_path, read_health
 from .kiosk import DISPLAY_CSS, DISPLAY_SCRIPT
 from .models import Departure
 from .render import get_line_style, line_style_css, station_label_for_display
+from .smart_home import smart_home_payload
 from .stations import resolve_stations
 from .time_display import format_departure_time, minutes_until
 
@@ -601,6 +603,22 @@ class WebApplication:
         return {"departures": departures, "error": error, **metadata, "state": state,
                 "board_html": _departure_rows(departures, absolute_time=True) if not metadata["expired"] else '<p class="empty">Letzter Stand zu alt; Abfahrten ausgeblendet.</p>',
                 "signal": signal, "change_summary": f"Abfahrtsstatus geändert: {cancellations} Ausfälle, {delayed} Verspätungen."}
+
+    def smart_home(self) -> dict[str, Any]:
+        # Share the web cache and backoff across HA and any number of displays.
+        with self._departure_lock:
+            now = datetime.now(HAMBURG_TZ)
+            try:
+                config = load_config(self.config_path)
+            except (ConfigError, OSError):
+                return smart_home_payload({}, None, now)
+            night = config.night_shutdown.enabled and in_night_shutdown(
+                now, config.night_shutdown.start, config.night_shutdown.end
+            )
+            if night:
+                # No Geofox call, including when there is no cached snapshot yet.
+                return smart_home_payload({}, config, now, night_shutdown=True)
+            return smart_home_payload(self.departure_view(), config, datetime.now(HAMBURG_TZ))
 
     def station_suggestions(self, query: str, city: str) -> list[dict[str, Any]]:
         query = query.strip()
@@ -1268,6 +1286,10 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 except (ConfigError, OSError):
                     self._send(application.config_backup_page("Export nicht möglich: Konfiguration oder Sicherung ist ungültig oder nicht lesbar."), HTTPStatus.BAD_REQUEST)
                 return
+            if path in {"/api/smart-home", "/api/esphome"}:
+                data = application.smart_home()
+                self._send_json(json.loads(data["display_payload"]) if path == "/api/esphome" else data)
+                return
             if path == "/api/departures":
                 data = application.departure_view()
                 data.pop("board_html", None)
@@ -1539,6 +1561,28 @@ def run(
         server.server_close()
 
 
+def load_web_password_hash(path: Path) -> str | None:
+    """Read the container's private environment file without shell evaluation."""
+    try:
+        with path.open(encoding="utf-8") as source:
+            content = source.read(8193)
+    except FileNotFoundError:
+        return None
+    if len(content) > 8192:
+        raise ValueError("Web-EnvironmentFile ist zu groß")
+    values = []
+    for line in content.splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key.strip() == "HVV_WEB_PASSWORD_HASH":
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            values.append(value)
+    if len(values) > 1:
+        raise ValueError("Web-EnvironmentFile enthält mehrere Passwort-Hashes")
+    return values[0] or None if values else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Lokale Weboberfläche für den HVV-Anzeiger"
@@ -1571,6 +1615,8 @@ def main() -> None:
         help="Privater TLS-Schlüssel für nicht-lokale Zugriffe",
     )
     args = parser.parse_args()
+    if args.access_token is None and (web_env_file := os.environ.get("HVV_WEB_ENV_FILE")):
+        args.access_token = load_web_password_hash(Path(web_env_file))
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
     run(
         args.host,

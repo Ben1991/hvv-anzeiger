@@ -1,0 +1,21 @@
+# Paste as a manual Lovelace card. Adjust the entity ID if HA assigned a suffix.
+type: markdown
+title: HVV Abfahrten
+content: >-
+  {% set board = 'sensor.hvv_board' %}
+  {% set status = states(board) %}
+  {% if status == 'night' %}
+  Nachtabschaltung aktiv.
+  {% elif status in ['unknown', 'unavailable', 'expired'] %}
+  Keine aktuellen Abfahrtsdaten verfügbar.
+  {% else %}
+  {% if status == 'stale' %}**Veraltete Daten – letzter erfolgreicher Stand.**{% endif %}
+
+  | Linie | Ziel | Abfahrt | Restzeit |
+  | :--- | :--- | :--- | ---: |
+  {% for row in state_attr(board, 'departures') or [] %}
+  | {{ row.line | e }} {{ row.station | e }} | {{ row.destination | replace('|', '/') | e }} | {{ row.time }} | {{ row.display_time }} |
+  {% else %}
+  | – | Keine passenden Abfahrten | – | – |
+  {% endfor %}
+  {% endif %}

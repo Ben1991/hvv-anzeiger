@@ -1,0 +1,18 @@
+# ESP32-S3 DevKit + external 480x320 ILI9488 SPI display.
+substitutions:
+  name: hvv-s3
+  friendly_name: HVV S3
+  board_entity: sensor.hvv_board
+  esp32_board: esp32-s3-devkitc-1
+  display_model: ILI9488
+  spi_clk: GPIO12
+  spi_mosi: GPIO11
+  display_cs: GPIO10
+  display_dc: GPIO9
+  display_reset: GPIO8
+  backlight_pin: GPIO7
+
+packages:
+  core: !include packages/core.yaml
+  transport: !include packages/home-assistant.yaml
+  hardware: !include boards/esp32-ili9341.yaml

@@ -1,0 +1,19 @@
+# Register the ESPHome device in HA: HA then subscribes it to this attribute.
+time:
+  - platform: homeassistant
+    id: hvv_clock
+    timezone: Europe/Berlin
+
+text_sensor:
+  - platform: homeassistant
+    id: hvv_snapshot
+    entity_id: ${board_entity}
+    attribute: display_payload
+    internal: true
+    on_value:
+      then:
+        - lambda: |-
+            if (x.size() > 8192) return;
+            json::parse_json(x, [](JsonObject root) -> bool {
+              return hvv_board.accept(root, millis());
+            });

@@ -1,4 +1,4 @@
-# HVV-Anzeiger für Raspberry Pi
+# HVV-Anzeiger für Raspberry Pi, Home Assistant und ESPHome
 
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/U3D523YISZ)
 
@@ -11,12 +11,29 @@ Ich möchte morgens möglichst schnell sehen, wann ich los muss, um meinen Bus o
 
 ## Und wie funktioniert es?
 
-Eine kompakte Abfahrtsanzeige für einen Raspberry Pi Zero 2 W oder ein
-kompatibles Raspberry-Pi-Modell mit 40-Pin-GPIO und ein
-2,2-Zoll-ILI9341-SPI-Display. Sie läuft ohne grafische Oberfläche auf
-Raspberry Pi OS Lite, lädt alle 15 Sekunden aktuelle Geofox-Prognosen, filtert
-die gewünschten Verbindungen und sortiert sie haltestellenübergreifend nach
-der erwarteten Abfahrtszeit.
+Der HVV-Anzeiger lädt im Normalbetrieb alle 15 Sekunden aktuelle
+Geofox-Prognosen. Er filtert die gewünschten Verbindungen und sortiert sie
+über mehrere Haltestellen hinweg nach der erwarteten Abfahrtszeit.
+
+Das ursprüngliche Setup besteht aus einem Raspberry Pi Zero 2 W oder einem
+kompatiblen Raspberry-Pi-Modell mit 40-Pin-GPIO und einem
+2,2-Zoll-ILI9341-SPI-Display. Es läuft auf Raspberry Pi OS Lite ohne grafische
+Oberfläche. Zusätzlich sind Home Assistant und ESP32-Displays mit ESPHome möglich.
+
+### Welcher Aufbau passt zu dir?
+
+| Du möchtest … | Aufbau | Hier geht es weiter |
+|---|---|---|
+| eine Anzeige direkt am Raspberry Pi | Raspberry Pi mit angeschlossenem SPI-Display | [Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Verdrahtung](#display-anschließen) → [Installation](#installieren) |
+| Abfahrten in Home Assistant oder auf einem ESP32-Display | Python-Hintergrunddienst + HA-Paket und/oder ESPHome | [Home Assistant und ESP32 einrichten](docs/home-assistant-esphome.md) |
+| einen Browser als Kiosk- oder Zweitbildschirm | geschützter Displaymodus des Webdienstes | [Weboberfläche und Displaymodus](#lokale-weboberfläche) |
+
+Ein Geofox-Zugang ist bei allen Varianten erforderlich. Der Python-
+Hintergrunddienst bleibt auch bei ESPHome nötig; er kann auf dem vorhandenen
+Pi oder als Container laufen. Der ESP32 übernimmt die Anzeige.
+Die folgenden Hardware-, Installations- und systemd-Anleitungen beschreiben
+das Raspberry-Pi-Setup. Für ESPHome gelten die separate Anleitung und deren
+[Prüfgrenzen](docs/home-assistant-esphome-validation.md).
 
 ![Beispielhafte Abfahrten ab Jungfernstieg Richtung Hauptbahnhof mit Bus, U-Bahn und S-Bahn](docs/hvv-anzeiger-preview.png)
 
@@ -24,166 +41,21 @@ Das Preview zeigt beispielhafte Abfahrten ab Jungfernstieg in Richtung
 Hauptbahnhof. Bus, U-Bahn und S-Bahn werden dabei mit ihren unterschiedlichen
 Linienfarben und -formen dargestellt; die angezeigten Zeiten sind illustrativ.
 
-## Praxisbeispiel
-
-Die fertige Anzeige im Einsatz auf einem Raspberry Pi mit 2,2-Zoll-Display:
-
-![Praxisbeispiel der fertigen HVV-Abfahrtsanzeige](docs/practice-example.png)
-
-Die Hülle für den Raspberry Pi und das Display ist 3D-gedruckt und kann bei
-[3DprintsByBen auf Etsy](https://3dprintsbybenstudio.etsy.com) bestellt werden.
-Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
-
-> Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
-> offizielles Produkt von hvv, HOCHBAHN oder Geofox.
-
-## Release Notes
-
-### Release V2.3.0 – Diagnose, Sicherungen, Kioskmodus und Sicherheit
-
-V2.3.0 ergänzt die Weboberfläche um Diagnose und sichere
-Konfigurationssicherungen, verbessert den Kioskmodus und behebt vier
-Security-Findings. Die Paketversion ist `0.3.0`.
-
-- neuer Bereich **Gesundheit und Diagnose** mit Dienstzustand, Version,
-  Laufzeit, Netzwerkstatus, Datenalter und Retry-/Rate-Limit-Informationen;
-  geschützter JSON-Endpunkt für Monitoring und Support
-- Konfigurationsexport und -import mit Vorschau und Bestätigung, privaten
-  Sicherungen vor Änderungen und geheimnisfreien öffentlichen Exporten
-- versionierte Backup-Leser und Kompatibilitätstests erhalten die Bedeutung
-  älterer Sicherungen auch bei neuen Versionen; vorhandene `config.json`-
-  und `.bak`-Sicherungen bleiben importierbar
-- barrierearmer `/display`-Modus mit Tastatur- und Screenreader-Unterstützung,
-  sichtbarem Fokus, reduzierter Bewegung, Vollbild und Pause
-- kontrollierte Aktualisierung bei Fehlern; Datenalter, Ausfälle und
-  Verspätungen bleiben sichtbar, zu alte Daten werden nicht als aktuell gezeigt
-- null Minuten werden unabhängig von `min`, `m` oder fehlender Einheit wieder
-  als **sofort** angezeigt – auf Hardware und im Web
-- individuelle Erstanmeldung vor dem LAN-Start; das frühere gemeinsame
-  Erstpasswort wird bei Updates ersetzt und bei Passwortänderungen abgelehnt
-- sichere Datenübernahme im Installer und private Vorschauausgabe außerhalb
-  des dienstschreibbaren Datenbereichs
-- TLS-Verbindungsaufbau mit Zeitgrenze und begrenzter Parallelität
-- aktualisierte Abhängigkeiten, GitHub Actions und Dokumentation; 254
-  Python-Tests, acht Browser-/Accessibility-Tests und Installer-/Rollback-Tests
-
-**Update-Hinweis:** Individuelle Webpasswörter und reguläre Konfigurationen
-bleiben erhalten. Bei Erstinstallation oder noch unverändertem früherem
-Erstpasswort ist eine verdeckte Passworteingabe mit Bestätigung erforderlich.
-Unerwartete Dateiverweise, Hardlinks oder Spezialdateien im Datenbereich führen
-zum sicheren Abbruch und müssen vor einem erneuten Update geprüft werden.
-
-[Vollständige Release Notes zu V2.3.0](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.3.0)
-
-### Release V2.2.2 – einfachere Stations- und Linienauswahl
-
-V2.2.2 macht die Einrichtung von Haltestellen in der Weboberfläche klarer und
-schneller:
-
-- eine sichtbare Schrittfolge führt von der Geofox-Haltestellensuche über das
-  Laden der Linien bis zum Speichern
-- Stadt, Geofox-ID und ein freies Anzeige-Kürzel werden nach der Auswahl eines
-  Geofox-Treffers automatisch übernommen
-- Linien werden nach Verkehrsmittel gruppiert und können über ein Suchfeld
-  gefiltert werden; die Auswahl zeigt jederzeit „x von y ausgewählt“
-- die Statusanzeige zeigt den nächsten sinnvollen Schritt und blendet leere
-  Suchfelder aus
-- Browser-Smoke-Tests prüfen zusätzlich das Laden, Gruppieren und Filtern der
-  Linienauswahl
-
-### Release V2.2.1 – überarbeitete V2.2-Release
-
-V2.2.1 veröffentlicht die überarbeitete V2.2-Implementierung mit einem
-zusätzlichen End-to-End- und Responsive-Testlauf:
-
-- Geofox-gestützte Haltestellen- und Linienauswahl für Bus, U-Bahn, S-Bahn,
-  AKN, Regionalverkehr und Fähre
-- Richtungs- und Zielstationsfilter bleiben beim erneuten Laden der Linien
-  erhalten
-- Geofox-Anfragen werden global serialisiert; HTTP-400-Fehlercodes aus
-  Response-Bodies werden verständlich ausgewertet
-- Speichermeldungen erscheinen zusätzlich direkt am betroffenen Feld bzw. an
-  der Liniengruppe
-- responsiver, geschützter `/display`-Modus und mobile Stations-/
-  Linienkonfiguration ohne horizontalen Overflow
-- Browser-Smoke- und visuelle Regressionstests prüfen Dashboard, Displaymodus,
-  Settings, Filterpersistenz und das 390-Pixel-Mobile-Layout
-- `web.py` ist in der Coverage-Messung enthalten; die CI läuft mit Python 3.11
-- README-Screenshots wurden aus der geprüften Weboberfläche neu erzeugt,
-  einschließlich eines Displaybeispiels Jungfernstieg Richtung Hauptbahnhof
-- alle GitHub-CI-Gates einschließlich Shell-Installer und CodeQL sind grün
-
-<details>
-<summary>Ältere Release Notes anzeigen</summary>
-
-### Version 0.2.2 / V2.2
-
-- Stationsverwaltung über die Weboberfläche für alle von Geofox gemeldeten
-  Verkehrsmittel, einschließlich Bus, U-Bahn, S-Bahn, AKN, Regionalverkehr
-  und Fähre
-- sichere Linienauswahl mit konfigurierbarem Richtungs- oder
-  Zielstationsfilter; bestehende manuelle Bus-Konfigurationen bleiben
-  kompatibel
-- einheitliche, verkehrsmittelabhängige Linienfarben und -formen in Display,
-  Web-Dashboard und geschütztem Displaymodus
-- konfigurierbare Darstellung mit Countdown oder absoluter Abfahrtszeit,
-  wählbarer Countdown-Einheit und optional ausgeblendeten Haltestellenkürzeln
-- geschützter, responsiver `/display`-Modus für Kiosk- und Zweitbildschirme
-- zusätzliche Sicherheitskorrekturen für Geofox-Anfrageserialisierung und
-  nicht-lokale Webzugriffe
-- Code of Conduct sowie strukturierte Bug- und Feature-Issue-Templates für
-  Beiträge zum Projekt
-
-### Version 0.2.1 / V2.1
-
-- lokal gebundene Weboberfläche unter `http://127.0.0.1:8080`; Zugriff von
-  anderen Rechnern per SSH-Tunnel oder mit eigener TLS-Konfiguration
-- automatischer Start der Weboberfläche bei Installation und nach jedem Reboot
-- Standard-Anmeldung `hvv-anzeiger` / `hvv-anzeiger` für die Ersteinrichtung
-- Webpasswort in der Einstellungsseite änderbar; gespeichert wird nur ein
-  gesalzener Hash
-- README mit Hinweisen zum Deaktivieren und späteren Reaktivieren des
-  Webdienst-Autostarts
-
-### Version 0.2.0 / V2
-
-- lokale Weboberfläche mit Abfahrtsanzeige im Display-Stil
-- Bearbeitung und Speicherung aller konfigurierbaren Werte einschließlich
-  Geofox-Zugangsdaten
-- Haltestellen-Autovervollständigung über die Geofox-API mit verständlichem
-  Hinweis zu Vollständigkeit und Korrektheit der Vorschläge
-- „Auf Standard zurücksetzen“-Schaltflächen für einzelne Konfigurationswerte
-- direkte Übernahme gespeicherter Einstellungen ohne Neustart, wenn möglich
-- automatische Wiederherstellung der Anzeige nach einem kurzzeitigen
-  Display-/SPI-Verbindungsfehler
-- Hardware-Übersicht für CPU, RAM und SD-Speicher sowie System-Neustartaktion
-- Schutz der Weboberfläche durch CSRF-Prüfung und Token-Authentifizierung bei
-  Zugriff außerhalb des lokalen Rechners
-- einfaches `update.sh` für sichere Updates aus einem sauberen `main`-Checkout
-
-Die vollständige Installations-, Konfigurations- und Update-Anleitung steht in
-den folgenden Abschnitten dieses README.
-
-### Version 0.1.0 / V1
-
-V1 war die erste veröffentlichte Version des HVV-Anzeigers. Sie wurde am
-10. August 2026 unter dem unveränderlichen Git-Tag `V1` veröffentlicht.
-
-- [V1 auf GitHub ansehen](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V1)
-- [Quellcode von V1 anzeigen](https://github.com/Ben1991/hvv-anzeiger/tree/V1)
-
-</details>
-
 ## Inhalt
 
-Für die erste Einrichtung: [Voraussetzungen](#voraussetzungen) →
-[Geofox-Zugang beantragen](#geofox-zugang-beantragen) →
-[Display anschließen](#display-anschließen) → [Installieren](#installieren).
-Für den Alltag sind [Konfigurieren](#konfigurieren) und
-[Betrieb und Updates](#betrieb-und-updates) die wichtigsten Abschnitte.
+| Dein nächster Schritt | Abschnitt |
+|---|---|
+| Raspberry Pi erstmals einrichten | [Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Display anschließen](#display-anschließen) → [Installieren](#installieren) |
+| Home Assistant oder ESP32 einrichten | [Separate Anleitung mit Pinbelegung](docs/home-assistant-esphome.md) |
+| Haltestellen, Linien oder Darstellung ändern | [Konfigurieren](#konfigurieren) |
+| Version aktualisieren oder Dienst steuern | [Betrieb und Updates](#betrieb-und-updates) |
+| Einen Fehler untersuchen | [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose) |
 
-- [Release Notes](#release-notes)
+<details>
+<summary>Alle Abschnitte anzeigen</summary>
+
 - [Funktionen](#funktionen)
+- [Praxisbeispiel](#praxisbeispiel)
 - [Vorkonfigurierte Anzeige](#vorkonfigurierte-anzeige)
 - [Voraussetzungen](#voraussetzungen)
 - [Geofox-Zugang beantragen](#geofox-zugang-beantragen)
@@ -196,10 +68,15 @@ Für den Alltag sind [Konfigurieren](#konfigurieren) und
 - [Sicherheit und Datenschutz](#sicherheit-und-datenschutz)
 - [Projektentwicklung](#projektentwicklung)
 - [Grenzen](#grenzen)
+- [Release Notes](#release-notes)
 - [Haftungsausschluss](#haftungsausschluss)
 - [Lizenz und Unterstützung](#lizenz-und-unterstützung)
 
+</details>
+
 ## Funktionen
+
+### Anzeige
 
 - bis zu fünf Abfahrten auf 320 × 240 Pixeln im Querformat
 - Linie, Fahrtziel, absolute Uhrzeit und verbleibende Minuten
@@ -210,16 +87,34 @@ Für den Alltag sind [Konfigurieren](#konfigurieren) und
 - wahlweise Countdown oder absolute Abfahrtszeit sowie optional ausgeblendete
   Haltestellenkürzel
 - Geofox-Echtzeitprognosen einschließlich Verspätungen und Ausfällen
+
+### Daten und Fehlerverhalten
+
 - Aktualisierung im Normalbetrieb alle 15 Sekunden
 - sichtbare Hinweise bei fehlendem WLAN, veralteten Daten oder noch nicht
   synchronisierter Systemzeit
 - letzter erfolgreicher Datenstand bleibt bei vorübergehenden Fehlern sichtbar
 - begrenzte Wiederholungsversuche mit wachsendem Abstand bei API-Fehlern
 - optionaler Nachtmodus mit schwarzem Bild und pausierten Geofox-Abfragen
+
+### Raspberry-Pi-Betrieb
+
 - automatischer Start nach Neustart oder Stromausfall
 - Prozessüberwachung und automatischer Neustart durch systemd
 - wöchentliche Begrenzung der Systemprotokolle
 - Diagnosewerkzeug und PNG-Vorschau für Betrieb ohne angeschlossenes Display
+
+### Home Assistant und ESPHome auf ESP32
+
+Zusätzlich zur Pi-Anzeige können Home Assistant und ESP32-Displays denselben
+Abfahrtsdienst nutzen. Enthalten sind ein HA-Paket mit Dashboardbeispiel,
+ESPHome-Profile für ILI9341, CYD und ESP32-S3/ILI9488 sowie ein optionaler
+direkter HTTPS-Abruf. Der Hintergrunddienst kann auch ohne GPIO als Container
+laufen. Die bestehende Pi-Anzeige und Webkonfiguration bleiben erhalten.
+Ein konkreter Displayaufbau muss vor Ort geprüft werden.
+
+Die vollständige Einrichtung, Pinbelegung und Funktionsabdeckung stehen in
+[Home Assistant und ESP32 mit ESPHome](docs/home-assistant-esphome.md).
 
 ### Welche Abfahrtszeit wird angezeigt?
 
@@ -237,6 +132,19 @@ verwendet. Gemeldete Ausfälle erscheinen als `AUS`.
 Eine noch bevorstehende Abfahrt bleibt eine Prognose und kann sich bis zur
 Abfahrt ändern. Sie ist nicht mit einer nachträglich gemessenen tatsächlichen
 Abfahrt gleichzusetzen.
+
+## Praxisbeispiel
+
+Die fertige Anzeige im Einsatz auf einem Raspberry Pi mit 2,2-Zoll-Display:
+
+![Praxisbeispiel der fertigen HVV-Abfahrtsanzeige](docs/practice-example.png)
+
+Die Hülle für den Raspberry Pi und das Display ist 3D-gedruckt und kann bei
+[3DprintsByBen auf Etsy](https://3dprintsbybenstudio.etsy.com) bestellt werden.
+Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
+
+> Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
+> offizielles Produkt von hvv, HOCHBAHN oder Geofox.
 
 ## Vorkonfigurierte Anzeige
 
@@ -267,6 +175,8 @@ Haltestelle eine Abfahrt stammt. Alle Verbindungen lassen sich in
 
 ### Hardware-Einkauf
 
+#### Raspberry Pi und Zubehör
+
 Die folgenden Amazon.de-Suchlinks führen zu passenden Produktkategorien für
 das Referenzsetup mit Raspberry Pi Zero 2 W. Vor dem Kauf die technischen
 Angaben des konkreten Angebots prüfen; insbesondere Controller, Auflösung,
@@ -285,6 +195,32 @@ vorgesehene Netzteil erforderlich.
 | SD-/microSD-Kartenleser, falls nötig | [SD-/microSD-Kartenleser suchen (Affiliate-Link)](https://www.amazon.de/s?k=SD-Kartenleser+USB+microSD&tag=bema19910e-21) | nur erforderlich, wenn dein Rechner keinen passenden Leser zum Flashen der Speicherkarte hat |
 | Löt-Set, falls nötig | [Löt-Set für Elektronik suchen (Affiliate-Link)](https://www.amazon.de/s?k=Loetset+Loetkolben+Elektronik&tag=bema19910e-21) | einfache Grundausrüstung zum sicheren Verbinden der Leitungen |
 | „Dritte Hand“ / Platinenhalter, falls nötig | [Dritte Hand mit Platinenhalter und Klemmen suchen (Affiliate-Link)](https://www.amazon.de/s?k=Dritte+Hand+Platinenhalter+Klemmen&tag=bema19910e-21) | hält Kabel und Platine beim Löten sicher fest |
+
+#### ESP32, Displays und Zubehör
+
+Wähle **einen** der dokumentierten Aufbauten: ESP32 DevKit mit ILI9341,
+CYD mit integriertem Display oder ESP32-S3 DevKit mit ILI9488.
+Beim CYD ist kein zusätzliches Display nötig. Die Suchlinks beziehen sich
+auf diese Referenzprofile; nicht jedes Suchergebnis passt dazu.
+
+| Komponente / Variante | Amazon.de-Suche | Worauf achten? |
+|---|---|---|
+| ESP32 DevKit | [ESP32-DevKit-Board suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32+DevKit+ESP32-WROOM-32+Entwicklungsboard&tag=bema19910e-21) | klassischer ESP32 für `hvv-display.yaml`; herausgeführte GPIOs müssen zur dokumentierten Pinbelegung passen |
+| ILI9341-SPI-Display | [ILI9341-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=ILI9341+SPI+Display+240x320+3%2C3V&tag=bema19910e-21) | externes Display zum ESP32 DevKit; 240 × 320 Pixel, SPI und 3,3-V-kompatible Logik |
+| CYD mit integriertem Display | [ESP32-2432S028 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-2432S028+ILI9341+2.8+Display&tag=bema19910e-21) | `hvv-cyd.yaml` ist für das Original mit Micro-USB und ILI9341 vorgesehen; Varianten mit ST7789/ILI9342 benötigen das passende Profilmodell |
+| ESP32-S3 DevKit | [ESP32-S3-DevKitC-1 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-S3+DevKitC-1+Entwicklungsboard&tag=bema19910e-21) | für `hvv-s3-ili9488.yaml`; GPIOs, USB-Anschluss und konkrete Boardvariante prüfen |
+| ILI9488-SPI-Display | [ILI9488-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=ILI9488+SPI+Display+320x480+3%2C3V&tag=bema19910e-21) | externes Display zum S3-Referenzaufbau; 320 × 480 Pixel und SPI, nicht die ähnlich angebotene parallele Schnittstelle |
+| USB-Netzteil | [5-V-USB-Netzteil mit 2 A suchen (Affiliate-Link)](https://www.amazon.de/s?k=USB+Netzteil+5V+2A&tag=bema19910e-21) | stabile Versorgung und Anschluss passend zum Kabel; Spannungs- und Stromvorgaben von Board und Display beachten |
+| USB-Datenkabel | [USB-Datenkabel für Micro-USB oder USB-C suchen (Affiliate-Link)](https://www.amazon.de/s?k=USB+Datenkabel+Micro+USB+USB+C&tag=bema19910e-21) | Stecker passend zum Board und Rechner; das erste Flashen benötigt Datenübertragung, ein reines Ladekabel reicht nicht |
+| Jumper-Kabel | [2,54-mm-Jumper-Kabel-Set suchen (Affiliate-Link)](https://www.amazon.de/s?k=Jumper+Kabel+Set+2%2C54mm+Buchse+Stecker&tag=bema19910e-21) | für externe Displays; Buchse/Stecker passend zu den Stiftleisten auswählen |
+| Stiftleisten, falls nötig | [2,54-mm-Stiftleisten suchen (Affiliate-Link)](https://www.amazon.de/s?k=Stiftleiste+2%2C54mm+gerade&tag=bema19910e-21) | nur bei unbestückten Boards oder Displaymodulen; gegebenenfalls Lötwerkzeug aus der obigen Liste nötig |
+| Backlight-Treiber, falls nötig | [MOSFET-/LED-Treibermodul mit 3,3-V-Steuerung suchen (Affiliate-Link)](https://www.amazon.de/s?k=MOSFET+LED+Treiber+Modul+3%2C3V+Logic+Level&tag=bema19910e-21) | nur ohne geeigneten BL-Steuereingang am Display; Treiber muss mit 3,3 V schalten und zum LED-Strom passen; nackte Hintergrundbeleuchtung nicht direkt am GPIO betreiben |
+
+Pinbelegung, Versorgung und Backlight-Anschluss stehen in der
+[ESPHome-Einrichtungsanleitung](docs/home-assistant-esphome.md).
+Die Referenzfirmwares wurden kompiliert; die konkreten Amazon-Angebote und
+deren Hardware wurden nicht geprüft. Der Python-Hintergrunddienst bleibt
+auch mit einem ESP32-Display erforderlich.
 
 > **Hinweis zu Affiliate-Links:** Als Amazon-Partner verdiene ich an
 > qualifizierten Verkäufen. Wenn du über einen entsprechend gekennzeichneten
@@ -441,11 +377,16 @@ Die Bezeichnungen unterscheiden sich je nach Modul. `SCK` kann auch `CLK`,
 Falls das Displaymodul zusätzlich einen `MISO`-Pin nutzt, gehört dieser auf
 den physischen Pin 21 (`GPIO 9, SPI0 MISO`).
 
+<details>
+<summary>GPIO-Pinbelegung als Grafiken ansehen</summary>
+
 ![Raspberry Pi Zero 2 W Pinbelegung](docs/raspberry-pi-zero2w-pinout.png)
 
 ![Raspberry Pi GPIO Pinbelegung](docs/raspberry-pi-pinout-40.png)
 
 Quellen der Pinout-Grafiken: eTechnophiles.com.
+
+</details>
 
 | Display | Raspberry Pi | Physischer Pin |
 |---|---|---:|
@@ -526,6 +467,38 @@ Später lässt sie sich wieder aktivieren:
 sudo systemctl enable --now hvv-anzeiger-web
 ```
 
+### Erster Neustart und Prüfung
+
+Nach der ersten Installation:
+
+```bash
+sudo reboot
+```
+
+Danach anmelden und die Diagnose ausführen:
+
+```bash
+cd /opt/hvv-anzeiger
+./diagnose.sh
+```
+
+Die Diagnose prüft Linux, SPI, WLAN, Systemzeit, Anwendung, Konfiguration,
+Zugangsdaten, systemd-Dienst, Watchdog, Dateirechte, Log-Bereinigung und das
+lokale Rendern eines Displaybilds. Zugangsdaten werden nicht ausgegeben.
+
+Zusätzlich kann der Autostart geprüft werden:
+
+```bash
+systemctl is-enabled hvv-anzeiger
+systemctl status hvv-anzeiger --no-pager
+```
+
+`systemctl is-enabled` muss `enabled` ausgeben. Falls nicht:
+
+```bash
+sudo systemctl enable --now hvv-anzeiger
+```
+
 ### Weboberfläche: Verbindung abgelehnt
 
 Wenn `https://<raspberry-pi-ip>:8080` mit „Verbindung abgelehnt“ antwortet,
@@ -579,6 +552,9 @@ sudo systemctl daemon-reload
 sudo systemctl restart hvv-anzeiger-web
 ```
 
+<details>
+<summary>Technische Details: Datenübernahme, Dateischutz und Rollback</summary>
+
 Der aktuelle Installer legt die aktive Datei unter `var/config.json` ab und
 erhält `config.json` als symbolischen Verweis darauf. Dadurch können temporäre
 Nachbardateien im beschreibbaren Laufzeitverzeichnis angelegt und atomar
@@ -600,37 +576,7 @@ laufende Version ersetzt wird. Die Vorbereitung bleibt bis zum Versionswechsel
 root-privat; Installationsvorschauen entstehen außerhalb des Datenbereichs in
 privaten temporären Verzeichnissen.
 
-### Erster Neustart und Prüfung
-
-Nach der ersten Installation:
-
-```bash
-sudo reboot
-```
-
-Danach anmelden und die Diagnose ausführen:
-
-```bash
-cd /opt/hvv-anzeiger
-./diagnose.sh
-```
-
-Die Diagnose prüft Linux, SPI, WLAN, Systemzeit, Anwendung, Konfiguration,
-Zugangsdaten, systemd-Dienst, Watchdog, Dateirechte, Log-Bereinigung und das
-lokale Rendern eines Displaybilds. Zugangsdaten werden nicht ausgegeben.
-
-Zusätzlich kann der Autostart geprüft werden:
-
-```bash
-systemctl is-enabled hvv-anzeiger
-systemctl status hvv-anzeiger --no-pager
-```
-
-`systemctl is-enabled` muss `enabled` ausgeben. Falls nicht:
-
-```bash
-sudo systemctl enable --now hvv-anzeiger
-```
+</details>
 
 ## Konfigurieren
 
@@ -692,9 +638,14 @@ Die [Kiosk- und Accessibility-Anleitung](docs/kiosk-accessibility.md) erklärt
 Chromium-Start, Rückkehr, Fehlerverhalten und die Grenzen der Prüfungen.
 CI-Berichte enthalten axe-Ergebnisse sowie Desktop-/Mobil-Screenshots.
 
+<details>
+<summary>Displaymodus auf Desktop und Mobilgerät ansehen</summary>
+
 ![Displaymodus auf Desktop](docs/kiosk-desktop.png)
 
 ![Displaymodus auf Mobilgerät](docs/kiosk-mobile.png)
+
+</details>
 
 Der Webdienst läuft als lokaler Dienst auf dem Raspberry Pi und ist durch eine
 Anmeldung geschützt. Der Benutzername lautet:
@@ -749,11 +700,11 @@ Bind-Adresse nicht. Unverschlüsseltes Basic Auth über HTTP ist damit für den
 Remote-Betrieb ausgeschlossen. Auch lokal sind alle schreibenden Formulare
 gegen Cross-Site-Requests geschützt.
 
-Das Standardpasswort ist nur für die erste Einrichtung gedacht. Wer es nicht
-ändert, kann die Oberfläche mit den bekannten Standarddaten öffnen und damit
-auch Konfiguration, Geofox-Zugangsdaten und den Systemneustart auslösen. Der
-Installer richtet deshalb TLS und Passwortschutz gemeinsam ein;
-unverschlüsseltes Basic Auth über HTTP wird nicht unterstützt.
+Das frühere gemeinsame Standardpasswort wird nicht mehr akzeptiert. Ein
+Webzugang erlaubt Änderungen an Konfiguration und Geofox-Zugangsdaten sowie
+das Auslösen des Systemneustarts. Deshalb verlangt der Installer ein
+individuelles Passwort und richtet TLS ein. Unverschlüsseltes Basic Auth über
+HTTP wird für den LAN-Zugriff nicht unterstützt.
 
 </details>
 
@@ -761,6 +712,9 @@ Der Installer gibt `var/config.json` dem Dienstbenutzer `hvv-anzeiger` mit den
 Rechten `0640`. `config.json` verweist darauf. Nach einer Konfigurationsänderung
 hat die neue Datei die restriktiveren Rechte `0600`. Die Weboberfläche benötigt
 nur Schreibrechte im Laufzeitverzeichnis, nicht auf den Anwendungscode.
+
+<details>
+<summary>Weboberfläche und Einstellungen in Bildern</summary>
 
 Beispielansicht der lokalen Oberfläche:
 
@@ -775,6 +729,8 @@ Haltestellen und Linien werden als eigene Karten gepflegt. Dadurch müssen
 Nutzer kein verschachteltes JSON bearbeiten:
 
 ![V2.2: lokale Stations- und Routenkonfiguration](docs/web-stations.png)
+
+</details>
 
 Die Eingabe unter „Name“ fragt passende Geofox-Vorschläge ab und zeigt sie
 direkt darunter. Nach der Auswahl werden Name, Stadt und Geofox-ID übernommen;
@@ -804,20 +760,27 @@ Beispielansichten aus der lokalen Entwicklung:
 ![Konfigurationssicherung im Webinterface](docs/config-backup.png)
 ![Änderungsvorschau vor der Wiederherstellung](docs/config-preview.png)
 
-Der Import läuft in zwei Schritten: **Import prüfen** validiert die gesamte
-Konfiguration mit denselben Regeln wie beim Start und zeigt die alten und neuen
-Werte. Erst nach Setzen der Bestätigungs-Checkbox und **Änderungen anwenden**
-wird geschrieben. **Abbrechen** verändert nichts. Die Vorschau gilt zehn
-Minuten; höchstens 20 offene Vorschauen werden gehalten. Ändert sich der aktive
-Stand zwischen Vorschau und Bestätigung, wird die Wiederherstellung abgelehnt
-und muss erneut geprüft werden. Die Prüfung arbeitet offline; sie bestätigt
-die Konfigurationsregeln, nicht die Erreichbarkeit einer Haltestelle oder die
-angeschlossene Hardware.
+Der Import läuft in zwei Schritten:
+
+1. **Import prüfen** kontrolliert die gesamte Konfiguration mit denselben
+   Regeln wie beim Start und zeigt die alten und neuen Werte.
+2. Die Bestätigungs-Checkbox setzen und **Änderungen anwenden** wählen.
+   Erst dann wird gespeichert. **Abbrechen** verändert nichts.
+
+Die Vorschau gilt zehn Minuten; höchstens 20 offene Vorschauen bleiben erhalten.
+Ändert sich die aktive Konfiguration vor der Bestätigung, muss die Vorschau
+erneut geprüft werden. Die Prüfung arbeitet offline. Sie bestätigt die
+Konfigurationsregeln, aber weder die Erreichbarkeit einer Haltestelle noch
+die angeschlossene Hardware.
 
 Exports enthalten ausschließlich API-Einstellungen, Anzeige, Nachtruhe und
 Haltestellen. Geofox-Anwendungs-ID, API-Passwort, Webpasswort-Hash, Environment-
 Dateien und unbekannte Zusatzfelder werden nicht exportiert. Haltestellen
 können persönliche Orte erkennen lassen; vor dem Weitergeben prüfen.
+
+<details>
+<summary>Backup-Formate, Kompatibilität, Aufbewahrung und Dateischutz</summary>
+
 JSON-Exporte tragen `format: "hvv-anzeiger-config"` und aktuell
 `schema_version: 1`, höchstens 256 KiB. Neue HVV-Anzeiger-Versionen müssen alle
 bisher veröffentlichten Backup-Schemata weiterhin lesen und vor der Vorschau
@@ -853,6 +816,11 @@ Eigene temporäre Dateien eines abgebrochenen Vorgangs werden beim nächsten
 Schreibvorgang bereinigt. Auf Unix bleiben Eigentümer und Gruppe der aktiven
 Konfiguration auch bei einem CLI-Aufruf mit `sudo` erhalten.
 
+</details>
+
+<details>
+<summary>Sicherung und Wiederherstellung per Kommandozeile</summary>
+
 CLI-Beispiel auf dem installierten Pi:
 
 ```bash
@@ -882,6 +850,8 @@ ohne Änderung und empfiehlt sich **vor manuellen Dateiedits**. CLI-Exit-Code
 Web und CLI verändern bei Import/Restore keine Zugangsdaten und übertragen
 keine Konfiguration an Dritte. Der Displaydienst übernimmt erfolgreiche
 Änderungen bei der nächsten Aktualisierung.
+
+</details>
 
 Bestehende Installationen einmal mit `./update.sh` aktualisieren, damit die
 Konfiguration in das beschreibbare Laufzeitverzeichnis migriert wird. Der
@@ -991,6 +961,9 @@ Feld weggelassen, gilt der hier dokumentierte Code-Default.
 
 ### API-Defaults
 
+<details>
+<summary>Felder, Standardwerte und Beispiele anzeigen</summary>
+
 | Feld | Default | Bedeutung und Grenze |
 |---|---:|---|
 | `api.base_url` | Pflichtfeld | muss `https://gti.geofox.de/gti/public` verwenden |
@@ -1004,7 +977,12 @@ Feld weggelassen, gilt der hier dokumentierte Code-Default.
 `api.base_url` muss eine HTTPS-URL auf dem offiziellen Host `gti.geofox.de`
 ohne eingebettete Zugangsdaten, Query-Parameter oder Fragment sein.
 
+</details>
+
 ### Display-Defaults
+
+<details>
+<summary>Felder, Standardwerte und Beispiele anzeigen</summary>
 
 | Feld | Default | Bedeutung und Grenze |
 |---|---:|---|
@@ -1022,7 +1000,12 @@ ohne eingebettete Zugangsdaten, Query-Parameter oder Fragment sein.
 Für ein um 180 Grad gedrehtes Display üblicherweise `display.rotate` auf `2`
 setzen.
 
+</details>
+
 ### Nachtmodus-Defaults
+
+<details>
+<summary>Felder, Standardwerte und Beispiele anzeigen</summary>
 
 | Feld | Default | Bedeutung und Grenze |
 |---|---:|---|
@@ -1046,7 +1029,12 @@ Im Nachtfenster schreibt die Anwendung einmal ein schwarzes Bild und pausiert
 Geofox-Abfragen. Die Hintergrundbeleuchtung wird dabei nicht elektrisch
 abgeschaltet.
 
+</details>
+
 ### Haltestellen und Verbindungen
+
+<details>
+<summary>Felder, Standardwerte und Beispiele anzeigen</summary>
 
 | Feld | Default | Bedeutung und Grenze |
 |---|---|---|
@@ -1089,6 +1077,8 @@ Linien und Ziele werden tolerant gegenüber Groß- und Kleinschreibung, Umlauten
 und Schreibweisen wie `Straße` und `Strasse` verglichen. Ein zusätzliches
 Verkehrsmittel-Präfix im Geofox-Ziel, beispielsweise `S Elbgaustraße`, wird
 ebenfalls berücksichtigt.
+
+</details>
 
 ### Haltestellen mit Codex anpassen
 
@@ -1205,6 +1195,10 @@ Die Zugangsdaten liegen unter `/etc/hvv-anzeiger.env`, gehören `root:root` und
 haben die Dateirechte `0600`.
 
 ### Anwendung aktualisieren
+
+Für ESP32-Firmware, das Home-Assistant-Paket und den Backend-Container gilt die
+[separate Updateanleitung](docs/home-assistant-esphome.md#updates-für-esphome-home-assistant-und-container).
+Die folgenden Schritte aktualisieren die Raspberry-Pi-Installation.
 
 Eine neue Version wird auf dem Raspberry Pi aus dem ursprünglichen Checkout
 installiert. Die laufenden Dienste müssen vorher nicht manuell gestoppt werden;
@@ -1396,6 +1390,9 @@ Es werden keine Diagnoseberichte automatisch übertragen.
 
 ## Ressourcen- und Stromverbrauch
 
+Die folgenden Werte gelten für das Raspberry-Pi-Referenzsetup. Sie lassen
+sich nicht auf ESP32 oder Containerhosts übertragen.
+
 ### Erwarteter Ressourcenbedarf
 
 | Ressource | Erwartungswert |
@@ -1445,12 +1442,18 @@ API-Abfragen reduzieren lediglich CPU-, SPI- und WLAN-Aktivität.
 
 Für eine relevante Einsparung muss die Hintergrundbeleuchtung elektrisch über
 einen zum Modul passenden Transistor oder Treiber abgeschaltet werden. Diese
-Hardwaresteuerung ist nicht Bestandteil des Projekts.
+Hardwaresteuerung ist nicht Bestandteil des dokumentierten Pi-Aufbaus.
+Die ESPHome-Referenzprofile enthalten dagegen eine Backlight-Steuerung;
+ihre Verdrahtung steht in der [ESPHome-Anleitung](docs/home-assistant-esphome.md).
 
 ## Sicherheit und Datenschutz
 
-- Die Anwendung stellt keinen eingehenden Netzwerkdienst bereit.
-- Ausgehende API-Kommunikation ist auf HTTPS zu `gti.geofox.de` beschränkt.
+- Der reine Pi-Anzeigedienst stellt keinen eingehenden Netzwerkdienst bereit.
+  Die optionale Weboberfläche und ihre APIs verwenden für LAN-Zugriffe
+  Anmeldung und HTTPS.
+- Geofox-Abfragen verwenden ausschließlich HTTPS zu `gti.geofox.de`.
+  Die zusätzlichen Verbindungen für Home Assistant und ESPHome sind in der
+  [ESPHome-Anleitung](docs/home-assistant-esphome.md) beschrieben.
 - Geofox-Zugangsdaten stehen weder im Repository noch in Prozessargumenten.
 - Der Dienst läuft als nicht interaktiver Benutzer `hvv-anzeiger`.
 - Programm, virtuelle Python-Umgebung und Konfiguration sind für den Dienst
@@ -1489,10 +1492,11 @@ bash -n install.sh update.sh configure-credentials.sh configure-web.sh diagnose.
 
 ### Automatische Qualitätsprüfung
 
-Bei jedem Push und Pull Request prüft GitHub Actions:
+Bei Pull Requests und Pushes auf `main` prüft GitHub Actions:
 
 - Python 3.11 für Tests und Qualitätsprüfungen
-- Unit- und Integrationstests mit 100 Prozent Coverage
+- Unit- und Integrationstests mit mindestens 85 Prozent Coverage
+  (gemäß `pyproject.toml`)
 - Ruff sowie Abhängigkeitsprüfung auf bekannte Schwachstellen
 - Shell-Skripte und systemd-Units
 - vollständige Installation und Rollback in einer isolierten Ubuntu-Umgebung
@@ -1520,16 +1524,161 @@ Geheimnisse veröffentlichen.
 
 - Ein Geofox-Zugang ist erforderlich; es gibt keinen öffentlichen
   zugangsdatenfreien Fallback.
-- Ohne synchronisierte Systemzeit werden keine Abfahrten abgerufen.
+- Der Pi-Anzeigedienst ruft ohne synchronisierte Systemzeit keine Abfahrten ab.
+  Auch der ESP32 zeigt Abfahrten erst mit gültiger Gerätezeit.
 - Wegen der Displaygröße sind maximal fünf Abfahrten sichtbar.
-- Das dokumentierte Zielsetup ist ein ILI9341 mit 320 × 240 Pixeln im
-  Querformat.
-- Der Nachtmodus schaltet die Hintergrundbeleuchtung nicht elektrisch aus.
+- Das dokumentierte Pi-Zielsetup ist ein ILI9341 mit 320 × 240 Pixeln im
+  Querformat. Weitere ESP32-Referenzprofile sind separat dokumentiert.
+- Beim dokumentierten Pi-Aufbau schaltet der Nachtmodus die
+  Hintergrundbeleuchtung nicht elektrisch aus; ESPHome steuert sie über
+  den konfigurierten Backlight-Ausgang.
 - Die erwartete Abfahrtszeit bleibt eine Prognose.
 - Verbindliche Strom-, RAM- und CPU-Werte erfordern eine Messung am konkreten
   Gerät.
 - Display-Hardware und authentifizierte Geofox-Produktivantworten können in
   GitHub Actions nicht geprüft werden.
+
+## Release Notes
+
+<details>
+<summary>Release-Historie von V2.3.0 bis V1 anzeigen</summary>
+
+### Release V2.3.0 – Diagnose, Sicherungen, Kioskmodus und Sicherheit
+
+V2.3.0 ergänzt die Weboberfläche um Diagnose und sichere
+Konfigurationssicherungen, verbessert den Kioskmodus und behebt vier
+Security-Findings. Die Paketversion ist `0.3.0`.
+
+- neuer Bereich **Gesundheit und Diagnose** mit Dienstzustand, Version,
+  Laufzeit, Netzwerkstatus, Datenalter und Retry-/Rate-Limit-Informationen;
+  geschützter JSON-Endpunkt für Monitoring und Support
+- Konfigurationsexport und -import mit Vorschau und Bestätigung, privaten
+  Sicherungen vor Änderungen und geheimnisfreien öffentlichen Exporten
+- versionierte Backup-Leser und Kompatibilitätstests erhalten die Bedeutung
+  älterer Sicherungen auch bei neuen Versionen; vorhandene `config.json`-
+  und `.bak`-Sicherungen bleiben importierbar
+- barrierearmer `/display`-Modus mit Tastatur- und Screenreader-Unterstützung,
+  sichtbarem Fokus, reduzierter Bewegung, Vollbild und Pause
+- kontrollierte Aktualisierung bei Fehlern; Datenalter, Ausfälle und
+  Verspätungen bleiben sichtbar, zu alte Daten werden nicht als aktuell gezeigt
+- null Minuten werden unabhängig von `min`, `m` oder fehlender Einheit wieder
+  als **sofort** angezeigt – auf Hardware und im Web
+- individuelle Erstanmeldung vor dem LAN-Start; das frühere gemeinsame
+  Erstpasswort wird bei Updates ersetzt und bei Passwortänderungen abgelehnt
+- sichere Datenübernahme im Installer und private Vorschauausgabe außerhalb
+  des dienstschreibbaren Datenbereichs
+- TLS-Verbindungsaufbau mit Zeitgrenze und begrenzter Parallelität
+- aktualisierte Abhängigkeiten, GitHub Actions und Dokumentation; 254
+  Python-Tests, acht Browser-/Accessibility-Tests und Installer-/Rollback-Tests
+
+**Update-Hinweis:** Individuelle Webpasswörter und reguläre Konfigurationen
+bleiben erhalten. Bei Erstinstallation oder noch unverändertem früherem
+Erstpasswort ist eine verdeckte Passworteingabe mit Bestätigung erforderlich.
+Unerwartete Dateiverweise, Hardlinks oder Spezialdateien im Datenbereich führen
+zum sicheren Abbruch und müssen vor einem erneuten Update geprüft werden.
+
+[Vollständige Release Notes zu V2.3.0](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.3.0)
+
+### Release V2.2.2 – einfachere Stations- und Linienauswahl
+
+V2.2.2 macht die Einrichtung von Haltestellen in der Weboberfläche klarer und
+schneller:
+
+- eine sichtbare Schrittfolge führt von der Geofox-Haltestellensuche über das
+  Laden der Linien bis zum Speichern
+- Stadt, Geofox-ID und ein freies Anzeige-Kürzel werden nach der Auswahl eines
+  Geofox-Treffers automatisch übernommen
+- Linien werden nach Verkehrsmittel gruppiert und können über ein Suchfeld
+  gefiltert werden; die Auswahl zeigt jederzeit „x von y ausgewählt“
+- die Statusanzeige zeigt den nächsten sinnvollen Schritt und blendet leere
+  Suchfelder aus
+- Browser-Smoke-Tests prüfen zusätzlich das Laden, Gruppieren und Filtern der
+  Linienauswahl
+
+### Release V2.2.1 – überarbeitete V2.2-Release
+
+V2.2.1 veröffentlicht die überarbeitete V2.2-Implementierung mit einem
+zusätzlichen End-to-End- und Responsive-Testlauf:
+
+- Geofox-gestützte Haltestellen- und Linienauswahl für Bus, U-Bahn, S-Bahn,
+  AKN, Regionalverkehr und Fähre
+- Richtungs- und Zielstationsfilter bleiben beim erneuten Laden der Linien
+  erhalten
+- Geofox-Anfragen werden global serialisiert; HTTP-400-Fehlercodes aus
+  Response-Bodies werden verständlich ausgewertet
+- Speichermeldungen erscheinen zusätzlich direkt am betroffenen Feld bzw. an
+  der Liniengruppe
+- responsiver, geschützter `/display`-Modus und mobile Stations-/
+  Linienkonfiguration ohne horizontalen Overflow
+- Browser-Smoke- und visuelle Regressionstests prüfen Dashboard, Displaymodus,
+  Settings, Filterpersistenz und das 390-Pixel-Mobile-Layout
+- `web.py` ist in der Coverage-Messung enthalten; die CI läuft mit Python 3.11
+- README-Screenshots wurden aus der geprüften Weboberfläche neu erzeugt,
+  einschließlich eines Displaybeispiels Jungfernstieg Richtung Hauptbahnhof
+- alle GitHub-CI-Gates einschließlich Shell-Installer und CodeQL sind grün
+
+<details>
+<summary>Ältere Release Notes anzeigen</summary>
+
+### Version 0.2.2 / V2.2
+
+- Stationsverwaltung über die Weboberfläche für alle von Geofox gemeldeten
+  Verkehrsmittel, einschließlich Bus, U-Bahn, S-Bahn, AKN, Regionalverkehr
+  und Fähre
+- sichere Linienauswahl mit konfigurierbarem Richtungs- oder
+  Zielstationsfilter; bestehende manuelle Bus-Konfigurationen bleiben
+  kompatibel
+- einheitliche, verkehrsmittelabhängige Linienfarben und -formen in Display,
+  Web-Dashboard und geschütztem Displaymodus
+- konfigurierbare Darstellung mit Countdown oder absoluter Abfahrtszeit,
+  wählbarer Countdown-Einheit und optional ausgeblendeten Haltestellenkürzeln
+- geschützter, responsiver `/display`-Modus für Kiosk- und Zweitbildschirme
+- zusätzliche Sicherheitskorrekturen für Geofox-Anfrageserialisierung und
+  nicht-lokale Webzugriffe
+- Code of Conduct sowie strukturierte Bug- und Feature-Issue-Templates für
+  Beiträge zum Projekt
+
+### Version 0.2.1 / V2.1
+
+- lokal gebundene Weboberfläche unter `http://127.0.0.1:8080`; Zugriff von
+  anderen Rechnern per SSH-Tunnel oder mit eigener TLS-Konfiguration
+- automatischer Start der Weboberfläche bei Installation und nach jedem Reboot
+- Standard-Anmeldung `hvv-anzeiger` / `hvv-anzeiger` für die Ersteinrichtung
+- Webpasswort in der Einstellungsseite änderbar; gespeichert wird nur ein
+  gesalzener Hash
+- README mit Hinweisen zum Deaktivieren und späteren Reaktivieren des
+  Webdienst-Autostarts
+
+### Version 0.2.0 / V2
+
+- lokale Weboberfläche mit Abfahrtsanzeige im Display-Stil
+- Bearbeitung und Speicherung aller konfigurierbaren Werte einschließlich
+  Geofox-Zugangsdaten
+- Haltestellen-Autovervollständigung über die Geofox-API mit verständlichem
+  Hinweis zu Vollständigkeit und Korrektheit der Vorschläge
+- „Auf Standard zurücksetzen“-Schaltflächen für einzelne Konfigurationswerte
+- direkte Übernahme gespeicherter Einstellungen ohne Neustart, wenn möglich
+- automatische Wiederherstellung der Anzeige nach einem kurzzeitigen
+  Display-/SPI-Verbindungsfehler
+- Hardware-Übersicht für CPU, RAM und SD-Speicher sowie System-Neustartaktion
+- Schutz der Weboberfläche durch CSRF-Prüfung und Token-Authentifizierung bei
+  Zugriff außerhalb des lokalen Rechners
+- einfaches `update.sh` für sichere Updates aus einem sauberen `main`-Checkout
+
+Die vollständige Installations-, Konfigurations- und Update-Anleitung steht in
+den folgenden Abschnitten dieses README.
+
+### Version 0.1.0 / V1
+
+V1 war die erste veröffentlichte Version des HVV-Anzeigers. Sie wurde am
+10. August 2026 unter dem unveränderlichen Git-Tag `V1` veröffentlicht.
+
+- [V1 auf GitHub ansehen](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V1)
+- [Quellcode von V1 anzeigen](https://github.com/Ben1991/hvv-anzeiger/tree/V1)
+
+</details>
+
+</details>
 
 ## Haftungsausschluss
 
