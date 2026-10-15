@@ -14,6 +14,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  esphome:
+    name: ESPHome ${{ matrix.firmware }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        firmware: [hvv-display.yaml, hvv-cyd.yaml, hvv-s3-ili9488.yaml, hvv-direct.yaml]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install ESPHome
+        run: pip install esphome==2026.9.1
+      - name: Validate all profiles and compile firmware
+        run: python scripts/check_esphome.py --compile ${{ matrix.firmware }}
+      - name: Check Home Assistant package templates
+        if: matrix.firmware == 'hvv-display.yaml'
+        run: python scripts/check_home_assistant.py
+      - name: Install ArduinoJson for host protocol tests
+        if: matrix.firmware == 'hvv-display.yaml'
+        run: git clone --depth 1 --branch v7.4.3 https://github.com/bblanchon/ArduinoJson.git /tmp/arduinojson
+      - name: Run ESP32 display logic on host
+        if: matrix.firmware == 'hvv-display.yaml'
+        run: |
+          python tests/firmware/make_snapshot.py /tmp/hvv-snapshot.json
+          g++ -std=c++17 -Wall -Wextra -Werror -I tests/firmware -I /tmp/arduinojson/src tests/firmware/test_board.cpp -o /tmp/test-board
+          /tmp/test-board /tmp/hvv-snapshot.json
+
+  backend-container:
+    name: Backend container
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Build backend without GPIO dependencies
+        run: docker build -t hvv-backend .
+      - name: Validate Compose configuration
+        run: |
+          mkdir -p data
+          touch data/web.env
+          docker compose config --quiet
+      - name: Check backend imports and CLI
+        run: docker run --rm hvv-backend python -m hvv_display.web --help
+      - name: Exercise Compose installation and recreate with private files
+        run: python3 tests/container_smoke.py
+
   tests:
     name: Python 3.11 tests and quality
     runs-on: ubuntu-latest
@@ -61,10 +110,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Check Bash syntax
-        run: bash -n install.sh configure-credentials.sh configure-web.sh diagnose.sh
+        run: bash -n install.sh update.sh configure-credentials.sh configure-web.sh diagnose.sh
 
       - name: Run ShellCheck
-        run: shellcheck install.sh configure-credentials.sh configure-web.sh diagnose.sh tests/install-smoke.sh
+        run: shellcheck install.sh update.sh configure-credentials.sh configure-web.sh diagnose.sh tests/install-smoke.sh
 
       - name: Run transactional installer smoke test
         run: tests/install-smoke.sh

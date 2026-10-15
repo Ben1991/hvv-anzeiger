@@ -1,0 +1,53 @@
+# Copy to /config/packages/hvv.yaml; enable homeassistant.packages first.
+# All departures are attributes: HA entity states are limited to 255 characters.
+sensor:
+  - platform: rest
+    name: HVV Board
+    unique_id: hvv_board
+    resource: !secret hvv_smart_home_url
+    authentication: basic
+    username: hvv-anzeiger
+    password: !secret hvv_web_password
+    verify_ssl: true
+    scan_interval: 15
+    timeout: 30
+    value_template: "{{ value_json.state }}"
+    json_attributes:
+      - schema_version
+      - generated_at
+      - last_updated
+      - data_age_seconds
+      - stale
+      - night_shutdown
+      - departures
+      - display_payload
+
+template:
+  - sensor:
+      - name: HVV Next Departure
+        unique_id: hvv_next_departure
+        icon: mdi:bus-clock
+        availability: >-
+          {{ states('sensor.hvv_board') in ['ok', 'stale'] and
+             (state_attr('sensor.hvv_board', 'departures') or []) | count > 0 }}
+        state: >-
+          {% set rows = state_attr('sensor.hvv_board', 'departures') or [] %}
+          {{ rows[0].display_time if rows else 'unknown' }}
+        attributes:
+          line: >-
+            {% set rows = state_attr('sensor.hvv_board', 'departures') or [] %}
+            {{ rows[0].line if rows else '' }}
+          destination: >-
+            {% set rows = state_attr('sensor.hvv_board', 'departures') or [] %}
+            {{ rows[0].destination if rows else '' }}
+  - binary_sensor:
+      - name: HVV Data Stale
+        unique_id: hvv_data_stale
+        device_class: problem
+        state: "{{ states('sensor.hvv_board') not in ['ok', 'night'] }}"
+
+# Heartbeats change every 15s. Avoid writing the complete snapshot to the DB.
+recorder:
+  exclude:
+    entities:
+      - sensor.hvv_board

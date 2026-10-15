@@ -1,0 +1,36 @@
+substitutions:
+  display_rotation: '90'
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+spi:
+  clk_pin: GPIO14
+  mosi_pin: GPIO13
+
+output:
+  - platform: ledc
+    pin: GPIO21
+    id: hvv_backlight_output
+
+light:
+  - platform: monochromatic
+    name: Hintergrundbeleuchtung
+    id: hvv_backlight
+    output: hvv_backlight_output
+    restore_mode: ALWAYS_ON
+    default_transition_length: 0s
+
+display:
+  - platform: mipi_spi
+    id: hvv_screen
+    model: ${display_model}
+    rotation: ${display_rotation}
+    color_depth: 8
+    buffer_size: 25%
+    update_interval: 1s
+    lambda: |-
+      hvv_board.draw(it, id(hvv_font), id(hvv_small_font), millis(),
+                     id(hvv_display_enabled));

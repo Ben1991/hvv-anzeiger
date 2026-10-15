@@ -1,0 +1,9 @@
+include Dockerfile compose.yaml .dockerignore
+recursive-include docs *.md
+recursive-include home-assistant *.yaml
+recursive-include esphome *.yaml *.h
+recursive-include scripts *.py
+recursive-include tests/firmware *.cpp *.h *.py
+prune esphome/.esphome
+exclude esphome/secrets.yaml
+exclude home-assistant/secrets.yaml
