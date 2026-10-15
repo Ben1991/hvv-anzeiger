@@ -88,7 +88,17 @@ jobs:
       - name: Run tests with coverage
         run: |
           coverage run -m unittest discover -s tests -v
+          coverage json -o coverage.json
           coverage report
+
+      - name: Upload coverage details
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-coverage
+          path: coverage.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Run Ruff
         run: ruff check .
