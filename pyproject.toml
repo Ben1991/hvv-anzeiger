@@ -12,7 +12,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
   "luma.lcd>=2.13,<3",
-  "Pillow>=12.3,<13",
+  "Pillow>=12.3,<14",
   "RPi.GPIO>=0.7.1; sys_platform == 'linux' and (platform_machine == 'armv7l' or platform_machine == 'aarch64')",
   "spidev>=3.7,<4; sys_platform == 'linux' and (platform_machine == 'armv7l' or platform_machine == 'aarch64')",
 ]

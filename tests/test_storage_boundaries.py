@@ -101,6 +101,43 @@ class StorageBoundariesTest(unittest.TestCase):
             backup._sync_directory(self.root)
         self.assertEqual(simulated.open.call_count, 1)
 
+    def test_symlink_backup_directory_is_rejected(self):
+        with (
+            patch.object(Path, "is_symlink", return_value=True),
+            self.assertRaisesRegex(config.ConfigError, "symbolischer Link"),
+        ):
+            with self.store.locked():
+                self.fail("must not acquire a symlink backup directory")
+
+    @unittest.skipUnless(os.name == "posix", "POSIX ownership branch")
+    def test_root_owner_repairs_new_backup_parent_ownership(self):
+        simulated = os_adapter()
+        simulated.name = "posix"
+        simulated.geteuid = Mock(return_value=0)
+        simulated.chown = Mock()
+        simulated.fchown = Mock()
+        parent = self.store.backups.parent
+        original_exists = Path.exists
+
+        def exists(path):
+            return False if path == parent else original_exists(path)
+
+        with (
+            patch.object(backup, "os", simulated),
+            patch.object(Path, "exists", exists),
+            patch.dict(sys.modules, {"fcntl": SimpleNamespace(
+                LOCK_EX=1,
+                LOCK_NB=2,
+                LOCK_UN=4,
+                flock=Mock(),
+            )}),
+        ):
+            with self.store.locked():
+                pass
+        owner = self.path.stat()
+        simulated.chown.assert_any_call(parent, owner.st_uid, owner.st_gid)
+        simulated.chown.assert_any_call(self.store.backups, owner.st_uid, owner.st_gid)
+
     def test_locking_both_platforms_root_owner_retry_and_unlock_failure(self):
         for platform in ("posix", "nt"):
             with self.subTest(platform=platform):

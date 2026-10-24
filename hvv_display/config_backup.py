@@ -222,8 +222,7 @@ def _read_schema_v1(raw: Any, *, strict: bool) -> dict:
     )
     # Materialize historical defaults before current startup validation can change.
     for section, defaults in V1_DEFAULTS.items():
-        if section in result or section != "api":
-            result[section] = deepcopy(defaults) | result.get(section, {})
+        result[section] = deepcopy(defaults) | result.get(section, {})
     for station in result["stations"]:
         station.setdefault("city", "Hamburg")
         station.setdefault("id", None)

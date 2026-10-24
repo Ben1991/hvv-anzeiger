@@ -155,6 +155,18 @@ class WebBoundariesTest(unittest.TestCase):
         ):
             self.assertEqual(self.app.departure_view()["state"], "Daten aktuell.")
 
+    def test_departure_source_tracks_credentials_file_changes(self):
+        client = Mock()
+        client.departure_list.return_value = []
+        with (
+            patch.object(self.app, "_client", return_value=client),
+            patch.object(web, "resolve_stations", return_value=[]),
+        ):
+            self.assertEqual(self.app.departures()[0], [])
+            self.app.credentials_path.write_text("GEOFOX_USER=user\n")
+            self.assertEqual(self.app.departures()[0], [])
+        self.assertEqual(client.departure_list.call_count, 2)
+
     def test_station_identifiers_are_checked_before_requests(self):
         for value in ("", "x" * 161, "a\nb"):
             with self.subTest(value=value):
@@ -335,8 +347,17 @@ class WebBoundariesTest(unittest.TestCase):
                 self.assertEqual(self.request(path)[0], 200)
         for path in ("/settings", "/settings?saved=1", "/config-backup?saved=1"):
             self.assertEqual(self.request(path)[0], 200)
+        with patch.object(self.app, "dashboard", return_value=b"dashboard"):
+            self.assertEqual(self.request("/")[0], 200)
         self.assertEqual(self.request("/unknown")[0], 404)
         self.assertEqual(self.request("/unknown", {})[0], 404)
+
+    def test_config_preview_rejects_neither_or_both_sources(self):
+        self.start_server()
+        values = {"csrf_token": self.app.csrf_token}
+        self.assertEqual(self.request("/config/preview", values)[0], 400)
+        both = values | {"backup_id": "backup.json", "config_data": "{}"}
+        self.assertEqual(self.request("/config/preview", both)[0], 400)
 
     def test_restart_http_success_failure_size_and_csrf(self):
         self.start_server()
