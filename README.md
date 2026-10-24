@@ -116,6 +116,67 @@ Ein konkreter Displayaufbau muss vor Ort geprüft werden.
 Die vollständige Einrichtung, Pinbelegung und Funktionsabdeckung stehen in
 [Home Assistant und ESP32 mit ESPHome](docs/home-assistant-esphome.md).
 
+#### Home Assistant: Schritt für Schritt
+
+Diese Schritte binden den vorhandenen HVV-Webdienst als Sensor in Home
+Assistant ein. Für die Dateiablage wird im Beispiel Home Assistant OS verwendet.
+Die offizielle HA-Anleitung zu [Dateizugriff und `configuration.yaml`](https://www.home-assistant.io/docs/configuration/)
+beschreibt weitere Installationsarten.
+
+1. **Konfigurationsordner finden:** In Home Assistant zu
+   **Einstellungen → System → Reparaturen** gehen. Oben rechts das Menü mit den
+   drei Punkten öffnen, **Systeminformationen** wählen und den Eintrag
+   **Konfigurationsverzeichnis** ansehen. Bei Home Assistant OS ist das
+   normalerweise `/config`.
+2. **Datei-Editor öffnen:** In der Seitenleiste die App **File editor** öffnen.
+   Falls sie fehlt: **Einstellungen → Apps → App Store**, dort **File editor**
+   installieren und starten. Im Editor liegt die Datei `configuration.yaml`
+   direkt im Ordner `/config`. Bei Home Assistant Container ist `/config` der
+   Ordner, den du beim Containerstart eingebunden hast; Apps wie File editor
+   stehen dort nicht zur Verfügung.
+3. **Pakete aktivieren:** `configuration.yaml` öffnen und unter dem obersten
+   Schlüssel `homeassistant:` diese Zeile ergänzen:
+
+   ```yaml
+   homeassistant:
+     packages: !include_dir_named packages
+   ```
+
+   Gibt es schon einen Abschnitt `homeassistant:`, die Zeile dort einrücken und
+   **keinen zweiten** gleichnamigen Abschnitt anlegen.
+4. **Paketdatei kopieren:** Im Konfigurationsordner den Ordner `packages`
+   anlegen. Die Datei [`home-assistant/hvv.yaml`](home-assistant/hvv.yaml) aus
+   diesem Repository dort hinein kopieren und als `/config/packages/hvv.yaml`
+   speichern.
+5. **Zugangsdaten eintragen:** `/config/secrets.yaml` im selben Editor öffnen
+   (falls sie noch nicht existiert, im Ordner `/config` neu anlegen). Die
+   Beispielwerte aus [`home-assistant/secrets.example.yaml`](home-assistant/secrets.example.yaml)
+   übernehmen und anpassen:
+
+   ```yaml
+   hvv_smart_home_url: https://<Hostname>:8080/api/smart-home
+   hvv_web_password: DEIN_INDIVIDUELLES_WEBPASSWORT
+   ```
+
+   `<Hostname>` ist der Name, über den dein HVV-Webdienst erreichbar ist. Das
+   Passwort ist das bei dessen Einrichtung gesetzte Webpasswort. HTTPS und die
+   Zertifikatsprüfung bleiben eingeschaltet; Home Assistant muss dem Zertifikat
+   vertrauen. Zugangsdaten nicht in `configuration.yaml` oder `hvv.yaml`
+   eintragen und diese Dateien nicht öffentlich teilen.
+6. **Prüfen und neu starten:** Dateien speichern, dann in Home Assistant
+   **Einstellungen → Tools → YAML** öffnen und **Konfiguration prüfen** wählen.
+   Nur bei erfolgreicher Prüfung über das Drei-Punkte-Menü unter **Einstellungen**
+   **Home Assistant neu starten**.
+7. **Sensor kontrollieren:** Nach dem Neustart unter
+   **Einstellungen → Geräte & Dienste → Entitäten** nach `HVV Board` suchen.
+   Die Entität `sensor.hvv_board` sollte als Zustand `ok` anzeigen; mögliche
+   Zustände sind außerdem `stale`, `expired`, `unavailable` und `night`.
+
+Das Dashboard ist optional. Die zugehörige Karte steht in
+[`home-assistant/dashboard.yaml`](home-assistant/dashboard.yaml). Weitere
+Hinweise zur TLS-Vertrauenskette, Fehlersuche und zum Hintergrunddienst stehen
+in der [vollständigen Einrichtungsanleitung](docs/home-assistant-esphome.md).
+
 ### Welche Abfahrtszeit wird angezeigt?
 
 Die Anzeige verwendet nicht einfach die geplante Abfahrtszeit, sondern die
