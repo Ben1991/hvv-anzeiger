@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hvv-anzeiger"
-version = "0.3.0"
+version = "0.4.0"
 description = "HVV departure display for Raspberry Pi, Home Assistant and ESPHome"
 readme = "README.md"
 license = "GPL-3.0-only"

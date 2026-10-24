@@ -1601,6 +1601,38 @@ Geheimnisse veröffentlichen.
 
 ## Release Notes
 
+### Release V2.4.0 – Home Assistant und ESP32
+
+V2.4.0 greift das Feedback zur Anzeige außerhalb des Raspberry Pi auf: Der
+HVV-Anzeiger lässt sich jetzt in Home Assistant einbinden und auf unterstützten
+ESP32-Displays anzeigen. Die Paketversion ist `0.4.0`.
+
+- **Home Assistant:** REST-Sensoren für Datenstatus und nächste Abfahrt,
+  Vorlagen für veraltete Daten sowie eine optionale Dashboardkarte. Die neue
+  README-Schrittfolge nennt die HA-Menüs und Ablageorte für
+  `configuration.yaml`, `packages/hvv.yaml` und `secrets.yaml`.
+- **ESP32 mit ESPHome:** Fertige Profile für ein ESP32-Board mit ILI9341, das
+  2,8-Zoll-Cheap-Yellow-Display (CYD) und ESP32-S3 mit ILI9488; ein optionales
+  Profil kann die Daten direkt per HTTPS abrufen. Helligkeit, Anzeige,
+  Neustart und Gerätestatus lassen sich in Home Assistant bedienen.
+- **Gemeinsamer Hintergrunddienst:** Der bestehende Python-Dienst übernimmt
+  weiter Geofox-Zugang, Haltestellen-/Linienfilter, Cache, Wiederholungen und
+  Umgang mit veralteten Daten. Geofox-Zugangsdaten müssen nicht auf den ESP32.
+  Zusätzlich kann der Dienst ohne Pi-Display als Container laufen.
+- **Wartbarkeit und Prüfung:** Python-Zeilen- und Branch-Coverage sind jetzt
+  vollständig abgedeckt. CI prüft außerdem die vier ESPHome-Profile, das HA-
+  Paket, den Container, Installer und Browseroberfläche.
+- Abhängigkeiten und Dokumentation wurden aktualisiert.
+
+**Update:** Eine bestehende Raspberry-Pi-Installation lässt sich wie bisher
+mit `./update.sh` aktualisieren. Für Home Assistant und ESP32 gelten die neuen
+[Einrichtungsanleitungen](docs/home-assistant-esphome.md); der
+[HA-Schnellstart](#home-assistant-schritt-für-schritt) steht direkt in diesem
+README.
+
+[Änderungen seit V2.3.0](https://github.com/Ben1991/hvv-anzeiger/compare/V2.3.0...V2.4.0) ·
+[Vollständige Release Notes zu V2.4.0](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.4.0)
+
 <details>
 <summary>Release-Historie von V2.3.0 bis V1 anzeigen</summary>
 
