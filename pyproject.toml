@@ -9,10 +9,10 @@ description = "HVV departure display for Raspberry Pi, Home Assistant and ESPHom
 readme = "README.md"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "luma.lcd>=2.13,<3",
-  "Pillow>=12.3,<14",
+  "Pillow>=13.0,<14",
   "RPi.GPIO>=0.7.1; sys_platform == 'linux' and (platform_machine == 'armv7l' or platform_machine == 'aarch64')",
   "spidev>=3.7,<4; sys_platform == 'linux' and (platform_machine == 'armv7l' or platform_machine == 'aarch64')",
 ]
