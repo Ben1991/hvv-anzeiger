@@ -119,21 +119,23 @@ class StorageBoundariesTest(unittest.TestCase):
         parent = self.store.backups.parent
         original_exists = Path.exists
 
-        def exists(path):
-            return False if path == parent else original_exists(path)
+        fcntl = SimpleNamespace(
+            LOCK_EX=1,
+            LOCK_NB=2,
+            LOCK_UN=4,
+            flock=Mock(),
+        )
+        for parent_existed in (False, True):
+            def exists(path):
+                return parent_existed if path == parent else original_exists(path)
 
-        with (
-            patch.object(backup, "os", simulated),
-            patch.object(Path, "exists", exists),
-            patch.dict(sys.modules, {"fcntl": SimpleNamespace(
-                LOCK_EX=1,
-                LOCK_NB=2,
-                LOCK_UN=4,
-                flock=Mock(),
-            )}),
-        ):
-            with self.store.locked():
-                pass
+            with (
+                patch.object(backup, "os", simulated),
+                patch.object(Path, "exists", exists),
+                patch.dict(sys.modules, {"fcntl": fcntl}),
+            ):
+                with self.store.locked():
+                    pass
         owner = self.path.stat()
         simulated.chown.assert_any_call(parent, owner.st_uid, owner.st_gid)
         simulated.chown.assert_any_call(self.store.backups, owner.st_uid, owner.st_gid)
