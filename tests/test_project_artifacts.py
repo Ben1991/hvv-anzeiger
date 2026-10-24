@@ -95,11 +95,11 @@ class ProjectArtifactTest(unittest.TestCase):
             "Raspberry Pi OS (Lite oder Desktop)",
             installer,
         )
-        self.assertIn("sys.version_info < (3, 10)", installer)
-        self.assertIn("Python 3.10 oder neuer ist erforderlich", installer)
+        self.assertIn("sys.version_info < (3, 11)", installer)
+        self.assertIn("Python 3.11 oder neuer ist erforderlich", installer)
         self.assertIn(
             "sudo -H python3 -c 'import sys; "
-            "raise SystemExit(sys.version_info < (3, 10))'",
+            "raise SystemExit(sys.version_info < (3, 11))'",
             installer,
         )
         self.assertNotIn("Raspberry Pi OS/Debian", installer)
@@ -269,7 +269,7 @@ class ProjectArtifactTest(unittest.TestCase):
                     )
 
         runtime_lock = (ROOT / "requirements.txt").read_text(encoding="utf-8")
-        self.assertIn("pillow==12.3.0", runtime_lock)
+        self.assertIn("pillow==13.0.0", runtime_lock)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
             encoding="utf-8"
         )

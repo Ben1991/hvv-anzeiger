@@ -305,7 +305,7 @@ nicht auf ein Lite-Image beschränkt.
 | Raspberry Pi OS Lite, 32 Bit, Trixie | unterstützt | sinnvoll, wenn ein kleinerer Speicherbedarf wichtiger ist; auf den unten aufgeführten Modellen muss `uname -m` den Wert `armv7l` liefern |
 | Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm | unterstützt | weiterhin geeignet, solange Raspberry Pi die jeweilige Ausgabe mit Sicherheitsupdates versorgt |
 | Raspberry Pi OS mit Desktop oder Full, Trixie beziehungsweise Bookworm | unterstützt | technisch derselbe Installationsweg; Desktop und Zusatzprogramme werden für die Anzeige nicht benötigt |
-| Raspberry Pi OS Bullseye oder älter | nicht unterstützt | die mitgelieferte Python-Version erfüllt die Anforderung Python 3.10 oder neuer nicht zuverlässig |
+| Raspberry Pi OS Bullseye oder älter | nicht unterstützt | die mitgelieferte Python-Version erfüllt die Anforderung Python 3.11 oder neuer nicht zuverlässig |
 | Ubuntu, allgemeines Debian und andere Distributionen | nicht unterstützt | der Installer setzt die Raspberry-Pi-spezifischen Werkzeuge, Gruppen und SPI-Konfiguration voraus |
 
 Raspberry Pi stellt
@@ -336,7 +336,7 @@ Installationen sind als
 
 #### Weitere Voraussetzungen
 
-- Python 3.10 oder neuer
+- Python 3.11 oder neuer
 - [microSD-Karte (Affiliate-Link)](https://www.amazon.de/s?k=microSD+32GB+High+Endurance&tag=bema19910e-21)
 - [zuverlässiges 5-V-Netzteil mit mindestens 2 A (Affiliate-Link)](https://www.amazon.de/s?k=5V+2A+Micro+USB+Netzteil+Raspberry+Pi+Zero+2+W&tag=bema19910e-21)
 - WLAN mit Internetzugang

@@ -48,7 +48,7 @@ eigenen Beiträgen.
 
 ## Lokale Prüfung
 
-Eine virtuelle Umgebung mit Python 3.10 oder neuer verwenden und die
+Eine virtuelle Umgebung mit Python 3.11 oder neuer verwenden und die
 festgeschriebenen Entwicklungsabhängigkeiten installieren:
 
 ```bash
