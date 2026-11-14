@@ -5,6 +5,39 @@
 [![CI](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml)
 [![Lizenz: GPL-3.0-only](https://img.shields.io/badge/Lizenz-GPL--3.0--only-blue.svg)](LICENSE)
 
+## Inhalt
+
+| Dein nächster Schritt | Abschnitt |
+|---|---|
+| Raspberry Pi erstmals einrichten | [Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Display anschließen](#display-anschließen) → [Installieren](#installieren) |
+| Home Assistant oder ESP32 einrichten | [Separate Anleitung mit Pinbelegung](docs/home-assistant-esphome.md) |
+| Haltestellen, Linien oder Darstellung ändern | [Konfigurieren](#konfigurieren) |
+| Version aktualisieren oder Dienst steuern | [Betrieb und Updates](#betrieb-und-updates) |
+| Einen Fehler untersuchen | [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose) |
+
+<details>
+<summary>Alle Abschnitte anzeigen</summary>
+
+- [Funktionen](#funktionen)
+- [Praxisbeispiel](#praxisbeispiel)
+- [Vorkonfigurierte Anzeige](#vorkonfigurierte-anzeige)
+- [Voraussetzungen](#voraussetzungen)
+- [Geofox-Zugang beantragen](#geofox-zugang-beantragen)
+- [Display anschließen](#display-anschließen)
+- [Installieren](#installieren)
+- [Konfigurieren](#konfigurieren)
+- [Betrieb und Updates](#betrieb-und-updates)
+- [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose)
+- [Ressourcen- und Stromverbrauch](#ressourcen--und-stromverbrauch)
+- [Sicherheit und Datenschutz](#sicherheit-und-datenschutz)
+- [Projektentwicklung](#projektentwicklung)
+- [Grenzen](#grenzen)
+- [Release Notes](#release-notes)
+- [Haftungsausschluss](#haftungsausschluss)
+- [Lizenz und Unterstützung](#lizenz-und-unterstützung)
+
+</details>
+
 ## Wieso gibt es dieses Projekt?
 
 Ich möchte morgens möglichst schnell sehen, wann ich los muss, um meinen Bus oder meine Bahn zu bekommen - ohne auf mein Handy gucken zu müssen.
@@ -40,39 +73,6 @@ das Raspberry-Pi-Setup. Für ESPHome gelten die separate Anleitung und deren
 Das Preview zeigt beispielhafte Abfahrten ab Jungfernstieg in Richtung
 Hauptbahnhof. Bus, U-Bahn und S-Bahn werden dabei mit ihren unterschiedlichen
 Linienfarben und -formen dargestellt; die angezeigten Zeiten sind illustrativ.
-
-## Inhalt
-
-| Dein nächster Schritt | Abschnitt |
-|---|---|
-| Raspberry Pi erstmals einrichten | [Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Display anschließen](#display-anschließen) → [Installieren](#installieren) |
-| Home Assistant oder ESP32 einrichten | [Separate Anleitung mit Pinbelegung](docs/home-assistant-esphome.md) |
-| Haltestellen, Linien oder Darstellung ändern | [Konfigurieren](#konfigurieren) |
-| Version aktualisieren oder Dienst steuern | [Betrieb und Updates](#betrieb-und-updates) |
-| Einen Fehler untersuchen | [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose) |
-
-<details>
-<summary>Alle Abschnitte anzeigen</summary>
-
-- [Funktionen](#funktionen)
-- [Praxisbeispiel](#praxisbeispiel)
-- [Vorkonfigurierte Anzeige](#vorkonfigurierte-anzeige)
-- [Voraussetzungen](#voraussetzungen)
-- [Geofox-Zugang beantragen](#geofox-zugang-beantragen)
-- [Display anschließen](#display-anschließen)
-- [Installieren](#installieren)
-- [Konfigurieren](#konfigurieren)
-- [Betrieb und Updates](#betrieb-und-updates)
-- [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose)
-- [Ressourcen- und Stromverbrauch](#ressourcen--und-stromverbrauch)
-- [Sicherheit und Datenschutz](#sicherheit-und-datenschutz)
-- [Projektentwicklung](#projektentwicklung)
-- [Grenzen](#grenzen)
-- [Release Notes](#release-notes)
-- [Haftungsausschluss](#haftungsausschluss)
-- [Lizenz und Unterstützung](#lizenz-und-unterstützung)
-
-</details>
 
 ## Funktionen
 
