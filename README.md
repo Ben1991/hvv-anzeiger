@@ -155,6 +155,7 @@ beschreibt weitere Installationsarten.
 
    ```yaml
    hvv_smart_home_url: https://<Hostname>:8080/api/smart-home
+   hvv_health_url: https://<Hostname>:8080/api/diagnostics
    hvv_web_password: DEIN_INDIVIDUELLES_WEBPASSWORT
    ```
 
@@ -1372,7 +1373,73 @@ set +a
 | Geofox-Anfragelimit erreicht | Fehlerstatus | `Retry-After` wird bis maximal eine Stunde berücksichtigt |
 | Systemzeit nicht synchron | `ZEIT NICHT SYNCHRON` | keine Geofox-Abfrage bis zur Synchronisierung |
 | Prozess abgestürzt oder länger als 90 Sekunden blockiert | letztes Bild bleibt kurz stehen | systemd startet den Dienst neu |
+| ILI9341 nach kurzem Kontaktverlust weiß, obwohl SPI keinen Fehler meldet | weißes oder beschädigtes Bild | vorsorglicher Controller-Reset alle 60 Sekunden mit vollständigem Neuzeichnen |
 | Nachtmodus aktiv | schwarzes Bild | keine Geofox-Abfrage bis zum Ende des Nachtfensters |
+
+### Weißes Pi-Display nach einem Wackelkontakt
+
+Der Pi-Dienst setzt den ILI9341-Controller automatisch alle 60 Sekunden über
+den konfigurierten RST-Pin und zusätzlich per SPI-Software-Reset zurück,
+überträgt seine Initialisierung erneut und zeichnet
+das vollständige Bild neu. Das geschieht auch bei unverändertem Inhalt und im
+Nachtmodus; dort bleibt das Zielbild schwarz. Der Reset benötigt rund 520 ms
+Wartezeit zuzüglich SPI-Übertragung und kann kurz sichtbar sein. Zusätzliche
+Geofox-Abfragen oder ein Neustart des Raspberry Pi sind dafür nicht nötig.
+Der vorhandene systemd-Watchdog bleibt für einen blockierten Dienst zuständig.
+
+Die Prüfung erfolgt im normalen Aktualisierungszyklus. Sobald die Kontakte
+wieder zuverlässig verbunden sind, folgt der nächste Reset spätestens nach
+60 Sekunden zuzüglich eines Aktualisierungszyklus und möglicher laufender
+Netzwerkabfragen. Meldet SPI tatsächlich einen Fehler, wird die Verbindung
+freigegeben und im nächsten Zyklus erneut geöffnet. Das luma-Treiberobjekt
+bleibt auch bei längerem Ausfall erhalten. Die periodische Initialisierung
+verwendet dieselbe SPI-Verbindung weiter. Bei Konfigurationswechsel und
+regulärem Dienstende werden die bisherigen Verbindungen geschlossen.
+
+Die Anzeige- und Statusschleife schläft höchstens 15 Sekunden, unabhängig vom
+eingestellten Geofox-Abrufintervall; die Zahl der Geofox-Abfragen erhöht sich
+dadurch nicht. Laufende Netzwerkaufrufe können die Schleife weiterhin verzögern.
+Bei blockiertem Prozess greift der systemd-Watchdog nach 90 Sekunden. systemd
+begrenzt das Stoppen auf zehn Sekunden und versucht Neustarts mit zehn Sekunden
+Abstand dauerhaft weiter. Ein festhängender Kernel-/Hardwarezugriff kann
+trotzdem einen physischen Eingriff erfordern.
+
+Das Display liefert keine optische Rückmeldung: Ein erfolgreicher Schreibzugriff
+und der Diagnosewert „Display verfügbar“ beweisen kein sichtbares Bild.
+Dauerhaft getrennte Kontakte, eine fehlende Stromversorgung oder ein nicht
+mehr ansprechbarer Controller lassen sich damit nicht reparieren. Vor Arbeiten
+an der Verkabelung immer die Stromversorgung trennen und lose Kontakte dauerhaft
+beheben. Ein Hardware-Reset oder ein Aus- und Einschalten kann weiterhin nötig
+sein, wenn auch der RST-Pin nicht zuverlässig verbunden ist.
+
+Automatisierte Nachweise und die noch am Pi auszuführende Abnahme stehen in
+[Display-Wiederherstellung prüfen](docs/display-recovery-validation.md).
+
+### Displayfehler in Home Assistant
+
+Das aktualisierte [Home-Assistant-Paket](home-assistant/hvv.yaml) ergänzt
+`sensor.hvv_display_error` und `binary_sensor.hvv_display_problem`.
+`hvv_health_url` in `/config/secrets.yaml` muss auf
+`https://<Hostname>:8080/api/diagnostics` zeigen. Es gilt dasselbe individuelle
+Webpasswort wie für die Abfahrten. Paket und Secrets gemeinsam aktualisieren,
+die HA-Konfiguration prüfen und Home Assistant neu starten.
+
+Der Fehlersensor zeigt `none`, `initialization`, `reset`, `transfer` oder
+`service_unavailable`; bei fehlendem Status ist er unbekannt beziehungsweise
+nicht verfügbar. Seine Attribute enthalten Fehlerzahl, aufeinanderfolgende
+Fehler, letzte Fehlerart und UTC-Zeit sowie Wiederherstellungsversuche und
+erfolgreiche Wiederherstellungen. Der Problemsensor eignet sich für eine
+Benachrichtigungsautomation. Nach erfolgreicher Bildausgabe verschwindet der
+aktive Fehler; die Historie bleibt bis zum nächsten Dienstneustart erhalten.
+
+Ein vorsorglicher Reset zählt als Wiederherstellungsversuch, nicht als Fehler.
+Erst nach anschließender erfolgreicher Bildübertragung zählt er als erfolgreich.
+Auch ein anfänglich nicht erreichbares Display wird im laufenden Dienst erneut
+versucht und als Initialisierungsfehler gemeldet. Die Diagnoseabfrage liest nur
+den lokalen Status, löst keine Geofox-Abfrage aus und liefert bei Gerätefehlern
+HTTP 200 mit dem Fehler im JSON. `/api/health` behält seine HTTP-Statuscodes.
+Stille Kontaktfehler und die tatsächliche Bildqualität sind ohne Rückmeldung
+vom Display weiterhin nicht messbar; Versorgung und LED sind nicht schaltbar.
 
 Erster Diagnoseweg:
 
@@ -1600,6 +1667,22 @@ Geheimnisse veröffentlichen.
   GitHub Actions nicht geprüft werden.
 
 ## Release Notes
+
+### Noch nicht veröffentlicht – automatische Pi-Display-Wiederherstellung
+
+- Vorsorglicher RST-Puls und ILI9341-Software-Reset alle 60 Sekunden gegen stille
+  Controllerfehler nach kurzzeitigen Kontaktproblemen.
+- Vollständige Bildübertragung nach jedem Reset, auch bei unverändertem
+  Inhalt oder schwarzem Nachtbild; keine zusätzlichen Geofox-Abfragen.
+- Tests mit echtem luma-Treiber und simuliertem SPI/GPIO sowie ein
+  dokumentierter Abnahmeablauf für den angeschlossenen Pi-Bildschirm.
+- Vollständige Initialisierung einschließlich der separat als Daten gesendeten
+  Registerparameter; Langzeittests mit 1.000 fehlschlagenden Verbindungen und
+  1.000 periodischen Resets ohne zusätzliche Treiberobjekte oder Exit-Hooks.
+- Freigabe defekter SPI-Verbindungen, kein Zugriff auf den unbenutzten
+  Backlight-GPIO 18 und zunächst unbekannter Displaystatus nach Dienststart.
+- Home-Assistant-Fehler- und Problemsensor mit getrennten Fehler- und
+  Wiederherstellungszählern; keine zusätzlichen Geofox-Aufrufe für Diagnosen.
 
 ### Release V2.4.0 – Home Assistant und ESP32
 

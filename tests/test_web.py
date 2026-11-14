@@ -60,7 +60,7 @@ class WebApplicationTest(unittest.TestCase):
         base_url = f"http://127.0.0.1:{server.server_port}"
         auth = "Basic " + base64.b64encode(b"hvv-anzeiger:test-web-password").decode()
         try:
-            for path in ("/api/health", "/diagnostics"):
+            for path in ("/api/health", "/api/diagnostics", "/diagnostics"):
                 with self.assertRaises(HTTPError) as denied:
                     urlopen(base_url + path)  # noqa: S310
                 self.assertEqual(denied.exception.code, 401)
@@ -116,6 +116,39 @@ class WebApplicationTest(unittest.TestCase):
         with patch("hvv_display.web.time.monotonic", return_value=101):
             self.assertTrue(self.app.allow_health_request())
         self.assertEqual(len(self.app._health_requests), 20)
+
+    def test_diagnostics_api_reports_display_fault_with_http_200_without_geofox(self):
+        from hvv_display.health import DisplayDiagnostics
+
+        details = DisplayDiagnostics()
+        details.failed("reset", datetime.now(timezone.utc))
+        HealthPublisher(self.app.health_file).publish(
+            configuration_valid=True, display_available=False,
+            display_diagnostics=details.snapshot(),
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.app))
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_port}/api/diagnostics"
+            with patch.object(
+                self.app, "_client", side_effect=AssertionError("No API")
+            ), patch("hvv_display.web.LOG.info") as access_log:
+                with urlopen(url) as response:  # noqa: S310
+                    self.assertEqual(response.status, 200)
+                    data = json.load(response)
+            access_log.assert_not_called()
+            self.assertEqual(data["status"], "unavailable")
+            self.assertFalse(data["display_available"])
+            self.assertEqual(data["display_diagnostics"]["last_error_kind"], "reset")
+            self.assertEqual(data["display_diagnostics"]["error_count"], 1)
+            page = self.app.diagnostics().decode()
+            self.assertIn("Erkannte Displayfehler seit Dienststart", page)
+            self.assertIn("Reset fehlgeschlagen", page)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
     def test_diagnostics_formats_timestamps_and_durations_for_readability(self):
         now = datetime.now(HAMBURG_TZ)

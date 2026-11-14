@@ -9,6 +9,7 @@ from unittest.mock import patch
 from hvv_display.health import (
     MAX_SNAPSHOT_BYTES,
     STATUS_CODES,
+    DisplayDiagnostics,
     HealthPublisher,
     health_path,
     main,
@@ -56,6 +57,7 @@ class HealthTest(unittest.TestCase):
                 "network_connected",
                 "clock_synchronized",
                 "display_available",
+                "display_diagnostics",
                 "night_shutdown",
                 "last_successful_fetch",
                 "data_age_seconds",
@@ -75,6 +77,43 @@ class HealthTest(unittest.TestCase):
         self.assertTrue(data["service_running"])
         self.assertFalse(data["stale"])
         self.assertLess(self.path.stat().st_size, MAX_SNAPSHOT_BYTES)
+
+    def test_display_diagnostics_keep_faults_and_preventive_resets_distinct(self):
+        details = DisplayDiagnostics()
+        details.recovery_started()
+        details.frame_succeeded(self.now)
+        self.assertEqual(details.error_count, 0)
+        self.assertEqual(details.recovery_successes, 1)
+        details.failed("transfer", self.now)
+        self.assertTrue(details.needs_recovery)
+        details.recovery_started()
+        details.failed("initialization", self.now)
+        self.assertEqual(details.recovery_successes, 1)
+        self.assertFalse(details.recovering)
+        details.recovery_started()
+        details.frame_succeeded(self.now)
+        data = self.read(display_diagnostics=details.snapshot())
+        self.assertEqual(data["display_diagnostics"], details.snapshot())
+        self.assertEqual(details.error_count, 2)
+        self.assertEqual(details.consecutive_failures, 0)
+        self.assertEqual(details.recovery_attempts, 3)
+        self.assertEqual(details.recovery_successes, 2)
+        self.assertEqual(details.last_error_kind, "initialization")
+        self.assertFalse(details.needs_recovery)
+
+    def test_legacy_snapshots_and_invalid_display_diagnostics_are_safe(self):
+        self.publish()
+        data = json.loads(self.path.read_text())
+        data.pop("display_diagnostics")
+        self.path.write_text(json.dumps(data))
+        self.assertIsNone(read_health(self.path, now=self.now)["display_diagnostics"])
+        details = DisplayDiagnostics().snapshot()
+        for invalid in ([], {}, details | {"last_error_kind": "secret-path"},
+                        details | {"error_count": -1},
+                        details | {"last_error_at": "bad"}):
+            self.assertFalse(self.read(display_diagnostics=invalid)["snapshot_available"])
+        result = self.read(display_diagnostics=details | {"exception": "secret-path"})
+        self.assertNotIn("secret-path", json.dumps(result))
 
     def test_offline_unknown_clock_and_display_failure_are_distinct(self):
         for changes, expected in (
@@ -126,6 +165,7 @@ class HealthTest(unittest.TestCase):
             read_health(self.path, now=self.now + timedelta(seconds=91))["status"],
             "unavailable",
         )
+
         self.assertEqual(
             self.read(
                 night_shutdown=True, network_connected=None, last_successful_fetch=None
@@ -136,6 +176,13 @@ class HealthTest(unittest.TestCase):
             self.read(night_shutdown=True, configuration_valid=False)["status"],
             "unavailable",
         )
+
+    def test_clock_rollback_does_not_keep_a_dead_heartbeat_healthy(self):
+        self.publish()
+        status = read_health(self.path, now=self.now - timedelta(hours=1))
+        self.assertFalse(status["snapshot_available"])
+        self.assertFalse(status["service_running"])
+        self.assertEqual(status["status"], "unavailable")
 
     def test_unknown_fields_and_secret_paths_never_leave_the_reader(self):
         self.publish()

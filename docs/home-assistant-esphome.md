@@ -169,6 +169,9 @@ homeassistant:
 Die Werte aus `home-assistant/secrets.example.yaml` in `/config/secrets.yaml`
 übernehmen und ersetzen. `hvv_smart_home_url` muss auf
 `https://<Hostname>:8080/api/smart-home` zeigen. Benutzername ist `hvv-anzeiger`.
+Für die Displaydiagnose zusätzlich `hvv_health_url` auf
+`https://<Hostname>:8080/api/diagnostics` setzen; auch bei einem Update beide
+URL-Secrets und das vorhandene Webpasswort übernehmen.
 TLS-Prüfung eingeschaltet lassen; bei eigener CA deren Vertrauenskette auf dem
 HA-System einrichten. Konfiguration prüfen und HA neu starten.
 
@@ -178,6 +181,27 @@ Entity-Namen in den Vorlagen, Recorder-Ausschlüssen und ESPHome-Substitutionen
 anpassen. Abfahrten und `display_payload` sind Attribute, weil ein HA-Zustand
 auf 255 Zeichen begrenzt ist. Der vollständige Datensatz wird nicht im Recorder
 gespeichert. `home-assistant/dashboard.yaml` ist eine optionale Dashboardkarte.
+
+Das Paket ergänzt `sensor.hvv_diagnostics`, `sensor.hvv_display_error` und
+`binary_sensor.hvv_display_problem`. Der Fehlersensor meldet `initialization`,
+`reset` und `transfer` für erkannte Treiberfehler, `service_unavailable` für
+einen gestoppten Dienst beziehungsweise ausgebliebene Lebenszeichen und `none`
+bei erfolgreicher Bildausgabe. Attribute enthalten Fehler- und
+Wiederherstellungszähler sowie letzte Fehlerart und UTC-Zeitpunkte. Nach
+erfolgreicher Wiederherstellung geht der Problemsensor aus; historische Fehler
+bleiben in den Attributen, bis der Pi-Anzeigedienst neu startet. Vorsorgliche
+Resets erhöhen die Wiederherstellungs-, aber keine Fehlerzähler.
+
+Die unabhängige REST-Diagnose benötigt keinen Geofox-Zugang und fragt nur den
+lokalen Dienststatus ab. `/api/diagnostics` liefert auch bei Gerätefehlern HTTP
+200, damit Home Assistant die Fehlerattribute auswerten kann. Authentifizierung,
+TLS-Prüfung und Rate-Limit gelten wie für `/api/health`; dessen HTTP-Codes bleiben
+unverändert. Fehlt die Diagnose, ist der Webdienst nicht erreichbar, läuft nur
+ein Image-Backend oder stammt der Dienststatus aus einer alten Version ohne
+Displaydiagnose, werden die Display-Sensoren nicht als gesund ausgegeben.
+Ein stilles Weißbild trotz erfolgreicher SPI-Schreibzugriffe ist nicht direkt
+erkennbar. Die Sensoren beweisen weder elektrische Verbindung noch sichtbares
+Bild. Siehe [Display-Wiederherstellung und Abnahme](display-recovery-validation.md).
 
 Die REST-Abfrage läuft alle 15 Sekunden. Ihr Timeout ist 30 Sekunden: Ein
 erster Abruf kann mehrere Geofox-Aufrufe zur Haltestellenauflösung benötigen.

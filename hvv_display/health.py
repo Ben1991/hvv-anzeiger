@@ -10,6 +10,7 @@ import os
 import re
 import stat
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,53 @@ LOG = logging.getLogger(__name__)
 MAX_SNAPSHOT_BYTES = 8192
 STATUS_CODES = {"healthy": (200, 0), "degraded": (503, 1), "unavailable": (500, 2)}
 ERROR_KINDS = {"none", "technical", "temporary", "rate_limit", "authentication"}
+DISPLAY_ERROR_KINDS = {"none", "initialization", "reset", "transfer"}
+DISPLAY_COUNTERS = (
+    "error_count", "consecutive_failures", "recovery_attempts", "recovery_successes"
+)
+
+
+@dataclass
+class DisplayDiagnostics:
+    """Process-lifetime counts; preventive resets are never detected faults."""
+
+    error_count: int = 0
+    consecutive_failures: int = 0
+    recovery_attempts: int = 0
+    recovery_successes: int = 0
+    last_error_kind: str = "none"
+    last_error_at: datetime | None = None
+    last_recovery_at: datetime | None = None
+    needs_recovery: bool = False
+    recovering: bool = False
+
+    def failed(self, kind: str, now: datetime) -> None:
+        self.error_count += 1
+        self.consecutive_failures += 1
+        self.last_error_kind = kind
+        self.last_error_at = now
+        self.needs_recovery = True
+        self.recovering = False
+
+    def recovery_started(self) -> None:
+        self.recovery_attempts += 1
+        self.recovering = True
+
+    def frame_succeeded(self, now: datetime) -> None:
+        self.consecutive_failures = 0
+        if self.recovering:
+            self.recovery_successes += 1
+            self.last_recovery_at = now
+        self.needs_recovery = False
+        self.recovering = False
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            **{name: getattr(self, name) for name in DISPLAY_COUNTERS},
+            "last_error_kind": self.last_error_kind,
+            "last_error_at": _iso(self.last_error_at),
+            "last_recovery_at": _iso(self.last_recovery_at),
+        }
 
 
 def health_path(cache: str | Path = "var/stations.json") -> Path:
@@ -55,6 +103,22 @@ def _iso(value: datetime | None) -> str | None:
     return value.astimezone(timezone.utc).isoformat() if value else None
 
 
+def _display_diagnostics(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None  # Old snapshots and image-only backends have no GPIO status.
+    if (
+        not isinstance(value, dict)
+        or value.get("last_error_kind") not in DISPLAY_ERROR_KINDS
+    ):
+        raise ValueError("Invalid display diagnostics")
+    return {
+        **{name: _seconds(value[name]) for name in DISPLAY_COUNTERS},
+        "last_error_kind": value["last_error_kind"],
+        "last_error_at": _iso(_timestamp(value["last_error_at"])),
+        "last_recovery_at": _iso(_timestamp(value["last_recovery_at"])),
+    }
+
+
 def _empty_status() -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -66,6 +130,7 @@ def _empty_status() -> dict[str, Any]:
         "network_connected": None,
         "clock_synchronized": None,
         "display_available": None,
+        "display_diagnostics": None,
         "night_shutdown": False,
         "last_successful_fetch": None,
         "data_age_seconds": None,
@@ -105,6 +170,8 @@ def read_health(path: Path, *, now: datetime | None = None) -> dict[str, Any]:
         started = _timestamp(data["started_at"])
         if heartbeat is None or started is None:
             return result
+        if heartbeat > now + timedelta(seconds=5):
+            return result  # A clock rollback must not keep an old heartbeat fresh.
         age = max(0, math.floor((now - heartbeat).total_seconds()))
         running = _boolean(data["service_running"]) and age <= _seconds(
             data["heartbeat_timeout_seconds"]
@@ -113,6 +180,7 @@ def read_health(path: Path, *, now: datetime | None = None) -> dict[str, Any]:
         network = _boolean(data["network_connected"], optional=True)
         clock = _boolean(data["clock_synchronized"], optional=True)
         display = _boolean(data["display_available"], optional=True)
+        display_diagnostics = _display_diagnostics(data.get("display_diagnostics"))
         night = _boolean(data["night_shutdown"])
         success = _timestamp(data["last_successful_fetch"])
         data_age = (
@@ -157,6 +225,7 @@ def read_health(path: Path, *, now: datetime | None = None) -> dict[str, Any]:
             network_connected=network,
             clock_synchronized=clock,
             display_available=display,
+            display_diagnostics=display_diagnostics,
             night_shutdown=night,
             last_successful_fetch=_iso(success),
             data_age_seconds=data_age,
@@ -187,6 +256,7 @@ class HealthPublisher:
         network_connected: bool | None = None,
         clock_synchronized: bool | None = None,
         display_available: bool | None = None,
+        display_diagnostics: dict[str, Any] | None = None,
         night_shutdown: bool = False,
         last_successful_fetch: datetime | None = None,
         consecutive_failures: int = 0,
@@ -209,6 +279,7 @@ class HealthPublisher:
             "network_connected": network_connected,
             "clock_synchronized": clock_synchronized,
             "display_available": display_available,
+            "display_diagnostics": display_diagnostics,
             "night_shutdown": night_shutdown,
             "last_successful_fetch": _iso(last_successful_fetch),
             "consecutive_failures": consecutive_failures,

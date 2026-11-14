@@ -429,6 +429,21 @@ class WebApplication:
             ("Verbleibende Rate-Limit-Pause", duration(data["rate_limit_remaining_seconds"])),
             ("Alter des letzten Lebenszeichens", duration(data["heartbeat_age_seconds"])),
         ]
+        display_details = data["display_diagnostics"]
+        if display_details is not None:
+            display_errors = {
+                "none": "Keiner", "initialization": "Initialisierung fehlgeschlagen",
+                "reset": "Reset fehlgeschlagen", "transfer": "Bildübertragung fehlgeschlagen",
+            }
+            fields.extend([
+                ("Erkannte Displayfehler seit Dienststart", str(display_details["error_count"])),
+                ("Displayfehler in Folge", str(display_details["consecutive_failures"])),
+                ("Letzter erkannter Displayfehler", display_errors[display_details["last_error_kind"]]),
+                ("Letzter Displayfehler (UTC)", display_details["last_error_at"] or "Noch keiner"),
+                ("Display-Wiederherstellungsversuche", str(display_details["recovery_attempts"])),
+                ("Erfolgreiche Display-Wiederherstellungen", str(display_details["recovery_successes"])),
+                ("Letzte Display-Wiederherstellung (UTC)", display_details["last_recovery_at"] or "Noch keine"),
+            ])
         cards = "".join(f'<div>{html.escape(label)}<strong style="overflow-wrap:anywhere">{html.escape(value)}</strong></div>' for label, value in fields)
         status = labels[data["status"]]
         notice = "" if data["snapshot_available"] else '<p class="notice">Kein gültiger Status des Anzeigedienstes verfügbar. Dienst starten und Schreibrechte im Laufzeitverzeichnis prüfen.</p>'
@@ -1240,7 +1255,7 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 self._unauthorized()
                 return
             path = urlsplit(self.path).path
-            if path in {"/api/health", "/diagnostics"}:
+            if path in {"/api/health", "/api/diagnostics", "/diagnostics"}:
                 self.connection.settimeout(2)
                 if not application.allow_health_request():
                     self._send_json({"error": "Zu viele Statusabfragen"}, HTTPStatus.TOO_MANY_REQUESTS, retry_after=1)
@@ -1248,7 +1263,8 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                     self._send(application.diagnostics())
                 else:
                     data = application.health()
-                    self._send_json(data, HTTPStatus(STATUS_CODES[data["status"]][0]))
+                    status = HTTPStatus.OK if path == "/api/diagnostics" else HTTPStatus(STATUS_CODES[data["status"]][0])
+                    self._send_json(data, status)
                 return
             if path == "/":
                 self._send(application.dashboard())
@@ -1504,7 +1520,7 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 )
 
         def log_message(self, format: str, *args: object) -> None:
-            if urlsplit(getattr(self, "path", "")).path in {"/api/health", "/diagnostics"}:
+            if urlsplit(getattr(self, "path", "")).path in {"/api/health", "/api/diagnostics", "/diagnostics"}:
                 return
             LOG.info("web %s", format % args)
 

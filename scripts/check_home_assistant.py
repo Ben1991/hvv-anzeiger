@@ -40,7 +40,7 @@ def main():
         for rows in ([], [row]):
             env = Environment(undefined=StrictUndefined, autoescape=False)  # noqa: S701
             env.globals.update(states=lambda _: state, state_attr=lambda *_: rows)
-            next_sensor = package["template"][0]["sensor"][0]
+            next_sensor = package["template"][0]["sensor"][1]
             available = env.from_string(next_sensor["availability"]).render().strip()
             expected = state in {"ok", "stale"} and bool(rows)
             if available != str(expected):

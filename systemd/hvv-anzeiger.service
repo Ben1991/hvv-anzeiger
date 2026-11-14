@@ -2,6 +2,7 @@
 Description=HVV Abfahrtsanzeige
 After=network-online.target time-sync.target
 Wants=network-online.target time-sync.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=notify
@@ -18,6 +19,7 @@ Environment=HVV_HEALTH_FILE=/opt/hvv-anzeiger/var/health.json
 ExecStart=/opt/hvv-anzeiger/.venv/bin/python -m hvv_display --config /opt/hvv-anzeiger/config.json --cache /opt/hvv-anzeiger/var/stations.json --credentials /opt/hvv-anzeiger/var/credentials.env
 Restart=always
 RestartSec=10
+TimeoutStopSec=10
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
