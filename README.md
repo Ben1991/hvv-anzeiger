@@ -1372,7 +1372,36 @@ set +a
 | Geofox-Anfragelimit erreicht | Fehlerstatus | `Retry-After` wird bis maximal eine Stunde berücksichtigt |
 | Systemzeit nicht synchron | `ZEIT NICHT SYNCHRON` | keine Geofox-Abfrage bis zur Synchronisierung |
 | Prozess abgestürzt oder länger als 90 Sekunden blockiert | letztes Bild bleibt kurz stehen | systemd startet den Dienst neu |
+| ILI9341 nach kurzem Kontaktverlust weiß, obwohl SPI keinen Fehler meldet | weißes oder beschädigtes Bild | vorsorglicher Controller-Reset alle 60 Sekunden mit vollständigem Neuzeichnen |
 | Nachtmodus aktiv | schwarzes Bild | keine Geofox-Abfrage bis zum Ende des Nachtfensters |
+
+### Weißes Pi-Display nach einem Wackelkontakt
+
+Der Pi-Dienst setzt den ILI9341-Controller automatisch alle 60 Sekunden per
+SPI-Software-Reset zurück, überträgt seine Initialisierung erneut und zeichnet
+das vollständige Bild neu. Das geschieht auch bei unverändertem Inhalt und im
+Nachtmodus; dort bleibt das Zielbild schwarz. Der Reset benötigt rund 270 ms
+Wartezeit zuzüglich SPI-Übertragung und kann kurz sichtbar sein. Zusätzliche
+Geofox-Abfragen oder ein Neustart des Raspberry Pi sind dafür nicht nötig.
+Der vorhandene systemd-Watchdog bleibt für einen blockierten Dienst zuständig.
+
+Die Prüfung erfolgt im normalen Aktualisierungszyklus. Sobald die Kontakte
+wieder zuverlässig verbunden sind, folgt der nächste Reset spätestens nach
+60 Sekunden zuzüglich eines Aktualisierungszyklus und möglicher laufender
+Netzwerkabfragen. Meldet SPI tatsächlich einen Fehler, wird der Treiber wie
+bisher im nächsten Zyklus neu aufgebaut. Die periodische Initialisierung
+verwendet dagegen denselben Treiber und dieselbe SPI-Verbindung weiter.
+
+Das Display liefert keine optische Rückmeldung: Ein erfolgreicher Schreibzugriff
+und der Diagnosewert „Display verfügbar“ beweisen kein sichtbares Bild.
+Dauerhaft getrennte Kontakte, eine fehlende Stromversorgung oder ein nicht
+mehr ansprechbarer Controller lassen sich damit nicht reparieren. Vor Arbeiten
+an der Verkabelung immer die Stromversorgung trennen und lose Kontakte dauerhaft
+beheben. Ein Hardware-Reset oder ein Aus- und Einschalten kann weiterhin nötig
+sein, wenn der Controller keine SPI-Befehle mehr annimmt.
+
+Automatisierte Nachweise und die noch am Pi auszuführende Abnahme stehen in
+[Display-Wiederherstellung prüfen](docs/display-recovery-validation.md).
 
 Erster Diagnoseweg:
 
@@ -1600,6 +1629,15 @@ Geheimnisse veröffentlichen.
   GitHub Actions nicht geprüft werden.
 
 ## Release Notes
+
+### Noch nicht veröffentlicht – automatische Pi-Display-Wiederherstellung
+
+- Vorsorglicher ILI9341-Software-Reset alle 60 Sekunden gegen stille
+  Controllerfehler nach kurzzeitigen Kontaktproblemen.
+- Vollständige Bildübertragung nach jedem Reset, auch bei unverändertem
+  Inhalt oder schwarzem Nachtbild; keine zusätzlichen Geofox-Abfragen.
+- Tests mit echtem luma-Treiber und simuliertem SPI/GPIO sowie ein
+  dokumentierter Abnahmeablauf für den angeschlossenen Pi-Bildschirm.
 
 ### Release V2.4.0 – Home Assistant und ESP32
 

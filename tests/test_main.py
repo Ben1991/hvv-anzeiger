@@ -3,6 +3,7 @@ import json
 import sys
 import unittest
 from argparse import Namespace
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -12,6 +13,7 @@ from PIL import Image
 
 from hvv_display.config import ConfigError, load_config
 from hvv_display.geofox import HAMBURG_TZ, GeofoxError
+from hvv_display.hardware import Ili9341Display
 from hvv_display.main import (
     MAX_REFRESH_BACKOFF_SECONDS,
     _arguments,
@@ -643,6 +645,86 @@ class MainTest(unittest.TestCase):
             ):
                 self.assertEqual(run(), 0)
         display.show.assert_called_once()
+
+    def test_silent_display_loss_recovers_even_when_visible_frame_is_unchanged(self):
+        for night in (False, True):
+            with self.subTest(night_shutdown=night):
+                self._check_periodic_display_recovery(night)
+
+    def _check_periodic_display_recovery(self, night):
+        config = load_config("config.example.json")
+        config = replace(
+            config,
+            night_shutdown=replace(config.night_shutdown, enabled=night),
+        )
+        now = datetime(2026, 11, 14, 23 if night else 12, tzinfo=HAMBURG_TZ)
+        elapsed = 0.0
+        handlers = []
+        published = []
+
+        def sleep(seconds):
+            nonlocal elapsed
+            elapsed += seconds
+
+        def publish(**values):
+            published.append(values)
+            if len(published) == 6:
+                handlers[0](15, None)
+
+        with (
+            TemporaryDirectory() as directory,
+            patch("luma.core.interface.serial.spi", return_value=Mock()),
+            patch("luma.lcd.device.backlit_device.__rpi_gpio__", return_value=Mock()),
+            patch("atexit.register"),
+            patch("hvv_display.main.time.monotonic", side_effect=lambda: elapsed),
+            patch("hvv_display.main.time.sleep", side_effect=sleep),
+        ):
+            display = Ili9341Display(config.display)
+            arguments = Namespace(
+                config="config.example.json",
+                credentials=str(Path(directory) / "missing.env"),
+                cache=str(Path(directory) / "stations.json"),
+                once=False,
+                output=None,
+            )
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.load_config", return_value=config),
+                patch("hvv_display.main.Ili9341Display", return_value=display),
+                patch.object(display, "show", wraps=display.show) as show,
+                patch.object(
+                    display, "recover_if_due", wraps=display.recover_if_due
+                ) as recover,
+                patch("hvv_display.main.datetime") as dates,
+                patch("hvv_display.main.GeofoxClient") as client,
+                patch(
+                    "hvv_display.main.resolve_stations", return_value=config.stations
+                ),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch("hvv_display.main.wifi_connected", return_value=True),
+                patch("hvv_display.main.HealthPublisher") as health,
+                patch(
+                    "hvv_display.main.signal.signal",
+                    side_effect=lambda _signal, handler: handlers.append(handler),
+                ),
+            ):
+                dates.now.return_value = now
+                client.return_value.departure_list.return_value = []
+                health.return_value.publish.side_effect = publish
+                self.assertEqual(run(), 0)
+            # Six cycles: draw initially and after the 60-second reset only.
+            # This verifies recovery bypasses BOTH application caching and the
+            # real luma framebuffer, even for an unchanged black night frame.
+            self.assertEqual(recover.call_count, 6)
+            self.assertEqual(show.call_count, 2)
+            self.assertEqual(
+                show.call_args_list[0].args[0].tobytes(),
+                show.call_args_list[1].args[0].tobytes(),
+            )
+            if night:
+                self.assertEqual(set(show.call_args.args[0].tobytes()), {0})
+                client.return_value.departure_list.assert_not_called()
+            self.assertTrue(all(value["display_available"] for value in published))
 
     def test_invalid_changed_configuration_keeps_previous_values(self) -> None:
         handlers = []

@@ -1,11 +1,11 @@
 import builtins
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, call, patch
 
 from PIL import Image
 
 from hvv_display.config import load_config
-from hvv_display.hardware import Ili9341Display
+from hvv_display.hardware import DISPLAY_RECOVERY_SECONDS, Ili9341Display
 
 
 class HardwareTest(unittest.TestCase):
@@ -30,12 +30,14 @@ class HardwareTest(unittest.TestCase):
             bus_speed_hz=config.bus_speed_hz,
         )
         ili9341.assert_called_once_with(
-            serial_interface=serial,
+            serial_interface=ANY,
             width=320,
             height=240,
             rotate=config.rotate,
             bgr=config.bgr,
+            framebuffer=ANY,
         )
+        self.assertIs(ili9341.call_args.kwargs["serial_interface"].serial, serial)
         rendered = device.display.call_args.args[0]
         self.assertEqual(rendered.size, (320, 240))
         self.assertEqual(rendered.mode, "RGB")
@@ -68,3 +70,87 @@ class HardwareTest(unittest.TestCase):
             display.show(image)
         rendered = device.display.call_args.args[0]
         self.assertEqual(rendered.tobytes(), image.tobytes())
+
+    def test_real_driver_replays_initialization_and_full_frame_after_silent_loss(self):
+        """Use real luma rendering; only the physical SPI/GPIO are simulated."""
+        config = load_config("config.example.json").display
+        serial = Mock()
+        image = Image.new("RGB", (320, 240), "red")
+        panel = {"pixels": b"", "accepts_pixels": True}
+
+        def command(*values):
+            if values == (0x01,):
+                panel["accepts_pixels"] = False
+            elif values == (0x29,):  # Display On completes initialization.
+                panel["accepts_pixels"] = True
+
+        def pixels(data):
+            if panel["accepts_pixels"]:
+                panel["pixels"] = bytes(data)
+
+        serial.command.side_effect = command
+        serial.data.side_effect = pixels
+        with (
+            patch("luma.core.interface.serial.spi", return_value=serial) as spi,
+            patch("luma.lcd.device.backlit_device.__rpi_gpio__", return_value=Mock()),
+            patch("atexit.register") as register,
+            patch("hvv_display.hardware.time.monotonic", return_value=100) as clock,
+            patch("hvv_display.hardware.time.sleep") as sleep,
+        ):
+            display = Ili9341Display(config)
+            initialization = serial.command.call_args_list.copy()
+            display.show(image)
+            frame = serial.data.call_args.args[0]
+            self.assertEqual(len(frame), 320 * 240 * 3)
+            self.assertEqual(panel["pixels"], bytes(frame))
+
+            # Losing power or DC can silently discard controller state while
+            # the host continues to accept every SPI write without an error.
+            panel["pixels"] = b"\xff" * len(frame)
+            panel["accepts_pixels"] = False
+            serial.reset_mock()
+            display.show(image)
+            self.assertEqual(set(panel["pixels"]), {255})
+            self.assertNotIn(call(0x01), serial.command.call_args_list)
+            clock.return_value = 100 + DISPLAY_RECOVERY_SECONDS - 0.001
+            self.assertFalse(display.recover_if_due())
+            serial.reset_mock()
+
+            clock.return_value = 100 + DISPLAY_RECOVERY_SECONDS
+            self.assertTrue(display.recover_if_due())
+            self.assertEqual(
+                serial.command.call_args_list, [call(0x01), *initialization]
+            )
+            self.assertEqual(sleep.call_args_list, [call(0.15), call(0.12)])
+            serial.data.assert_not_called()
+            display.show(image)
+            self.assertEqual(serial.data.call_args.args[0], frame)
+            self.assertEqual(panel["pixels"], bytes(frame))
+            self.assertFalse(display.recover_if_due())
+
+            # Multiple silent outages reuse the same driver, SPI and exit hook.
+            clock.return_value += DISPLAY_RECOVERY_SECONDS
+            self.assertTrue(display.recover_if_due())
+            display.show(Image.new("RGB", image.size, "black"))
+            self.assertEqual(set(serial.data.call_args.args[0]), {0})
+            spi.assert_called_once()
+            register.assert_called_once()
+            display._serial.cleanup()
+            serial.cleanup.assert_called_once()
+
+    def test_reset_failure_propagates_and_does_not_postpone_next_attempt(self):
+        config = load_config("config.example.json").display
+        serial = Mock()
+        with (
+            patch("luma.core.interface.serial.spi", return_value=serial),
+            patch("luma.lcd.device.ili9341"),
+            patch("hvv_display.hardware.time.monotonic", return_value=0) as clock,
+            patch("hvv_display.hardware.time.sleep"),
+        ):
+            display = Ili9341Display(config)
+            clock.return_value = DISPLAY_RECOVERY_SECONDS
+            serial.command.side_effect = OSError("SPI disconnected")
+            with self.assertRaisesRegex(OSError, "SPI disconnected"):
+                display.recover_if_due()
+            serial.command.side_effect = None
+            self.assertTrue(display.recover_if_due())

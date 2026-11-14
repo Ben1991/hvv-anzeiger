@@ -358,6 +358,10 @@ def run() -> int:
         display_available = False
         if args.output or display is not None:
             try:
+                if display is not None and display.recover_if_due():
+                    # A reset erases controller state. Redraw even an unchanged
+                    # frame (including the black frame during night shutdown).
+                    last_board_state = None
                 last_board_state = update_board(
                     visible_departures,
                     now=now,
