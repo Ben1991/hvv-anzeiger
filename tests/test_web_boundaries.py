@@ -446,10 +446,16 @@ class WebBoundariesTest(unittest.TestCase):
     def test_cli_passes_arguments_to_server(self):
         with (
             patch.object(sys, "argv", ["hvv-web", "--port", "1234"]),
+            patch.dict(
+                "os.environ", {"HVV_DEPARTURE_CACHE": "/data/departures.json"}
+            ),
             patch.object(web, "run") as run,
         ):
             web.main()
         self.assertEqual(run.call_args.args[1], 1234)
+        self.assertEqual(
+            run.call_args.kwargs["departure_cache"], "/data/departures.json"
+        )
 
 
 if __name__ == "__main__":

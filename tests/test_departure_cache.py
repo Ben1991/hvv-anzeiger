@@ -75,6 +75,21 @@ class DepartureCacheTest(unittest.TestCase):
         self.assertNotIn("GEOFOX_PASSWORD", serialized)
         self.assertNotIn("credentials.env", serialized)
 
+    def test_negative_realtime_delay_survives_cache_round_trip(self) -> None:
+        early_departure = Departure(
+            "21",
+            "U Niendorf Nord",
+            self.fetched_at + timedelta(minutes=4, seconds=-60),
+            delay_seconds=-60,
+            station_label="R",
+            product="bus",
+        )
+        self.cache.save([early_departure], self.fetched_at, self.source)
+        loaded = self.cache.load(self.source, now=self.fetched_at)
+
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded.departures, [early_departure])
+
     def test_stale_snapshot_is_shown_only_until_the_configured_age(self) -> None:
         self.cache.save(self.departures, self.fetched_at, self.source)
         loaded = self.cache.load(
@@ -173,6 +188,15 @@ class DepartureCacheTest(unittest.TestCase):
         self.cache.key_path.write_bytes(b"bad")
         self.cache.key_path.chmod(0o600)
         self.assertIsNone(self.cache.load(self.source))
+        self.cache.save(self.departures, self.fetched_at, self.source)
+        recovered = self.cache.load(self.source, now=self.fetched_at)
+        self.assertIsNotNone(recovered)
+        self.assertEqual(recovered.departures, self.departures)
+        if os.name != "nt":
+            self.cache.key_path.chmod(0o644)
+            self.assertIsNone(self.cache.load(self.source))
+            self.cache.save(self.departures, self.fetched_at, self.source)
+            self.assertIsNotNone(self.cache.load(self.source, now=self.fetched_at))
 
     def test_future_timestamps_and_invalid_fingerprints_are_rejected(self) -> None:
         self.cache.save(self.departures, self.fetched_at, self.source)
@@ -217,6 +241,7 @@ class DepartureCacheTest(unittest.TestCase):
                 departure_time="2026-11-14T10:00:00"
             ),
             lambda payload: payload["departures"][0].update(delay_seconds=True),
+            lambda payload: payload["departures"][0].update(delay_seconds=86_401),
             lambda payload: payload["departures"][0].update(cancelled=1),
             lambda payload: payload.update(departures=[{}] * 31),
             lambda payload: payload.update(fetched_at=3),

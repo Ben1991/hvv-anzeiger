@@ -18,7 +18,9 @@ produktiven Renderer und der Weboberfläche.
 | Höchstalter und sichtbarer Stale-Status | `DepartureCacheTest.test_stale_snapshot_is_shown_only_until_the_configured_age`, `RenderTest.test_status_text_covers_wifi_stale_and_current_states` und `WebApplicationTest.test_expired_web_cache_is_empty_and_shows_next_retry` |
 | Kein falscher Live-Zeitpunkt | Cache serialisiert und rendert den unveränderten `fetched_at`-Zeitpunkt; Webtests prüfen den ursprünglichen Abruf und das Datenalter |
 | 429 und `Retry-After` bleiben wirksam | Neustart-/Webtests prüfen genau einen Geofox-Aufruf und den nächsten Versuch nach 120 Sekunden; Cache-Lesen selbst ruft Geofox nicht auf |
-| Beschädigung, Manipulation, Größe und Dateirechte | `DepartureCacheTest.test_modified_payload_is_rejected_without_crashing`, `test_invalid_and_oversized_cache_files_are_ignored`, `test_cache_symlink_hardlink_and_permissive_file_are_rejected` und `test_missing_or_invalid_key_rejects_the_snapshot` |
+| Beschädigung, Manipulation, Größe und Dateirechte | `DepartureCacheTest.test_modified_payload_is_rejected_without_crashing`, `test_invalid_and_oversized_cache_files_are_ignored`, `test_cache_symlink_hardlink_and_permissive_file_are_rejected`, `test_invalid_signed_snapshot_fields_are_rejected` und `test_missing_or_invalid_key_rejects_the_snapshot` |
+| Frühe Abfahrten und Selbstheilung eines ungültigen Schlüssels | `DepartureCacheTest.test_negative_realtime_delay_survives_cache_round_trip` und `test_missing_or_invalid_key_rejects_the_snapshot` |
+| Container verwendet persistenten Cache-Pfad | `ProjectArtifactTest.test_container_departure_cache_uses_persistent_data_volume` und `WebBoundariesTest.test_cli_passes_arguments_to_server` |
 | Konfiguration, Migration und Bereinigung | API-Option `api.max_stale_age_minutes` bleibt rückwärtskompatibel; CLI-Pfad ist über `--departure-cache`/`HVV_DEPARTURE_CACHE` konfigurierbar; README beschreibt erstmalige Anlage, Dateirechte, Updateübernahme und Entfernen |
 | Linux-Installation | `tests/install-smoke.sh` prüft die ausgelieferten systemd-Units und Installationsabläufe |
 

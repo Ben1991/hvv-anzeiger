@@ -10,6 +10,7 @@ EXPOSE 8080
 ENV HVV_CONFIG=/data/config.json \
     HVV_CREDENTIALS_FILE=/data/credentials.env \
     HVV_STATION_CACHE=/data/stations.json \
+    HVV_DEPARTURE_CACHE=/data/departures.json \
     HVV_WEB_ENV_FILE=/data/web.env \
     HVV_WEB_HOST=0.0.0.0 \
     HVV_WEB_TLS_CERTFILE=/data/tls.crt \

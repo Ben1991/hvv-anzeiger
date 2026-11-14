@@ -780,7 +780,8 @@ Der letzte erfolgreiche Abruf wird als begrenzter Abfahrtsstand in
 Abfahrten und den ursprünglichen Abrufzeitpunkt, keine Geofox-Zugangsdaten und
 keine rohe API-Antwort. Display- und Webdienst verwenden dieselbe Datei. Der
 Standardpfad lässt sich mit `--departure-cache` oder `HVV_DEPARTURE_CACHE`
-ändern.
+ändern. Der Container legt den Cache unter `/data/departures.json` im persistent
+gemounteten Datenverzeichnis ab.
 
 `api.max_stale_age_minutes` steuert, wie lange diese Abfahrten bei einem
 Geofox-Fehler nach einem Neustart noch sichtbar bleiben (Standard: fünf
@@ -792,7 +793,8 @@ keine zusätzliche Geofox-Anfrage aus.
 Die Datei `var/departures.key` schützt den Cache mit einer HMAC-Prüfsumme. Der
 Snapshot wird atomar ersetzt; beide Dateien haben Modus `0600`. Beschädigte, zu große,
 verlinkte, fremde oder veränderte Dateien werden ignoriert und erst nach einem
-erfolgreichen Geofox-Abruf ersetzt. Es gibt höchstens eine Cache-Datei und eine
+erfolgreichen Geofox-Abruf ersetzt. Ein beschädigter oder unsicherer HMAC-Schlüssel
+wird bei diesem Abruf atomar erneuert. Es gibt höchstens eine Cache-Datei und eine
 Schlüsseldatei; eine Bereinigung alter Snapshots ist nicht nötig. Ältere
 Installationen starten ohne Migration und legen beide Dateien nach dem nächsten
 erfolgreichen Abruf an. Der Installer übernimmt sie bei Updates zusammen mit

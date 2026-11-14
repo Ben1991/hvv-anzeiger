@@ -10,6 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProjectArtifactTest(unittest.TestCase):
+    def test_container_departure_cache_uses_persistent_data_volume(self) -> None:
+        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+        compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+        self.assertIn("HVV_DEPARTURE_CACHE=/data/departures.json", dockerfile)
+        self.assertIn("./data:/data", compose)
+
     def test_readme_has_open_source_user_journey(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         headings = [

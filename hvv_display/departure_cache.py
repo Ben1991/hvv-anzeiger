@@ -164,7 +164,7 @@ def _departure_from_data(value: Any) -> Departure:
     if departure_time.tzinfo is None:
         raise ValueError("departure timestamp needs timezone")
     delay = value.get("delay_seconds")
-    if type(delay) is not int or not 0 <= delay <= 86_400:
+    if type(delay) is not int or not -86_400 <= delay <= 86_400:
         raise ValueError("invalid delay")
     cancelled = value.get("cancelled")
     if type(cancelled) is not bool:
@@ -199,7 +199,14 @@ class DepartureCache:
         try:
             descriptor = os.open(self.key_path, flags, 0o600)
         except FileExistsError:
-            return self._load_key()
+            try:
+                return self._load_key()
+            except (OSError, ValueError):
+                # A partial or unsafe key from an interrupted first write must
+                # not permanently disable snapshots. Replace it atomically.
+                key = secrets.token_bytes(KEY_BYTES)
+                _write_private_file(self.key_path, key)
+                return key
         key = secrets.token_bytes(KEY_BYTES)
         try:
             if os.name != "nt":  # pragma: no branch - Windows has no fchmod
