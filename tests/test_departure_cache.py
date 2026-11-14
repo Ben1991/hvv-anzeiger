@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import multiprocessing
 import os
 import stat
 import unittest
@@ -18,11 +19,20 @@ from hvv_display.config import load_config
 from hvv_display.departure_cache import (
     MAX_CACHE_BYTES,
     DepartureCache,
+    _exclusive_cache_lock,
     departure_source,
 )
 from hvv_display.freshness import departures_for_display
 from hvv_display.geofox import HAMBURG_TZ
 from hvv_display.models import Departure
+
+
+def _save_in_child_process(  # pragma: no cover - child process has independent coverage
+    path, departures, fetched_at, source, started, finished
+):
+    started.set()
+    DepartureCache(path).save(departures, fetched_at, source)
+    finished.set()
 
 
 class DepartureCacheTest(unittest.TestCase):
@@ -347,6 +357,34 @@ class DepartureCacheTest(unittest.TestCase):
         self.assertFalse(second.is_alive())
         self.assertEqual(errors, [])
         loaded = self.cache.load(self.source)
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded.departures, self.departures)
+
+    def test_cache_lock_serializes_distinct_service_processes(self) -> None:
+        context = multiprocessing.get_context("spawn")
+        started = context.Event()
+        finished = context.Event()
+        process = context.Process(
+            target=_save_in_child_process,
+            args=(
+                self.path,
+                self.departures,
+                self.fetched_at,
+                self.source,
+                started,
+                finished,
+            ),
+        )
+        with _exclusive_cache_lock(self.path):
+            process.start()
+            self.assertTrue(started.wait(2))
+            self.assertFalse(finished.wait(0.1))
+        process.join(3)
+
+        self.assertFalse(process.is_alive())
+        self.assertEqual(process.exitcode, 0)
+        self.assertTrue(finished.is_set())
+        loaded = self.cache.load(self.source, now=self.fetched_at)
         self.assertIsNotNone(loaded)
         self.assertEqual(loaded.departures, self.departures)
 

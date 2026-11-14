@@ -15,7 +15,7 @@ produktiven Renderer und der Weboberfläche.
 | Kriterium | Nachweis |
 |---|---|
 | Letzter erfolgreicher Stand bleibt über Neustarts erhalten | `DepartureCacheTest.test_snapshot_survives_a_new_cache_instance_with_private_files`, `MainTest.test_restart_uses_signed_cache_after_geofox_failure_without_extra_request` und `WebApplicationTest.test_web_restart_uses_cache_and_429_retry_without_an_extra_geofox_call` |
-| Gleichzeitige Erststarts schreiben einen konsistenten Schlüssel und Snapshot | `DepartureCacheTest.test_concurrent_cache_writers_serialize_key_and_snapshot_publication` |
+| Gleichzeitige Erststarts schreiben einen konsistenten Schlüssel und Snapshot | `DepartureCacheTest.test_concurrent_cache_writers_serialize_key_and_snapshot_publication` und `test_cache_lock_serializes_distinct_service_processes` |
 | Höchstalter und sichtbarer Stale-Status | `DepartureCacheTest.test_stale_snapshot_is_shown_only_until_the_configured_age`, `RenderTest.test_status_text_covers_wifi_stale_and_current_states` und `WebApplicationTest.test_expired_web_cache_is_empty_and_shows_next_retry` |
 | Kein falscher Live-Zeitpunkt | Cache serialisiert und rendert den unveränderten `fetched_at`-Zeitpunkt; Webtests prüfen den ursprünglichen Abruf und das Datenalter |
 | 429 und `Retry-After` bleiben wirksam | Neustart-/Webtests prüfen genau einen Geofox-Aufruf und den nächsten Versuch nach 120 Sekunden; Cache-Lesen selbst ruft Geofox nicht auf |
