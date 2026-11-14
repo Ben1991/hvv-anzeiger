@@ -1663,7 +1663,14 @@ Geheimnisse veröffentlichen.
   Hintergrundbeleuchtung nicht elektrisch aus; ESPHome steuert sie über
   den konfigurierten Backlight-Ausgang.
 - Die erwartete Abfahrtszeit bleibt eine Prognose.
-- Verbindliche Strom-, ### Release V2.5.0 – Display-Wiederherstellung und Diagnose
+- Verbindliche Strom-, RAM- und CPU-Werte erfordern eine Messung am konkreten
+  Gerät.
+- Display-Hardware und authentifizierte Geofox-Produktivantworten können in
+  GitHub Actions nicht geprüft werden.
+
+## Release Notes
+
+### Release V2.5.0 – Display-Wiederherstellung und Diagnose
 
 V2.5.0 macht den Raspberry-Pi-Bildschirm robuster gegen kurzzeitige Kontaktprobleme und erweitert die Home-Assistant-Diagnose. Die Paketversion ist `0.5.0`.
 
@@ -1676,10 +1683,6 @@ V2.5.0 macht den Raspberry-Pi-Bildschirm robuster gegen kurzzeitige Kontaktprobl
 
 [Änderungen seit V2.4.0](https://github.com/Ben1991/hvv-anzeiger/compare/V2.4.0...V2.5.0) ·
 [Vollständige Release Notes zu V2.5.0](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.5.0)
-
-chst unbekannter Displaystatus nach Dienststart.
-- Home-Assistant-Fehler- und Problemsensor mit getrennten Fehler- und
-  Wiederherstellungszählern; keine zusätzlichen Geofox-Aufrufe für Diagnosen.
 
 ### Release V2.4.0 – Home Assistant und ESP32
 
