@@ -31,10 +31,22 @@ class _ReplaySerial:
     def cleanup(self) -> None:
         self.serial.cleanup()
 
+    def hardware_reset(self, pin: int) -> None:
+        # luma has no public reset method. Reuse its configured GPIO backend
+        # instead of constructing another SPI/device with another exit hook.
+        gpio = self.serial._gpio
+        try:
+            gpio.output(pin, gpio.LOW)
+            time.sleep(0.1)
+        finally:
+            gpio.output(pin, gpio.HIGH)
+        time.sleep(0.15)
+
 
 class Ili9341Display:
     def __init__(self, config: DisplayConfig) -> None:
         try:
+            from luma.core.error import Error as DriverError
             from luma.core.framebuffer import full_frame
             from luma.core.interface.serial import spi
             from luma.lcd.device import ili9341
@@ -43,22 +55,36 @@ class Ili9341Display:
                 "Display-Treiber fehlt. Installation gemäß README ausführen."
             ) from exc
 
-        serial = spi(
-            port=config.spi_port,
-            device=config.spi_device,
-            gpio_DC=config.gpio_dc,
-            gpio_RST=config.gpio_reset,
-            bus_speed_hz=config.bus_speed_hz,
-        )
-        self._serial = _ReplaySerial(serial)
-        self._device: Any = ili9341(
-            serial_interface=self._serial,
-            width=320,
-            height=240,
-            rotate=config.rotate,
-            bgr=config.bgr,
-            framebuffer=full_frame(),
-        )
+        serial = None
+        try:
+            serial = spi(
+                port=config.spi_port,
+                device=config.spi_device,
+                gpio_DC=config.gpio_dc,
+                gpio_RST=config.gpio_reset,
+                bus_speed_hz=config.bus_speed_hz,
+                reset_hold_time=0.1,
+                reset_release_time=0.15,
+            )
+            self._serial = _ReplaySerial(serial)
+            self._reset_pin = config.gpio_reset
+            self._device: Any = ili9341(
+                serial_interface=self._serial,
+                width=320,
+                height=240,
+                rotate=config.rotate,
+                bgr=config.bgr,
+                framebuffer=full_frame(),
+            )
+        except (DriverError, OSError, RuntimeError) as exc:
+            if serial is not None:
+                try:
+                    serial.cleanup()
+                except (DriverError, OSError, RuntimeError):
+                    LOG.debug("SPI nach Initialisierungsfehler nicht freigegeben")
+            raise RuntimeError(
+                "Displaytreiber konnte nicht initialisiert werden"
+            ) from exc
         self._serial.recording = False
         self._next_recovery_at = time.monotonic() + DISPLAY_RECOVERY_SECONDS
 
@@ -71,6 +97,7 @@ class Ili9341Display:
         """
         if time.monotonic() < self._next_recovery_at:
             return False
+        self._serial.hardware_reset(self._reset_pin)
         self._serial.command(0x01)  # ILI9341 software reset
         time.sleep(0.15)
         for command in self._serial.initialization:

@@ -636,6 +636,7 @@ class MainTest(unittest.TestCase):
                 patch("hvv_display.main._arguments", return_value=arguments),
                 patch("hvv_display.main.GeofoxClient", return_value=client),
                 patch("hvv_display.main.Ili9341Display", return_value=display),
+                patch("hvv_display.main.HealthPublisher") as health,
                 patch(
                     "hvv_display.main.resolve_stations",
                     return_value=config.stations,
@@ -643,15 +644,23 @@ class MainTest(unittest.TestCase):
                 patch("hvv_display.main.clock_is_synchronized", return_value=True),
                 patch("hvv_display.main.signal.signal"),
             ):
-                self.assertEqual(run(), 0)
+                self.assertEqual(run(), 1)
         display.show.assert_called_once()
+        details = health.return_value.publish.call_args.kwargs["display_diagnostics"]
+        self.assertEqual(details["last_error_kind"], "transfer")
+        self.assertEqual(details["error_count"], 1)
 
     def test_silent_display_loss_recovers_even_when_visible_frame_is_unchanged(self):
         for night in (False, True):
             with self.subTest(night_shutdown=night):
                 self._check_periodic_display_recovery(night)
 
-    def _check_periodic_display_recovery(self, night):
+    def test_initialization_and_reset_faults_are_published_then_recover(self):
+        for failure in ("initialization", "reset"):
+            with self.subTest(failure=failure):
+                self._check_periodic_display_recovery(False, failure)
+
+    def _check_periodic_display_recovery(self, night, failure=None):
         config = load_config("config.example.json")
         config = replace(
             config,
@@ -680,6 +689,22 @@ class MainTest(unittest.TestCase):
             patch("hvv_display.main.time.sleep", side_effect=sleep),
         ):
             display = Ili9341Display(config.display)
+            injected = False
+            real_recover = display.recover_if_due
+
+            def create_display(_config):
+                nonlocal injected
+                if failure == "initialization" and not injected:
+                    injected = True
+                    raise OSError("secret GPIO path")
+                return display
+
+            def recover_display():
+                nonlocal injected
+                if failure == "reset" and elapsed >= 60 and not injected:
+                    injected = True
+                    raise OSError("secret GPIO path")
+                return real_recover()
             arguments = Namespace(
                 config="config.example.json",
                 credentials=str(Path(directory) / "missing.env"),
@@ -690,10 +715,10 @@ class MainTest(unittest.TestCase):
             with (
                 patch("hvv_display.main._arguments", return_value=arguments),
                 patch("hvv_display.main.load_config", return_value=config),
-                patch("hvv_display.main.Ili9341Display", return_value=display),
+                patch("hvv_display.main.Ili9341Display", side_effect=create_display),
                 patch.object(display, "show", wraps=display.show) as show,
                 patch.object(
-                    display, "recover_if_due", wraps=display.recover_if_due
+                    display, "recover_if_due", side_effect=recover_display
                 ) as recover,
                 patch("hvv_display.main.datetime") as dates,
                 patch("hvv_display.main.GeofoxClient") as client,
@@ -715,7 +740,9 @@ class MainTest(unittest.TestCase):
             # Six cycles: draw initially and after the 60-second reset only.
             # This verifies recovery bypasses BOTH application caching and the
             # real luma framebuffer, even for an unchanged black night frame.
-            self.assertEqual(recover.call_count, 6)
+            self.assertEqual(
+                recover.call_count, 5 if failure == "initialization" else 6
+            )
             self.assertEqual(show.call_count, 2)
             self.assertEqual(
                 show.call_args_list[0].args[0].tobytes(),
@@ -724,7 +751,43 @@ class MainTest(unittest.TestCase):
             if night:
                 self.assertEqual(set(show.call_args.args[0].tobytes()), {0})
                 client.return_value.departure_list.assert_not_called()
-            self.assertTrue(all(value["display_available"] for value in published))
+            if failure:
+                failed = [
+                    value for value in published if not value["display_available"]
+                ]
+                self.assertEqual(len(failed), 1)
+                self.assertEqual(
+                    failed[0]["display_diagnostics"]["last_error_kind"], failure
+                )
+                self.assertNotIn("secret GPIO path", str(published))
+                details = published[-1]["display_diagnostics"]
+                self.assertEqual(details["error_count"], 1)
+                self.assertEqual(details["consecutive_failures"], 0)
+                self.assertGreater(details["recovery_successes"], 0)
+                self.assertTrue(published[-1]["display_available"])
+            else:
+                self.assertTrue(all(value["display_available"] for value in published))
+
+    def test_output_failure_does_not_report_a_gpio_fault(self):
+        with TemporaryDirectory() as directory:
+            arguments = Namespace(
+                config="config.example.json", cache=str(Path(directory) / "stations"),
+                once=True, output=str(Path(directory) / "output.png"),
+            )
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient"),
+                patch("hvv_display.main.resolve_stations", return_value=()),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch("hvv_display.main.wifi_connected", return_value=True),
+                patch("hvv_display.main.signal.signal"),
+                patch("hvv_display.main.HealthPublisher") as health,
+                patch(
+                    "hvv_display.main.update_board", side_effect=OSError("disk full")
+                ),
+            ):
+                self.assertEqual(run(), 1)
+        self.assertIsNone(health.return_value.publish.call_args.kwargs["display_diagnostics"])
 
     def test_invalid_changed_configuration_keeps_previous_values(self) -> None:
         handlers = []

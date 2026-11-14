@@ -6,7 +6,9 @@ Ziel ist ein ILI9341 am Raspberry Pi, dessen Controller nach kurzzeitigem
 Kontaktverlust ein weißes oder beschädigtes Bild zeigt, während der Host
 erfolgreiche SPI-Schreibzugriffe meldet. Ein Fehlerhandler allein erkennt diesen
 Fall nicht. Nach jeweils 60 Sekunden monotoner Laufzeit führt der nächste
-Anzeigezyklus deshalb einen Software-Reset (0x01) aus, wartet 150 ms, spielt
+Anzeigezyklus deshalb einen RST-Puls am konfigurierten GPIO aus: 100 ms LOW,
+danach HIGH und 150 ms Wartezeit. Anschließend führt er zusätzlich einen
+Software-Reset (0x01) aus, wartet 150 ms, spielt
 die Initialisierung des installierten luma-Treibers erneut ab und wartet nach
 Sleep Out (0x11) weitere 120 ms. Danach wird das ganze Bild neu übertragen.
 
@@ -22,8 +24,52 @@ API-Fehlern. Deshalb ist das Wiederherstellungsfenster nach Wiederverbindung
 60 Sekunden plus bis zu einem Anzeigezyklus und laufenden Netzwerkabfragen.
 Die Routine schaltet weder Pi noch Display-Stromversorgung aus. Sie kann kurz
 flackern. Ohne zuverlässige Strom-, Masse-, CS-, DC- und SPI-Verbindungen oder
-bei einem Controller, der keine Befehle mehr annimmt, ist keine Wiederherstellung
+bei einem Controller, der weder auf RST noch auf Befehle reagiert, ist keine Wiederherstellung
 garantiert. Ein erfolgreicher SPI-Aufruf ist kein optischer Funktionsnachweis.
+
+| Verbindung | Unterstützung nach stabiler Wiederverbindung | Nicht messbar/behebbar |
+|---|---|---|
+| SCK, MOSI, CS, DC | RST-Puls, Software-Reset, Initialisierung und vollständiges Bild | dauerhaft offene Leitung, tatsächlicher Signalpegel am Panel |
+| RST | gezielter LOW/HIGH-Puls am konfigurierten GPIO; zusätzlich SPI-Reset | dauerhaft getrennte oder kurzgeschlossene Resetleitung |
+| VCC, GND | Reset/Initialisierung nach zurückgekehrter Versorgung können helfen | Spannungsabfall und fehlende Versorgung; keine elektrische Schaltmöglichkeit |
+| LED | keine Softwaremaßnahme beim dokumentierten 3,3-V-Anschluss | unterbrochene Versorgung der Hintergrundbeleuchtung |
+| MISO, optional | für die Schreibausgabe nicht benutzt | kein Register- oder Bild-Readback implementiert |
+
+Die Pin-Zuordnung folgt der Konfiguration, nicht einem fest verdrahteten GPIO
+25. Der RST-Pin wird auch bei einem unterbrochenen Resetablauf wieder auf HIGH
+gesetzt, sofern der GPIO-Treiber das noch zulässt. Bei Fehlern der
+Treiberinitialisierung bleibt der Dienst aktiv und versucht es im nächsten
+Zyklus erneut. Ein `--once`-Aufruf meldet eine gescheiterte Ausgabe mit Exit 1.
+
+## Diagnose und Home Assistant
+
+`health.json`, `/api/health` und `/api/diagnostics` enthalten das optionale
+Objekt `display_diagnostics` mit `error_count`, `consecutive_failures`,
+`recovery_attempts`, `recovery_successes`, `last_error_kind`, `last_error_at`
+und `last_recovery_at`. Zeitpunkte sind UTC; Zähler gelten seit Dienststart.
+Fehlerarten sind ausschließlich `none`, `initialization`, `reset` und `transfer`.
+Rohe Exception-Texte und Pfade werden nicht exportiert. Alte Statusdateien ohne
+diese Felder bleiben lesbar; ihr Displaydiagnosestatus bleibt unbekannt.
+Ein Image-Backend liefert kein GPIO-Diagnoseobjekt.
+
+Erst die erfolgreiche Bildübertragung nach einem Reset beziehungsweise
+Treiber-Neuaufbau zählt als erfolgreiche Wiederherstellung. Eine vorsorgliche
+Initialisierung erhöht keinen Fehlerzähler. Die Zähler messen keine
+elektrischen Kontaktverluste und keine optischen Defekte.
+
+Das [HA-Paket](../home-assistant/hvv.yaml) liefert `sensor.hvv_display_error`
+und `binary_sensor.hvv_display_problem`. Beim Update zusätzlich
+`hvv_health_url: https://<Hostname>:8080/api/diagnostics` in HA-Secrets ergänzen.
+Der neue Endpunkt braucht dieselbe Anmeldung und TLS-Konfiguration, fragt
+keine Geofox-Daten ab und antwortet auch bei einem Gerätefehler mit HTTP 200.
+Damit kann HA Fehlerattribute lesen. `/api/health` behält unverändert die
+Monitoring-Codes 200/503/500.
+
+Aktive Fehler verschwinden nach erfolgreicher Ausgabe. Die letzte Fehlerart,
+deren UTC-Zeit und der Gesamtzähler bleiben bis zum Dienstneustart erhalten.
+Ein ausgebliebenes Lebenszeichen ergibt `service_unavailable`. Ein nicht
+erreichbarer Webdienst ergibt nicht verfügbare Sensoren; ein alter oder
+fehlender GPIO-Status wird nicht als gesund behandelt.
 
 ## Automatisierter Nachweis
 
@@ -44,7 +90,13 @@ Aus dem Repository-Verzeichnis:
   Übertragung desselben RGB-Bildes (230.400 Byte). Auch ein zweiter Ausfall und
   das schwarze Bild werden geprüft. Treiber, SPI und Exit-Hook bleiben einmalig.
   Das simulierte Panel bleibt trotz erfolgreicher Schreibaufrufe weiß, bis es
-  den Reset und die Initialisierung empfängt; danach übernimmt es wieder Pixel.
+  den Hardware-Reset und die Initialisierung empfängt; vorher ignoriert es
+  sogar den SPI-Software-Reset. Danach übernimmt es wieder Pixel.
+- `test_hardware_reset_uses_real_luma_spi_backend_and_configured_gpio` führt
+  auch die tatsächliche luma-SPI-Implementierung aus und prüft den RST-Puls auf
+  einem abweichend konfigurierten GPIO vor dem ersten SPI-Resetbefehl.
+- `test_interrupted_reset_releases_reset_pin_and_can_be_retried` prüft die
+  Rückkehr auf HIGH nach einem abgebrochenen Reset.
 - `test_reset_failure_propagates_and_does_not_postpone_next_attempt` injiziert
   einen SPI-Fehler beim Reset. Der Fehler wird weitergereicht und der
   Wiederherstellungszeitpunkt bei Misserfolg nicht verschoben.
@@ -54,12 +106,24 @@ Aus dem Repository-Verzeichnis:
   genau zwei vollständige Bildausgaben: anfangs und nach 60 Sekunden.
   Der Ablauf wird tagsüber und nachts geprüft; nachts bleibt das Bild schwarz
   und es erfolgen keine Geofox-Abfragen.
+- Weitere Schleifentests injizieren Initialisierungs- und Resetfehler, prüfen
+  die veröffentlichten Fehlerkategorien/Zähler und die anschließende Erholung.
+  Ein gescheiterter PNG-Export wird nicht als GPIO-Fehler gezählt.
+- `test_home_assistant.py` liest das ausgelieferte YAML und rendert die echten
+  Jinja-Vorlagen für Fehler, Wiederherstellung, Historie, fehlenden/alten Status,
+  Dienststillstand und Netzwerkfehler. HTTP-Tests prüfen Anmeldung, Fehlerdaten
+  trotz HTTP 200 und Diagnose ohne Geofox-Aufruf. Das ist kein Live-HA-Test.
 
 Diese Tests beweisen den Softwareablauf und die gesendeten Befehle/Bilddaten.
 Sie beweisen keine sichtbare Wiederherstellung eines physischen Panels.
 
-Ergebnis in der Cloud auf Basis von `main`-Commit `2959820`: **306 Tests
-bestanden**, **100 % Statement- und Branch-Abdeckung**, **Ruff bestanden**.
+Aktueller Cloud-Prüfstand: **317 Tests bestanden**, **100 % Statement- und
+Branch-Abdeckung**, **Ruff, Paket-Build, Vorschau und Shell-Syntax bestanden**.
+Der erste Stand (Commit `6114523`, nur Software-Reset) bestand 306 Tests.
+Ein Zwischenlauf traf beim bestehenden HTTP-413-Test auf einen Broken Pipe:
+Der Server schloss die übergroße Anfrage, während der Client noch schrieb.
+Die unveränderte HTTP-Boundary-Suite bestand isoliert; der anschließende
+vollständige Lauf bestand ebenfalls. Die physische Abnahme bleibt getrennt.
 
 ## Abnahme am Raspberry Pi – noch nicht ausgeführt
 
@@ -78,8 +142,14 @@ bestanden**, **100 % Statement- und Branch-Abdeckung**, **Ruff bestanden**.
    Rotation, fortlaufende Aktualisierung; PID und Neustartzähler unverändert.
 6. Im konfigurierten Nachtfenster wiederholen: nach einer Initialisierung
    wieder schwarzes Bild, keine neuen Geofox-Abfragen durch den Reset.
-7. Ergebnis mit PASS/FAIL/BLOCKED, Zeiten und Belegen festhalten. Ein
+7. HA-Paket und URL-Secret aktualisieren, HA-Konfiguration prüfen und neu
+   starten. `sensor.hvv_display_error` und `binary_sensor.hvv_display_problem`
+   prüfen; vorsorgliche Resets dürfen den Fehlerzähler nicht erhöhen. Einen
+   erkannten Treiberfehler samt Fehlerart und Zähler beobachten und nach
+   Wiederherstellung `none`/aus sowie erhaltene Historie verifizieren.
+8. Ergebnis mit PASS/FAIL/BLOCKED, Zeiten und Belegen festhalten. Ein
    dauerhaft unterbrochener Kontakt ist ein Hardwarefehler; die Software kann
    fehlende Versorgung oder Leitungen nicht ersetzen.
 
 Hardwareergebnis: **NOT RUN** – in der Cloud ist kein Pi-Display angeschlossen.
+Live-Home-Assistant-Ergebnis: **NOT RUN** – keine HA-Instanz verbunden.

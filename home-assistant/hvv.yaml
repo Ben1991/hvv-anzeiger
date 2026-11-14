@@ -22,8 +22,61 @@ sensor:
       - departures
       - display_payload
 
+  # Always HTTP 200 for readable diagnostics, even when the display is faulty.
+  # /api/health retains its monitoring HTTP 200/503/500 contract.
+  - platform: rest
+    name: HVV Diagnostics
+    unique_id: hvv_diagnostics
+    resource: !secret hvv_health_url
+    authentication: basic
+    username: hvv-anzeiger
+    password: !secret hvv_web_password
+    verify_ssl: true
+    scan_interval: 15
+    timeout: 10
+    value_template: "{{ 'online' if value_json.snapshot_available else 'missing' }}"
+    json_attributes:
+      - status
+      - snapshot_available
+      - service_running
+      - heartbeat_age_seconds
+      - display_available
+      - display_diagnostics
+
 template:
   - sensor:
+      - name: HVV Display Error
+        unique_id: hvv_display_error
+        icon: mdi:monitor-alert
+        availability: >-
+          {{ states('sensor.hvv_diagnostics') == 'online' and
+             state_attr('sensor.hvv_diagnostics', 'display_diagnostics') is mapping }}
+        state: >-
+          {% set d = state_attr('sensor.hvv_diagnostics', 'display_diagnostics') or {} %}
+          {% if not state_attr('sensor.hvv_diagnostics', 'service_running') %}
+            service_unavailable
+          {% elif state_attr('sensor.hvv_diagnostics', 'display_available') == false %}
+            {{ d.get('last_error_kind', 'unknown') if d.get('last_error_kind', 'none') != 'none' else 'unknown' }}
+          {% elif state_attr('sensor.hvv_diagnostics', 'display_available') == true %}
+            none
+          {% else %}
+            unknown
+          {% endif %}
+        attributes:
+          error_count: >-
+            {{ (state_attr('sensor.hvv_diagnostics', 'display_diagnostics') or {}).get('error_count') }}
+          consecutive_failures: >-
+            {{ (state_attr('sensor.hvv_diagnostics', 'display_diagnostics') or {}).get('consecutive_failures') }}
+          recovery_attempts: >-
+            {{ (state_attr('sensor.hvv_diagnostics', 'display_diagnostics') or {}).get('recovery_attempts') }}
+          recovery_successes: >-
+            {{ (state_attr('sensor.hvv_diagnostics', 'display_diagnostics') or {}).get('recovery_successes') }}
+          last_error_kind: >-
+            {{ (state_attr('sensor.hvv_diagnostics', 'display_diagnostics') or {}).get('last_error_kind') }}
+          last_error_at: >-
+            {{ (state_attr('sensor.hvv_diagnostics', 'display_diagnostics') or {}).get('last_error_at') }}
+          last_recovery_at: >-
+            {{ (state_attr('sensor.hvv_diagnostics', 'display_diagnostics') or {}).get('last_recovery_at') }}
       - name: HVV Next Departure
         unique_id: hvv_next_departure
         icon: mdi:bus-clock
@@ -41,6 +94,11 @@ template:
             {% set rows = state_attr('sensor.hvv_board', 'departures') or [] %}
             {{ rows[0].destination if rows else '' }}
   - binary_sensor:
+      - name: HVV Display Problem
+        unique_id: hvv_display_problem
+        device_class: problem
+        availability: "{{ states('sensor.hvv_display_error') not in ['unknown', 'unavailable'] }}"
+        state: "{{ states('sensor.hvv_display_error') != 'none' }}"
       - name: HVV Data Stale
         unique_id: hvv_data_stale
         device_class: problem
@@ -51,3 +109,4 @@ recorder:
   exclude:
     entities:
       - sensor.hvv_board
+      - sensor.hvv_diagnostics

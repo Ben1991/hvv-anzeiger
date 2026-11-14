@@ -25,7 +25,7 @@ from .freshness import (
 )
 from .geofox import HAMBURG_TZ, GeofoxClient, GeofoxError
 from .hardware import Ili9341Display
-from .health import HealthPublisher, health_path
+from .health import DisplayDiagnostics, HealthPublisher, health_path
 from .models import Departure
 from .network import wifi_connected
 from .render import HEIGHT, WIDTH, board_state_key, render_board
@@ -173,7 +173,7 @@ def run() -> int:
             version=config.api.version,
             timeout=config.api.request_timeout_seconds,
         )
-        display = None if args.output else Ili9341Display(config.display)
+        display = None
         config_mtime_ns = config_path.stat().st_mtime_ns
         credentials_mtime_ns = (
             credentials_path.stat().st_mtime_ns if credentials_path.exists() else None
@@ -208,6 +208,7 @@ def run() -> int:
     error_kind = "none"
     rate_limit_until = 0.0
     health_values = {"configuration_valid": True}
+    display_diagnostics = DisplayDiagnostics()
     notifier.ready()
     while not stopped:
         now = datetime.now(HAMBURG_TZ)
@@ -266,12 +267,13 @@ def run() -> int:
                     exc,
                 )
         if not args.output and display is None:
+            if display_diagnostics.needs_recovery:
+                display_diagnostics.recovery_started()
             try:
                 display = Ili9341Display(config.display)
-                LOG.info(
-                    "Displaytreiber nach einem Verbindungsfehler neu initialisiert"
-                )
+                LOG.info("Displaytreiber initialisiert")
             except (OSError, RuntimeError) as exc:
+                display_diagnostics.failed("initialization", now)
                 LOG.warning("Display ist nicht erreichbar: %s", exc)
         sync_probe = True if clock_confirmed else clock_is_synchronized()
         if sync_probe is True:
@@ -357,11 +359,14 @@ def run() -> int:
         )
         display_available = False
         if args.output or display is not None:
+            display_operation = "reset"
             try:
                 if display is not None and display.recover_if_due():
+                    display_diagnostics.recovery_started()
                     # A reset erases controller state. Redraw even an unchanged
                     # frame (including the black frame during night shutdown).
                     last_board_state = None
+                display_operation = "transfer"
                 last_board_state = update_board(
                     visible_departures,
                     now=now,
@@ -380,9 +385,15 @@ def run() -> int:
                     show_station_label=config.display.show_station_label,
                 )
                 display_available = True
+                display_diagnostics.frame_succeeded(now)
             except (OSError, RuntimeError) as exc:
+                if not args.output:
+                    if display_operation == "reset":
+                        display_diagnostics.recovery_started()
+                    display_diagnostics.failed(display_operation, now)
                 LOG.warning(
-                    "Displayübertragung fehlgeschlagen; erneuter Versuch folgt: %s",
+                    "Displayoperation %s fehlgeschlagen; erneuter Versuch folgt: %s",
+                    display_operation,
                     exc,
                 )
                 display = None
@@ -393,6 +404,9 @@ def run() -> int:
             "network_connected": wifi_state,
             "clock_synchronized": clock_ready,
             "display_available": display_available,
+            "display_diagnostics": (
+                display_diagnostics.snapshot() if not args.output else None
+            ),
             "night_shutdown": night_active,
             "last_successful_fetch": last_updated,
             "consecutive_failures": consecutive_failures,
@@ -407,7 +421,7 @@ def run() -> int:
         publisher.publish(**health_values)
         if args.once:
             publisher.publish(**health_values, service_running=False)
-            return 0 if clock_ready and last_error is None else 1
+            return 0 if clock_ready and last_error is None and display_available else 1
         deadline = time.monotonic() + config.api.refresh_seconds
         while not stopped:
             sleep_now = time.monotonic()
