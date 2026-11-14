@@ -16,6 +16,7 @@ from .clock import in_night_shutdown
 from .clock import time_is_synchronized as clock_is_synchronized
 from .config import ConfigError, load_config
 from .credentials import load_credentials
+from .departure_cache import DepartureCache, departure_source
 from .freshness import (
     MAX_REFRESH_BACKOFF_SECONDS as MAX_REFRESH_BACKOFF_SECONDS,
 )
@@ -67,6 +68,11 @@ def _arguments() -> argparse.Namespace:
         help="Pfad für automatisch gefundene Haltestellen-IDs",
     )
     parser.add_argument(
+        "--departure-cache",
+        default=os.environ.get("HVV_DEPARTURE_CACHE", "var/departures.json"),
+        help="Pfad für den letzten erfolgreichen Abfahrtsstand",
+    )
+    parser.add_argument(
         "--credentials",
         default=os.environ.get("HVV_CREDENTIALS_FILE", "var/credentials.env"),
         help="Pfad zur Geofox-EnvironmentFile",
@@ -97,6 +103,7 @@ def update_board(
     time_mode: str = "countdown",
     minute_unit: str = "min",
     show_station_label: bool = True,
+    retry_seconds: int | None = None,
 ) -> tuple[object, ...]:
     """Render and transfer a frame only when its visible content changed."""
     if night_shutdown:
@@ -114,6 +121,7 @@ def update_board(
             time_mode=time_mode,
             minute_unit=minute_unit,
             show_station_label=show_station_label,
+            retry_seconds=retry_seconds,
         )
     if current_state == previous_state:
         LOG.debug("Displayinhalt unverändert; Aktualisierung übersprungen")
@@ -134,6 +142,7 @@ def update_board(
             time_mode=time_mode,
             minute_unit=minute_unit,
             show_station_label=show_station_label,
+            retry_seconds=retry_seconds,
         )
     if output:
         output_path = Path(output)
@@ -166,6 +175,18 @@ def run() -> int:
         )
         config = load_config(config_path)
         configuration_valid = True
+        departure_cache = DepartureCache(
+            Path(
+                getattr(
+                    args,
+                    "departure_cache",
+                    os.environ.get(
+                        "HVV_DEPARTURE_CACHE",
+                        str(Path(args.cache).parent / "departures.json"),
+                    ),
+                )
+            )
+        )
         credentials = load_credentials(credentials_path)
         client = GeofoxClient(
             config.api.base_url,
@@ -198,6 +219,7 @@ def run() -> int:
     latest: list[Departure] = []
     stations = None
     last_updated: datetime | None = None
+    cache_loaded_for: str | None = None
     consecutive_failures = 0
     last_error: str | None = None
     next_api_attempt_at = 0.0
@@ -253,6 +275,7 @@ def run() -> int:
                 stations = None
                 latest = []
                 last_updated = None
+                cache_loaded_for = None
                 last_error = None
                 consecutive_failures = 0
                 next_api_attempt_at = 0.0
@@ -290,6 +313,13 @@ def run() -> int:
         if sync_probe is True:
             clock_confirmed = True
         clock_ready = clock_confirmed
+        source = departure_source(config)
+        if clock_ready and cache_loaded_for != source:
+            cached = departure_cache.load(source, now=now)
+            if cached is not None:
+                latest = cached.departures
+                last_updated = cached.fetched_at.astimezone(HAMBURG_TZ)
+            cache_loaded_for = source
         night_active = (
             clock_ready
             and config.night_shutdown.enabled
@@ -320,6 +350,13 @@ def run() -> int:
                     max_time_offset=config.api.max_time_offset_minutes,
                 )
                 last_updated = now
+                try:
+                    departure_cache.save(latest, last_updated, source)
+                except (OSError, ValueError) as cache_error:
+                    LOG.warning(
+                        "Abfahrtscache konnte nicht gespeichert werden: %s",
+                        cache_error,
+                    )
                 last_error = None
                 consecutive_failures = 0
                 error_kind = "none"
@@ -394,6 +431,11 @@ def run() -> int:
                     time_mode=config.display.time_mode,
                     minute_unit=config.display.minute_unit,
                     show_station_label=config.display.show_station_label,
+                    retry_seconds=(
+                        max(0, math.ceil(next_api_attempt_at - status_monotonic))
+                        if visible_error is not None and not visible_departures
+                        else None
+                    ),
                 )
                 display_available = True
                 display_diagnostics.frame_succeeded(now)

@@ -228,19 +228,31 @@ def _status_text(
     wifi_is_connected: bool | None,
     stale: bool,
     last_updated: datetime | None,
+    now: datetime | None = None,
     time_is_synchronized: bool | None = True,
 ) -> str | None:
     if time_is_synchronized is False:
         return "ZEIT NICHT SYNCHRON"
+    if stale:
+        label = "DATEN VERALTET"
+        if last_updated:
+            age_seconds = max(
+                0,
+                int(((now or last_updated) - last_updated).total_seconds()),
+            )
+            age = (
+                f"{age_seconds} SEK"
+                if age_seconds < 60
+                else f"{age_seconds // 60} MIN"
+            )
+            label += f" · {age} · STAND {last_updated.strftime('%H:%M')}"
+        if wifi_is_connected is False:
+            label += " · KEIN WLAN"
+        return label
     if wifi_is_connected is False:
         label = "KEIN WLAN"
         if last_updated:
             label += f" · STAND {last_updated.strftime('%H:%M')}"
-        return label
-    if stale:
-        label = "DATEN VERALTET"
-        if last_updated:
-            label += f" · {last_updated.strftime('%H:%M')}"
         return label
     return None
 
@@ -258,6 +270,7 @@ def board_state_key(
     time_mode: str = "countdown",
     minute_unit: str = "min",
     show_station_label: bool = True,
+    retry_seconds: int | None = None,
 ) -> tuple[object, ...]:
     """Describe only visible state so unchanged frames need not be redrawn."""
     visible_departures = tuple(
@@ -289,8 +302,10 @@ def board_state_key(
             time_is_synchronized=time_is_synchronized,
             stale=stale,
             last_updated=last_updated,
+            now=now,
         ),
         show_station_label,
+        retry_seconds if not visible_departures else None,
     )
 
 
@@ -307,6 +322,7 @@ def render_board(
     time_mode: str = "countdown",
     minute_unit: str = "min",
     show_station_label: bool = True,
+    retry_seconds: int | None = None,
 ) -> Image.Image:
     image = Image.new("RGB", (WIDTH, HEIGHT), BLACK)
     draw = ImageDraw.Draw(image)
@@ -333,7 +349,11 @@ def render_board(
         draw.text(((WIDTH - text_width) / 2, 102), text, font=font, fill=WHITE)
         draw.text(
             (42, 136),
-            "Nächster Versuch automatisch",
+            (
+                f"Nächster Versuch in {retry_seconds} s"
+                if retry_seconds is not None
+                else "Nächster Versuch automatisch"
+            ),
             font=_font(14),
             fill=MUTED,
         )
@@ -402,13 +422,12 @@ def render_board(
         time_is_synchronized=time_is_synchronized,
         stale=stale,
         last_updated=last_updated,
+        now=now,
     )
     if status_label:
         draw.rectangle((0, HEIGHT - 14, WIDTH, HEIGHT), fill=RED)
-        draw.text(
-            (7, HEIGHT - 14),
-            status_label,
-            font=_font(10, bold=True),
-            fill=WHITE,
+        status, font = _fit_text(
+            draw, status_label, WIDTH - 14, start_size=10, min_size=8, bold=True
         )
+        draw.text((7, HEIGHT - 14), status, font=font, fill=WHITE)
     return image

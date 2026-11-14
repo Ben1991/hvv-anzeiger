@@ -737,7 +737,8 @@ Unvollständige Verbindungen blockieren dadurch nicht die Verbindungsannahme.
 Alternativ kann die Oberfläche testweise direkt im Terminal gestartet werden:
 
 ```bash
-.venv/bin/hvv-web --config config.json --cache var/stations.json
+.venv/bin/hvv-web --config config.json --cache var/stations.json \
+  --departure-cache var/departures.json
 ```
 
 Ohne weitere Optionen ist sie nur lokal auf dem Raspberry Pi erreichbar. Für
@@ -771,6 +772,34 @@ individuelles Passwort und richtet TLS ein. Unverschlüsseltes Basic Auth über
 HTTP wird für den LAN-Zugriff nicht unterstützt.
 
 </details>
+
+### Persistenter Abfahrtscache
+
+Der letzte erfolgreiche Abruf wird als begrenzter Abfahrtsstand in
+`var/departures.json` gespeichert. Der Cache enthält nur die bereits gefilterten
+Abfahrten und den ursprünglichen Abrufzeitpunkt, keine Geofox-Zugangsdaten und
+keine rohe API-Antwort. Display- und Webdienst verwenden dieselbe Datei. Der
+Standardpfad lässt sich mit `--departure-cache` oder `HVV_DEPARTURE_CACHE`
+ändern.
+
+`api.max_stale_age_minutes` steuert, wie lange diese Abfahrten bei einem
+Geofox-Fehler nach einem Neustart noch sichtbar bleiben (Standard: fünf
+Minuten). Danach werden die Zeilen ausgeblendet; Datenalter, Fehlerstatus und
+nächster Versuch bleiben sichtbar. Der Abrufzeitpunkt bleibt der ursprüngliche
+Zeitpunkt und wird bei einem Neustart nicht erneuert. Lesen des Caches löst
+keine zusätzliche Geofox-Anfrage aus.
+
+Die Datei `var/departures.key` schützt den Cache mit einer HMAC-Prüfsumme. Der
+Snapshot wird atomar ersetzt; beide Dateien haben Modus `0600`. Beschädigte, zu große,
+verlinkte, fremde oder veränderte Dateien werden ignoriert und erst nach einem
+erfolgreichen Geofox-Abruf ersetzt. Es gibt höchstens eine Cache-Datei und eine
+Schlüsseldatei; eine Bereinigung alter Snapshots ist nicht nötig. Ältere
+Installationen starten ohne Migration und legen beide Dateien nach dem nächsten
+erfolgreichen Abruf an. Der Installer übernimmt sie bei Updates zusammen mit
+den übrigen regulären Dateien aus `var/`.
+
+Wenn ein Cache manuell entfernt werden soll, den Dienst stoppen und beide
+Dateien löschen: `var/departures.json` und `var/departures.key`.
 
 Der Installer gibt `var/config.json` dem Dienstbenutzer `hvv-anzeiger` mit den
 Rechten `0640`. `config.json` verweist darauf. Nach einer Konfigurationsänderung
@@ -1370,9 +1399,9 @@ set +a
 | Situation | Anzeige | Automatische Reaktion |
 |---|---|---|
 | WLAN getrennt | `KEIN WLAN`; letzter Datenstand bleibt sichtbar | neue Abfrage nach Wiederverbindung |
-| Geofox vorübergehend nicht erreichbar | `DATEN VERALTET`; letzter Datenstand bleibt sichtbar | wachsender Abstand bis maximal fünf Minuten |
-| Daten älter als `api.max_stale_age_minutes` | alte Buszeilen verschwinden; Fehlerstatus bleibt | weitere Abrufversuche |
-| Geofox-Anfragelimit erreicht | Fehlerstatus | `Retry-After` wird bis maximal eine Stunde berücksichtigt |
+| Geofox vorübergehend nicht erreichbar | `DATEN VERALTET` mit Datenalter und letztem erfolgreichen Abruf; letzter Stand bleibt sichtbar | wachsender Abstand bis maximal fünf Minuten |
+| Daten älter als `api.max_stale_age_minutes` | Abfahrten verschwinden; Fehlerstatus, Datenalter und nächster Versuch bleiben sichtbar | weitere Abrufversuche |
+| Geofox-Anfragelimit erreicht | Stale-Status mit nächstem Versuch | `Retry-After` wird bis maximal eine Stunde berücksichtigt |
 | Systemzeit nicht synchron | `ZEIT NICHT SYNCHRON` | keine Geofox-Abfrage bis zur Synchronisierung |
 | Prozess abgestürzt oder länger als 90 Sekunden blockiert | letztes Bild bleibt kurz stehen | systemd startet den Dienst neu |
 | ILI9341 nach kurzem Kontaktverlust weiß, obwohl SPI keinen Fehler meldet | weißes oder beschädigtes Bild | vorsorglicher Controller-Reset alle 60 Sekunden mit vollständigem Neuzeichnen |

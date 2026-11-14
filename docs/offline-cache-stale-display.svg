@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-labelledby="title description">
+  <title id="title">Mockup: veralteter Abfahrtsstand auf dem Hardwaredisplay</title>
+  <desc id="description">Ein HVV-Display zeigt gespeicherte Abfahrten mit einem roten Hinweis auf Datenalter, Abrufzeit und fehlendes WLAN.</desc>
+  <defs>
+    <linearGradient id="backdrop" x2="1" y2="1"><stop stop-color="#0a1423"/><stop offset="1" stop-color="#182c47"/></linearGradient>
+    <linearGradient id="panel" x2="0" y2="1"><stop stop-color="#111d2e"/><stop offset="1" stop-color="#0b111b"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity=".45"/></filter>
+  </defs>
+  <rect width="960" height="560" rx="28" fill="url(#backdrop)"/>
+  <text x="54" y="63" fill="#8fcfff" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" letter-spacing="2">HVV-ANZEIGER · MOCKUP 01</text>
+  <text x="54" y="105" fill="#f2f6fc" font-family="system-ui,Segoe UI,sans-serif" font-size="27" font-weight="750">Letzter Stand bleibt sichtbar</text>
+  <text x="54" y="133" fill="#a9b8cc" font-family="system-ui,Segoe UI,sans-serif" font-size="15">Offline nach einem Neustart · Zustand und Alter stehen im Klartext</text>
+  <g filter="url(#shadow)">
+    <rect x="54" y="168" width="624" height="344" rx="28" fill="#090d13" stroke="#34445b" stroke-width="2"/>
+    <rect x="78" y="190" width="576" height="300" rx="10" fill="#090b0d" stroke="#26364d"/>
+    <rect x="78" y="190" width="576" height="54" rx="10" fill="#003c78"/>
+    <rect x="78" y="234" width="360" height="10" fill="#1d75b8"/>
+    <text x="98" y="225" fill="#fff" font-family="system-ui,Segoe UI,sans-serif" font-size="25" font-weight="800">HVV  ABFAHRT</text>
+    <text x="600" y="226" fill="#fff" text-anchor="end" font-family="system-ui,Segoe UI,sans-serif" font-size="27" font-weight="800">08:45</text>
+    <g font-family="system-ui,Segoe UI,sans-serif">
+      <line x1="96" x2="636" y1="304" y2="304" stroke="#48515a"/>
+      <path d="M104 263h61l-7 27h-61z" fill="#d52b2f"/><text x="132" y="284" text-anchor="middle" fill="#fff" font-size="17" font-weight="800">21</text>
+      <text x="184" y="283" fill="#fff" font-size="21" font-weight="600">U Niendorf Nord</text><text x="622" y="283" text-anchor="end" fill="#fff" font-size="21" font-weight="750">08:49</text>
+      <line x1="96" x2="636" y1="365" y2="365" stroke="#48515a"/>
+      <path d="M104 324h61l-7 27h-61z" fill="#d52b2f"/><text x="132" y="345" text-anchor="middle" fill="#fff" font-size="17" font-weight="800">186</text>
+      <text x="184" y="344" fill="#fff" font-size="21" font-weight="600">Schenefeld, Achterndiek</text><text x="622" y="344" text-anchor="end" fill="#fff" font-size="21" font-weight="750">08:52</text>
+      <line x1="96" x2="636" y1="426" y2="426" stroke="#48515a"/>
+      <path d="M104 385h61l-7 27h-61z" fill="#d52b2f"/><text x="132" y="406" text-anchor="middle" fill="#fff" font-size="17" font-weight="800">184</text>
+      <text x="184" y="405" fill="#fff" font-size="21" font-weight="600">S Reinbek, Bahnhof</text><text x="622" y="405" text-anchor="end" fill="#fff" font-size="21" font-weight="750">08:55</text>
+    </g>
+    <rect x="78" y="468" width="576" height="22" fill="#b52e37"/>
+    <text x="91" y="484" fill="#fff" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="800" letter-spacing=".3">DATEN VERALTET · 3 MIN · STAND 08:42 · KEIN WLAN</text>
+  </g>
+  <g font-family="system-ui,Segoe UI,sans-serif">
+    <circle cx="728" cy="218" r="5" fill="#ff727b"/><text x="746" y="223" fill="#f3f6fb" font-size="16" font-weight="700">Nicht als Live-Daten markiert</text>
+    <text x="746" y="249" fill="#a9b8cc" font-size="14">Ursprünglicher Abruf: 08:42</text>
+    <circle cx="728" cy="306" r="5" fill="#65c6ff"/><text x="746" y="311" fill="#f3f6fb" font-size="16" font-weight="700">Höchstaltersgrenze aktiv</text>
+    <text x="746" y="337" fill="#a9b8cc" font-size="14">Abgelaufene Zeilen werden entfernt</text>
+    <text x="746" y="357" fill="#a9b8cc" font-size="14">und der Retry wird angekündigt.</text>
+    <rect x="724" y="398" width="190" height="72" rx="12" fill="#15263b" stroke="#38516f"/>
+    <text x="742" y="425" fill="#8fcfff" font-size="12" font-weight="750" letter-spacing="1">SICHERHEIT</text>
+    <text x="742" y="449" fill="#e4ebf5" font-size="14">0600 · HMAC · atomar</text>
+  </g>
+</svg>
