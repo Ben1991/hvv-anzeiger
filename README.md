@@ -101,6 +101,7 @@ Linienfarben und -formen dargestellt; die angezeigten Zeiten sind illustrativ.
 
 - automatischer Start nach Neustart oder Stromausfall
 - Prozessüberwachung und automatischer Neustart durch systemd
+- vorsorglicher ILI9341-Controller-Reset alle 60 Sekunden mit vollständigem Neuzeichnen nach möglichen Kontaktfehlern
 - wöchentliche Begrenzung der Systemprotokolle
 - Diagnosewerkzeug und PNG-Vorschau für Betrieb ohne angeschlossenes Display
 
@@ -108,6 +109,7 @@ Linienfarben und -formen dargestellt; die angezeigten Zeiten sind illustrativ.
 
 Zusätzlich zur Pi-Anzeige können Home Assistant und ESP32-Displays denselben
 Abfahrtsdienst nutzen. Enthalten sind ein HA-Paket mit Dashboardbeispiel,
+separate Fehler- und Problemsensoren mit Fehler- und Wiederherstellungszählern,
 ESPHome-Profile für ILI9341, CYD und ESP32-S3/ILI9488 sowie ein optionaler
 direkter HTTPS-Abruf. Der Hintergrunddienst kann auch ohne GPIO als Container
 laufen. Die bestehende Pi-Anzeige und Webkonfiguration bleiben erhalten.
@@ -1661,26 +1663,21 @@ Geheimnisse veröffentlichen.
   Hintergrundbeleuchtung nicht elektrisch aus; ESPHome steuert sie über
   den konfigurierten Backlight-Ausgang.
 - Die erwartete Abfahrtszeit bleibt eine Prognose.
-- Verbindliche Strom-, RAM- und CPU-Werte erfordern eine Messung am konkreten
-  Gerät.
-- Display-Hardware und authentifizierte Geofox-Produktivantworten können in
-  GitHub Actions nicht geprüft werden.
+- Verbindliche Strom-, ### Release V2.5.0 – Display-Wiederherstellung und Diagnose
 
-## Release Notes
+V2.5.0 macht den Raspberry-Pi-Bildschirm robuster gegen kurzzeitige Kontaktprobleme und erweitert die Home-Assistant-Diagnose. Die Paketversion ist `0.5.0`.
 
-### Noch nicht veröffentlicht – automatische Pi-Display-Wiederherstellung
+- **Display-Wiederherstellung:** Der ILI9341-Controller wird vorsorglich alle 60 Sekunden über den RST-Pin und per SPI-Software-Reset neu initialisiert. Danach wird das vollständige Bild übertragen, auch wenn sich der Inhalt nicht geändert hat oder der Nachtmodus aktiv ist. Dafür werden keine zusätzlichen Geofox-Abfragen ausgelöst.
+- **Fehlerhafte SPI-Verbindungen:** Erkannte SPI-Fehler geben die Verbindung frei, damit sie im nächsten Aktualisierungszyklus erneut geöffnet werden kann. Der Dienst greift nicht auf den unbenutzten Backlight-GPIO 18 zu.
+- **Home-Assistant-Diagnose:** Fehler- und Problemsensoren führen getrennte Fehler- und Wiederherstellungszähler. Diagnosewerte lösen keine zusätzlichen Geofox-Abfragen aus.
+- **Betrieb und Prüfung:** CI prüft die Display-Wiederherstellung mit dem luma-Treiber und simuliertem SPI/GPIO; ein Abnahmeablauf beschreibt die Prüfung am angeschlossenen Pi-Display. Langzeittests decken 1.000 fehlgeschlagene Verbindungsversuche und 1.000 periodische Resets ab.
 
-- Vorsorglicher RST-Puls und ILI9341-Software-Reset alle 60 Sekunden gegen stille
-  Controllerfehler nach kurzzeitigen Kontaktproblemen.
-- Vollständige Bildübertragung nach jedem Reset, auch bei unverändertem
-  Inhalt oder schwarzem Nachtbild; keine zusätzlichen Geofox-Abfragen.
-- Tests mit echtem luma-Treiber und simuliertem SPI/GPIO sowie ein
-  dokumentierter Abnahmeablauf für den angeschlossenen Pi-Bildschirm.
-- Vollständige Initialisierung einschließlich der separat als Daten gesendeten
-  Registerparameter; Langzeittests mit 1.000 fehlschlagenden Verbindungen und
-  1.000 periodischen Resets ohne zusätzliche Treiberobjekte oder Exit-Hooks.
-- Freigabe defekter SPI-Verbindungen, kein Zugriff auf den unbenutzten
-  Backlight-GPIO 18 und zunächst unbekannter Displaystatus nach Dienststart.
+**Update:** Bestehende Raspberry-Pi-Installationen lassen sich wie bisher mit `./update.sh` aktualisieren. Die Home-Assistant- und ESPHome-Einrichtung bleibt in der [Einrichtungsanleitung](docs/home-assistant-esphome.md) beschrieben.
+
+[Änderungen seit V2.4.0](https://github.com/Ben1991/hvv-anzeiger/compare/V2.4.0...V2.5.0) ·
+[Vollständige Release Notes zu V2.5.0](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.5.0)
+
+chst unbekannter Displaystatus nach Dienststart.
 - Home-Assistant-Fehler- und Problemsensor mit getrennten Fehler- und
   Wiederherstellungszählern; keine zusätzlichen Geofox-Aufrufe für Diagnosen.
 
