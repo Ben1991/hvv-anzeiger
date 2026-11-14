@@ -26,9 +26,9 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertEqual(
             headings,
             [
+                "## Inhalt",
                 "## Wieso gibt es dieses Projekt?",
                 "## Und wie funktioniert es?",
-                "## Inhalt",
                 "## Funktionen",
                 "## Praxisbeispiel",
                 "## Vorkonfigurierte Anzeige",
