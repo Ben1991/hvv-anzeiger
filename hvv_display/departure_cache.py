@@ -56,7 +56,9 @@ def _canonical_json(value: Any) -> bytes:
 
 
 def _owner_uid() -> int | None:
-    return os.getuid() if os.name != "nt" and hasattr(os, "getuid") else None
+    return (  # pragma: no branch - operating system determines owner support
+        os.getuid() if os.name != "nt" and hasattr(os, "getuid") else None
+    )
 
 
 def _read_private_file(path: Path, maximum: int) -> bytes:
@@ -103,14 +105,14 @@ def _write_private_file(path: Path, payload: bytes) -> None:
     )
     temporary = Path(temporary_name)
     try:
-        if os.name != "nt":
+        if os.name != "nt":  # pragma: no branch - Windows has no fchmod
             os.fchmod(descriptor, 0o600)
         with os.fdopen(descriptor, "wb") as target:
             target.write(payload)
             target.flush()
             os.fsync(target.fileno())
         os.replace(temporary, path)
-        if os.name != "nt":
+        if os.name != "nt":  # pragma: no branch - Windows lacks directory fsync
             directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
             directory_fd = os.open(path.parent, directory_flags)
             try:
@@ -200,7 +202,7 @@ class DepartureCache:
             return self._load_key()
         key = secrets.token_bytes(KEY_BYTES)
         try:
-            if os.name != "nt":
+            if os.name != "nt":  # pragma: no branch - Windows has no fchmod
                 os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "wb") as target:
                 target.write(key)

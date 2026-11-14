@@ -249,6 +249,38 @@ class MainTest(unittest.TestCase):
             self.assertTrue(render.call_args.kwargs["stale"])
             self.assertIsNone(render.call_args.kwargs["retry_seconds"])
 
+    def test_cache_write_failure_does_not_discard_a_successful_refresh(self):
+        config = load_config("config.example.json")
+        now = datetime.now(HAMBURG_TZ)
+        client = Mock()
+        client.departure_list.return_value = [Departure("21", "Ziel", now)]
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            arguments = Namespace(
+                config="config.example.json",
+                cache=str(root / "stations.json"),
+                departure_cache=str(root / "var" / "departures.json"),
+                once=True,
+                output=str(root / "board.png"),
+            )
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient", return_value=client),
+                patch(
+                    "hvv_display.main.resolve_stations",
+                    return_value=config.stations,
+                ),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch(
+                    "hvv_display.main.DepartureCache.save",
+                    side_effect=OSError("disk full"),
+                ),
+                patch("hvv_display.main.update_board", return_value=("rendered",)),
+                patch("hvv_display.main.signal.signal"),
+            ):
+                self.assertEqual(run(), 0)
+        client.departure_list.assert_called_once()
+
     def test_unsynchronized_time_is_rendered_without_geofox_request(self) -> None:
         config = load_config("config.example.json")
         client = Mock()

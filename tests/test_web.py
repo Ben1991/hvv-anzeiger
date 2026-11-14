@@ -463,6 +463,25 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn("Daten veraltet", view["state"])
         self.assertIn("Nächster Versuch in 120 Sekunden", view["state"])
 
+    def test_cache_write_failure_keeps_fresh_web_departures(self):
+        config = load_config(self.config)
+        client = type("Client", (), {})()
+        client.departure_list = Mock(return_value=[
+            Departure("21", "U Niendorf Nord", datetime.now(HAMBURG_TZ))
+        ])
+        with (
+            patch.object(self.app, "_client", return_value=client),
+            patch("hvv_display.web.resolve_stations", return_value=config.stations),
+            patch.object(
+                self.app.departure_cache, "save", side_effect=OSError("disk full")
+            ),
+        ):
+            view = self.app.departure_view()
+
+        self.assertEqual(view["departures"][0]["line"], "21")
+        self.assertFalse(view["stale"])
+        client.departure_list.assert_called_once()
+
     def test_dashboard_uses_shared_safe_line_style_and_escapes_line_text(self) -> None:
         with patch.object(
             self.app,
