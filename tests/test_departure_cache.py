@@ -9,8 +9,11 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Event, Thread, current_thread
+from time import sleep
 from unittest.mock import patch
 
+from hvv_display import departure_cache as cache_module
 from hvv_display.config import load_config
 from hvv_display.departure_cache import (
     MAX_CACHE_BYTES,
@@ -299,6 +302,81 @@ class DepartureCacheTest(unittest.TestCase):
                 self.cache.save(self.departures, self.fetched_at, self.source)
         self.assertEqual(self.path.read_bytes(), before)
         self.assertEqual(list(self.path.parent.glob("*.tmp")), [])
+
+    def test_concurrent_cache_writers_serialize_key_and_snapshot_publication(self):
+        first_cache = DepartureCache(self.path)
+        second_cache = DepartureCache(self.path)
+        key_creation_started = Event()
+        allow_first_writer = Event()
+        errors = []
+        make_key = cache_module.secrets.token_bytes
+
+        def delayed_key(size):
+            if current_thread().name == "cache-first-writer":
+                key_creation_started.set()
+                if not allow_first_writer.wait(3):
+                    raise TimeoutError("timed out waiting to finish key creation")
+            return make_key(size)
+
+        def save(cache, fetched_at):
+            try:
+                cache.save(self.departures, fetched_at, self.source)
+            except Exception as exc:  # Captured for assertions in the test thread.
+                errors.append(exc)
+
+        with patch("hvv_display.departure_cache.secrets.token_bytes", delayed_key):
+            first = Thread(
+                target=save,
+                args=(first_cache, self.fetched_at),
+                name="cache-first-writer",
+            )
+            first.start()
+            self.assertTrue(key_creation_started.wait(2))
+            second = Thread(
+                target=save,
+                args=(second_cache, self.fetched_at + timedelta(seconds=1)),
+                name="cache-second-writer",
+            )
+            second.start()
+            sleep(0.05)
+            allow_first_writer.set()
+            first.join(3)
+            second.join(3)
+
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual(errors, [])
+        loaded = self.cache.load(self.source)
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded.departures, self.departures)
+
+    def test_lock_file_rejects_links_permissions_and_foreign_owner(self) -> None:
+        if os.name == "nt":
+            self.skipTest("Unix lock-file metadata is not available on Windows")
+        self.cache.save(self.departures, self.fetched_at, self.source)
+        lock_path = self.path.with_name("departures.lock")
+        hard_link = lock_path.with_name("departures-lock-link")
+        os.link(lock_path, hard_link)
+        with self.assertRaises(OSError):
+            self.cache.save(self.departures, self.fetched_at, self.source)
+        hard_link.unlink()
+
+        lock_path.chmod(0o644)
+        with self.assertRaises(OSError):
+            self.cache.save(self.departures, self.fetched_at, self.source)
+        lock_path.chmod(0o600)
+
+        lock_path.write_bytes(b"too large")
+        with self.assertRaises(OSError):
+            self.cache.save(self.departures, self.fetched_at, self.source)
+        lock_path.write_bytes(b"")
+        uid = os.getuid()
+        with patch(
+            "hvv_display.departure_cache._owner_uid",
+            side_effect=(uid, uid + 1),
+        ):
+            with self.assertRaises(OSError):
+                self.cache.save(self.departures, self.fetched_at, self.source)
 
     def test_save_rejects_invalid_metadata_and_unserializable_size(self) -> None:
         with self.assertRaises(ValueError):

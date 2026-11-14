@@ -10,6 +10,8 @@ import os
 import secrets
 import stat
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -122,6 +124,53 @@ def _write_private_file(path: Path, payload: bytes) -> None:
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
+
+
+@contextmanager
+def _exclusive_cache_lock(path: Path) -> Iterator[None]:
+    """Serialize key rotation and snapshot publication between service processes."""
+    _private_directory(path)
+    lock_path = path.with_name("departures.lock")
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(lock_path, flags, 0o600)
+    locked = False
+    try:
+        metadata = os.fstat(descriptor)
+        uid = _owner_uid()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or (uid is not None and metadata.st_uid != uid)
+            or (os.name != "nt" and stat.S_IMODE(metadata.st_mode) & 0o077)
+            or metadata.st_size > 1
+        ):
+            raise OSError("cache lock metadata rejected")
+        if os.name != "nt":  # pragma: no branch - platform chooses lock API
+            import fcntl
+
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            locked = True
+        else:  # pragma: no cover - Windows uses msvcrt byte-range locks
+            import msvcrt
+
+            if metadata.st_size == 0:
+                os.write(descriptor, b"\0")
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+            locked = True
+        yield
+    finally:
+        if locked:
+            if os.name != "nt":  # pragma: no branch - platform chooses lock API
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            else:  # pragma: no cover - Windows uses msvcrt byte-range locks
+                import msvcrt
+
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+        os.close(descriptor)
 
 
 def _departure_data(departure: Departure) -> dict[str, Any]:
@@ -299,11 +348,12 @@ class DepartureCache:
             "fetched_at": fetched_at.isoformat(),
             "departures": [_departure_data(item) for item in departures],
         }
-        signature = hmac.new(
-            self._create_key(), _canonical_json(payload), hashlib.sha256
-        ).hexdigest()
-        envelope = {**payload, "signature": signature}
-        encoded = _canonical_json(envelope)
-        if len(encoded) > MAX_CACHE_BYTES:
-            raise ValueError("departure cache exceeds size limit")
-        _write_private_file(self.path, encoded)
+        with _exclusive_cache_lock(self.path):
+            signature = hmac.new(
+                self._create_key(), _canonical_json(payload), hashlib.sha256
+            ).hexdigest()
+            envelope = {**payload, "signature": signature}
+            encoded = _canonical_json(envelope)
+            if len(encoded) > MAX_CACHE_BYTES:
+                raise ValueError("departure cache exceeds size limit")
+            _write_private_file(self.path, encoded)
