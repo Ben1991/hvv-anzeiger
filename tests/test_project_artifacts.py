@@ -10,6 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProjectArtifactTest(unittest.TestCase):
+    def test_container_departure_cache_uses_persistent_data_volume(self) -> None:
+        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+        compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+        self.assertIn("HVV_DEPARTURE_CACHE=/data/departures.json", dockerfile)
+        self.assertIn("./data:/data", compose)
+
     def test_readme_has_open_source_user_journey(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         headings = [
@@ -239,6 +245,10 @@ class ProjectArtifactTest(unittest.TestCase):
             "--cache /opt/hvv-anzeiger/var/stations.json",
             service,
         )
+        self.assertIn(
+            "--departure-cache /opt/hvv-anzeiger/var/departures.json",
+            service,
+        )
         self.assertNotIn("GEOFOX_PASSWORD=", service)
 
         web_service = (ROOT / "systemd" / "hvv-anzeiger-web.service").read_text(
@@ -247,6 +257,10 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("--host 0.0.0.0", web_service)
         self.assertIn("--tls-certfile /etc/hvv-anzeiger/web.crt", web_service)
         self.assertIn("--tls-keyfile /etc/hvv-anzeiger/web.key", web_service)
+        self.assertIn(
+            "--departure-cache /opt/hvv-anzeiger/var/departures.json",
+            web_service,
+        )
         self.assertIn("EnvironmentFile=-/opt/hvv-anzeiger/var/web.env", web_service)
         self.assertIn(
             "Environment=HVV_WEB_ENV_FILE=/opt/hvv-anzeiger/var/web.env",

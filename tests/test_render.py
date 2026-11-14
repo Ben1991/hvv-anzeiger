@@ -244,7 +244,7 @@ class RenderTest(unittest.TestCase):
                 stale=True,
                 last_updated=now,
             ),
-            "KEIN WLAN · STAND 12:00",
+            "DATEN VERALTET · 0 SEK · STAND 12:00 · KEIN WLAN",
         )
         self.assertEqual(
             _status_text(
@@ -272,7 +272,16 @@ class RenderTest(unittest.TestCase):
                 stale=True,
                 last_updated=now,
             ),
-            "DATEN VERALTET · 12:00",
+            "DATEN VERALTET · 0 SEK · STAND 12:00",
+        )
+        self.assertEqual(
+            _status_text(
+                wifi_is_connected=False,
+                stale=True,
+                last_updated=now - timedelta(minutes=3),
+                now=now,
+            ),
+            "DATEN VERALTET · 3 MIN · STAND 11:57 · KEIN WLAN",
         )
         self.assertEqual(
             _status_text(

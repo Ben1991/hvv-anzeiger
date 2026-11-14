@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 from PIL import Image
 
 from hvv_display.config import ConfigError, load_config
+from hvv_display.departure_cache import DepartureCache, departure_source
 from hvv_display.geofox import HAMBURG_TZ, GeofoxError
 from hvv_display.hardware import Ili9341Display
 from hvv_display.main import (
@@ -38,6 +39,7 @@ class MainTest(unittest.TestCase):
                 {
                     "HVV_CONFIG": "custom.json",
                     "HVV_STATION_CACHE": "custom-cache.json",
+                    "HVV_DEPARTURE_CACHE": "custom-departures.json",
                 },
             ),
             patch.object(
@@ -49,6 +51,7 @@ class MainTest(unittest.TestCase):
             arguments = _arguments()
         self.assertEqual(arguments.config, "custom.json")
         self.assertEqual(arguments.cache, "custom-cache.json")
+        self.assertEqual(arguments.departure_cache, "custom-departures.json")
         self.assertTrue(arguments.once)
         self.assertEqual(arguments.output, "board.png")
 
@@ -204,6 +207,79 @@ class MainTest(unittest.TestCase):
 
             self.assertEqual(result, 1)
             self.assertTrue(output.is_file())
+
+    def test_restart_uses_signed_cache_after_geofox_failure_without_extra_request(self):
+        config = load_config("config.example.json")
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            cache_path = root / "var" / "departures.json"
+            fetched_at = datetime.now(HAMBURG_TZ) - timedelta(minutes=2)
+            cached_departure = Departure(
+                "21", "U Niendorf Nord", fetched_at + timedelta(minutes=6)
+            )
+            DepartureCache(cache_path).save(
+                [cached_departure], fetched_at, departure_source(config)
+            )
+            arguments = Namespace(
+                config="config.example.json",
+                cache=str(root / "stations.json"),
+                departure_cache=str(cache_path),
+                once=True,
+                output=str(root / "board.png"),
+            )
+            client = Mock()
+            client.departure_list.side_effect = GeofoxError("offline")
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient", return_value=client),
+                patch(
+                    "hvv_display.main.resolve_stations", return_value=config.stations
+                ),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch("hvv_display.main.wifi_connected", return_value=False),
+                patch("hvv_display.main.signal.signal"),
+                patch(
+                    "hvv_display.main.update_board", return_value=("rendered",)
+                ) as render,
+            ):
+                self.assertEqual(run(), 1)
+
+            client.departure_list.assert_called_once()
+            self.assertEqual(render.call_args.args[0], [cached_departure])
+            self.assertTrue(render.call_args.kwargs["stale"])
+            self.assertIsNone(render.call_args.kwargs["retry_seconds"])
+
+    def test_cache_write_failure_does_not_discard_a_successful_refresh(self):
+        config = load_config("config.example.json")
+        now = datetime.now(HAMBURG_TZ)
+        client = Mock()
+        client.departure_list.return_value = [Departure("21", "Ziel", now)]
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            arguments = Namespace(
+                config="config.example.json",
+                cache=str(root / "stations.json"),
+                departure_cache=str(root / "var" / "departures.json"),
+                once=True,
+                output=str(root / "board.png"),
+            )
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.GeofoxClient", return_value=client),
+                patch(
+                    "hvv_display.main.resolve_stations",
+                    return_value=config.stations,
+                ),
+                patch("hvv_display.main.clock_is_synchronized", return_value=True),
+                patch(
+                    "hvv_display.main.DepartureCache.save",
+                    side_effect=OSError("disk full"),
+                ),
+                patch("hvv_display.main.update_board", return_value=("rendered",)),
+                patch("hvv_display.main.signal.signal"),
+            ):
+                self.assertEqual(run(), 0)
+        client.departure_list.assert_called_once()
 
     def test_unsynchronized_time_is_rendered_without_geofox_request(self) -> None:
         config = load_config("config.example.json")

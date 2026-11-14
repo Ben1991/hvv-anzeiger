@@ -9,11 +9,13 @@ from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from hvv_display.geofox import HAMBURG_TZ
+from hvv_display.config import load_config
+from hvv_display.departure_cache import DepartureCache, departure_source
+from hvv_display.geofox import HAMBURG_TZ, GeofoxError
 from hvv_display.health import HealthPublisher
 from hvv_display.models import Departure
 from hvv_display.web import (
@@ -399,6 +401,87 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn("System neu starten", dashboard)
         self.assertIn("/system/restart", dashboard)
 
+    def test_web_restart_uses_cache_and_429_retry_without_an_extra_geofox_call(self):
+        config = load_config(self.config)
+        fetched_at = datetime.now(HAMBURG_TZ) - timedelta(minutes=2)
+        departure = Departure(
+            "21", "U Niendorf Nord", fetched_at + timedelta(minutes=6)
+        )
+        DepartureCache(self.app.departure_cache.path).save(
+            [departure], fetched_at, departure_source(config)
+        )
+        restarted = WebApplication(
+            self.config, self.credentials, Path(self.directory.name) / "stations.json"
+        )
+        client = type("Client", (), {})()
+        client.departure_list = Mock(
+            side_effect=GeofoxError(
+                "rate limited",
+                http_status=429,
+                kind="rate_limit",
+                retry_after_seconds=120,
+            )
+        )
+        with (
+            patch.object(restarted, "_client", return_value=client),
+            patch("hvv_display.web.resolve_stations", return_value=config.stations),
+        ):
+            view = restarted.departure_view()
+            page = restarted.dashboard().decode("utf-8")
+
+        client.departure_list.assert_called_once()
+        self.assertEqual(view["departures"][0]["line"], "21")
+        self.assertTrue(view["stale"])
+        self.assertIn("Daten veraltet", view["state"])
+        self.assertEqual(view["retry_in_seconds"], 120)
+        self.assertIn("Datenalter:", page)
+        self.assertIn("Nächster Versuch in 120 Sekunden", page)
+
+    def test_expired_web_cache_is_empty_and_shows_next_retry(self):
+        config = load_config(self.config)
+        fetched_at = datetime.now(HAMBURG_TZ) - timedelta(minutes=6)
+        departure = Departure(
+            "21", "U Niendorf Nord", fetched_at + timedelta(minutes=10)
+        )
+        self.app.departure_cache.save(
+            [departure], fetched_at, departure_source(config)
+        )
+        client = type("Client", (), {})()
+        client.departure_list = Mock(
+            side_effect=GeofoxError(
+                "rate limited", http_status=429, retry_after_seconds=120
+            )
+        )
+        with (
+            patch.object(self.app, "_client", return_value=client),
+            patch("hvv_display.web.resolve_stations", return_value=config.stations),
+        ):
+            view = self.app.departure_view()
+
+        self.assertEqual(view["departures"], [])
+        self.assertTrue(view["expired"])
+        self.assertIn("Daten veraltet", view["state"])
+        self.assertIn("Nächster Versuch in 120 Sekunden", view["state"])
+
+    def test_cache_write_failure_keeps_fresh_web_departures(self):
+        config = load_config(self.config)
+        client = type("Client", (), {})()
+        client.departure_list = Mock(return_value=[
+            Departure("21", "U Niendorf Nord", datetime.now(HAMBURG_TZ))
+        ])
+        with (
+            patch.object(self.app, "_client", return_value=client),
+            patch("hvv_display.web.resolve_stations", return_value=config.stations),
+            patch.object(
+                self.app.departure_cache, "save", side_effect=OSError("disk full")
+            ),
+        ):
+            view = self.app.departure_view()
+
+        self.assertEqual(view["departures"][0]["line"], "21")
+        self.assertFalse(view["stale"])
+        client.departure_list.assert_called_once()
+
     def test_dashboard_uses_shared_safe_line_style_and_escapes_line_text(self) -> None:
         with patch.object(
             self.app,
@@ -470,7 +553,10 @@ class WebApplicationTest(unittest.TestCase):
             self.app, "departures", return_value=([], "Geofox ist nicht erreichbar")
         ):
             error_display = self.app.display().decode("utf-8")
-        self.assertIn('id="display-state">Geofox ist nicht erreichbar', error_display)
+        self.assertIn(
+            'id="display-state">Daten veraltet. Geofox ist nicht erreichbar',
+            error_display,
+        )
         self.assertIn('class="empty"', error_display)
 
         with patch.object(self.app, "departures", return_value=([], None)):

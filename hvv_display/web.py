@@ -39,6 +39,7 @@ from .config_backup import (
     import_config,
 )
 from .credentials import load_credentials
+from .departure_cache import DepartureCache, departure_source
 from .freshness import departures_for_display, refresh_delay
 from .geofox import (
     HAMBURG_TZ,
@@ -351,10 +352,20 @@ class WebApplication:
         access_token: str | None = None,
         web_env_path: Path | None = None,
         health_file: Path | None = None,
+        departure_cache_path: Path | None = None,
     ) -> None:
         self.config_path = config_path
         self.credentials_path = credentials_path
         self.cache_path = cache_path
+        station_cache = Path(cache_path)
+        default_departure_cache = (
+            station_cache.parent / "departures.json"
+            if station_cache.suffix
+            else station_cache / "departures.json"
+        )
+        self.departure_cache = DepartureCache(
+            departure_cache_path or default_departure_cache
+        )
         self.health_file = health_file or health_path(cache_path)
         self.access_token = access_token
         self.web_env_path = web_env_path or Path(
@@ -538,6 +549,12 @@ class WebApplication:
                 self._departure_failures = 0
                 self._departure_error = None
                 self._departure_source = source
+                cached = self.departure_cache.load(
+                    departure_source(config), now=datetime.now(HAMBURG_TZ)
+                )
+                if cached is not None:
+                    self._latest_departures = cached.departures
+                    self._last_updated = cached.fetched_at.astimezone(HAMBURG_TZ)
             monotonic = time.monotonic()
             if monotonic >= self._next_fetch:
                 retry_after = None
@@ -549,6 +566,17 @@ class WebApplication:
                         max_time_offset=config.api.max_time_offset_minutes,
                     )[:30]
                     self._last_updated = datetime.now(HAMBURG_TZ)
+                    try:
+                        self.departure_cache.save(
+                            self._latest_departures,
+                            self._last_updated,
+                            departure_source(config),
+                        )
+                    except (OSError, ValueError) as cache_error:
+                        LOG.warning(
+                            "Abfahrtscache konnte nicht gespeichert werden: %s",
+                            cache_error,
+                        )
                     self._departure_failures = 0
                     self._departure_error = None
                 except (GeofoxError, OSError) as exc:
@@ -602,9 +630,18 @@ class WebApplication:
                     "max_age_seconds": 300, "retry_in_seconds": 15, "expired": False,
                     "stale": bool(error), **metadata}
         service = self.health()
-        state = error or ("Veraltete Daten." if metadata["stale"] else "Daten aktuell.")
+        state = (
+            f"Daten veraltet. {error}"
+            if metadata["stale"] and error
+            else "Daten veraltet."
+            if metadata["stale"]
+            else "Daten aktuell."
+        )
         if metadata["expired"]:
-            state = "Veraltete Daten – letzter Stand zu alt; Abfahrten ausgeblendet."
+            state = (
+                "Daten veraltet – letzter Stand zu alt; Abfahrten ausgeblendet. "
+                f"Nächster Versuch in {metadata['retry_in_seconds']} Sekunden."
+            )
         if service["snapshot_available"]:
             if service["night_shutdown"]:
                 state += " Hardwareanzeige in Nachtabschaltung."
@@ -852,7 +889,7 @@ class WebApplication:
         rows = _departure_rows(departures)
         message = f'<div class="notice">{html.escape(error)}</div>' if error else ""
         status = hardware_status()
-        message += f'<p class="subtle">{html.escape(data["state"])} Letzter Abruf: {html.escape(data["last_updated_label"])} · Datenalter: {data["data_age_seconds"] if data["data_age_seconds"] is not None else "unbekannt"} Sekunden</p>'
+        message += f'<p class="subtle">{html.escape(data["state"])} Letzter erfolgreicher Abruf: {html.escape(data["last_updated_label"])} · Datenalter: {data["data_age_seconds"] if data["data_age_seconds"] is not None else "unbekannt"} Sekunden · Nächster Versuch in {data["retry_in_seconds"]} Sekunden.</p>'
         content = f'''<div class="toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lokale HVV-Anzeige · aktualisiert beim Öffnen</div></div><div><a href="/display">Displaymodus</a> · <a href="/settings">Einstellungen</a> · <a href="/diagnostics">Gesundheit &amp; Diagnose</a> · <a href="/">Aktualisieren</a></div></div>{message}<section class="board" aria-label="Abfahrtsanzeige">{rows}</section><section class="status" aria-label="Hardware-Status"><div>CPU<strong>{html.escape(status["cpu"])}</strong></div><div>RAM<strong>{html.escape(status["ram"])}</strong></div><div>SD-Speicher<strong>{html.escape(status["storage"])}</strong></div></section><form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">System neu starten</button></form>'''
         content += '<p><a href="/config-backup">Sicherung &amp; Wiederherstellung</a></p>'
         return _page("Abfahrten", content)
@@ -1534,6 +1571,7 @@ def run(
     config: str = "config.json",
     credentials: str | None = None,
     cache: str = "var/stations.json",
+    departure_cache: str = "var/departures.json",
     access_token: str | None = None,
     tls_certfile: str | None = None,
     tls_keyfile: str | None = None,
@@ -1559,6 +1597,7 @@ def run(
         Path(cache),
         access_token=access_token,
         web_env_path=Path(os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")),
+        departure_cache_path=Path(departure_cache),
     )
     context = None
     if tls_certfile:
@@ -1616,6 +1655,11 @@ def main() -> None:
         "--cache", default=os.environ.get("HVV_STATION_CACHE", "var/stations.json")
     )
     parser.add_argument(
+        "--departure-cache",
+        default=os.environ.get("HVV_DEPARTURE_CACHE", "var/departures.json"),
+        help="Pfad für den letzten erfolgreichen Abfahrtsstand",
+    )
+    parser.add_argument(
         "--access-token",
         default=os.environ.get("HVV_WEB_PASSWORD_HASH"),
         help="Gesalzener Passwort-Hash für nicht-lokale Zugriffe",
@@ -1640,6 +1684,7 @@ def main() -> None:
         config=args.config,
         credentials=args.credentials,
         cache=args.cache,
+        departure_cache=args.departure_cache,
         access_token=args.access_token,
         tls_certfile=args.tls_certfile,
         tls_keyfile=args.tls_keyfile,
