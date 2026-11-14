@@ -12,9 +12,22 @@ Software-Reset (0x01) aus, wartet 150 ms, spielt
 die Initialisierung des installierten luma-Treibers erneut ab und wartet nach
 Sleep Out (0x11) weitere 120 ms. Danach wird das ganze Bild neu übertragen.
 
-Die Initialisierungsbefehle werden einmal bei der Treiberkonstruktion erfasst;
-normale Pixeltransfers und spätere Befehle vergrößern die Aufzeichnung nicht.
-Es werden keine regelmäßigen neuen luma-Instanzen oder Exit-Hooks angelegt.
+Initialisierungsbefehle **und Registerparameter** werden einmal bei der
+Treiberkonstruktion ohne Hardwarezugriff erfasst. luma sendet Parameter über
+die Datenleitung mit DC=HIGH; nur Bilddaten nach Memory Write (0x2C) dürfen
+bei der Aufzeichnung entfallen. Frühere Zwischenstände auf diesem Branch
+erfassten nur Befehlsbytes. Der Resilienzreview hat diese unvollständige
+Initialisierung korrigiert und die Tests entsprechend verschärft.
+
+Auch nach Verbindungsfehlern wird dieselbe luma-Instanz mit derselben einmaligen
+Initialisierungsaufzeichnung und demselben Exit-Hook weiterverwendet. Nur die
+defekte SPI-Verbindung wird geschlossen und neu geöffnet. Ein solcher Neuaufbau
+löscht zunächst das Panel, bevor die aktuelle Anzeige vollständig folgt.
+Spätere Pixeltransfers und Befehle vergrößern die Aufzeichnung nicht.
+Beim Konfigurationswechsel und regulären Dienstende werden alte Verbindungen
+explizit geschlossen. Alte Exit-Hooks dürfen keine Befehle an freigegebene Pins
+senden. Der dokumentierte LED-Anschluss liegt direkt an 3,3 V; lumas impliziter
+Backlight-GPIO 18 wird deshalb nicht konfiguriert oder geschaltet.
 Der vollständige Framebuffer verhindert, dass die Differenzoptimierung im
 Treiber unveränderte Pixel nach einem Controller-Reset weglässt. Die Anwendung
 überspringt identische Bilder zwischen den Resets weiterhin.
@@ -40,6 +53,25 @@ Die Pin-Zuordnung folgt der Konfiguration, nicht einem fest verdrahteten GPIO
 gesetzt, sofern der GPIO-Treiber das noch zulässt. Bei Fehlern der
 Treiberinitialisierung bleibt der Dienst aktiv und versucht es im nächsten
 Zyklus erneut. Ein `--once`-Aufruf meldet eine gescheiterte Ausgabe mit Exit 1.
+
+Die Anzeige-/Statusschleife schläft höchstens 15 Sekunden, auch wenn das
+Geofox-Intervall größer ist. Geofox bleibt durch seinen eigenen nächsten
+Abrufzeitpunkt begrenzt. Das Lebenszeichen erhält dadurch einen Timeout von
+90 Sekunden statt eines durch das API-Intervall verlängerten Timeouts.
+Ein alter Status aus der Zukunft wird nach einem Uhrzeitrücksprung nicht als
+gesund interpretiert. Vor dem ersten SPI-/Netzwerkzugriff wird der alte
+Prozessstatus durch einen neuen, zunächst unbekannten Displaystatus ersetzt.
+
+Der systemd-Watchdog bleibt bei 90 Sekunden. `TimeoutStopSec=10` begrenzt das
+Stoppen; `RestartSec=10` und `StartLimitIntervalSec=0` erhalten dauerhafte
+Neustartversuche. `systemd-analyze verify` prüft eine ansonsten identische
+Unit-Kopie mit `ExecStart=/usr/bin/true`, da der Pi-Installationspfad in der
+Cloud nicht existiert. Die echten Startargumente werden zusätzlich in den
+Repositorytests geprüft. Das ist kein Nachweis eines tatsächlich ausgelösten
+Watchdog-Neustarts auf dem Pi.
+Laufende Netzwerkaufrufe verzögern weiterhin den Anzeigezyklus. Ein im Kernel
+ununterbrechbar blockierter Hardwarezugriff kann sich auch SIGKILL entziehen
+und einen physischen Eingriff erfordern.
 
 ## Diagnose und Home Assistant
 
@@ -91,7 +123,9 @@ Aus dem Repository-Verzeichnis:
   das schwarze Bild werden geprüft. Treiber, SPI und Exit-Hook bleiben einmalig.
   Das simulierte Panel bleibt trotz erfolgreicher Schreibaufrufe weiß, bis es
   den Hardware-Reset und die Initialisierung empfängt; vorher ignoriert es
-  sogar den SPI-Software-Reset. Danach übernimmt es wieder Pixel.
+  sogar den SPI-Software-Reset. Danach übernimmt es wieder Pixel. Ohne korrekt
+  übertragenen Pixelformatparameter (Register 0x3A, Wert 0x46) akzeptiert es
+  weiterhin kein Bild. Der Test prüft die gesamte Befehls-/Datenreihenfolge.
 - `test_hardware_reset_uses_real_luma_spi_backend_and_configured_gpio` führt
   auch die tatsächliche luma-SPI-Implementierung aus und prüft den RST-Puls auf
   einem abweichend konfigurierten GPIO vor dem ersten SPI-Resetbefehl.
@@ -109,6 +143,19 @@ Aus dem Repository-Verzeichnis:
 - Weitere Schleifentests injizieren Initialisierungs- und Resetfehler, prüfen
   die veröffentlichten Fehlerkategorien/Zähler und die anschließende Erholung.
   Ein gescheiterter PNG-Export wird nicht als GPIO-Fehler gezählt.
+- `test_thousand_failed_connections_keep_one_driver_and_no_open_handles`
+  öffnet echte Betriebssystem-Dateideskriptoren an simulierten SPI-Endpunkten:
+  Nach jedem von 1.000 fehlgeschlagenen Verbindungsversuchen bleibt kein Handle
+  offen. Anschließend gelingen die Initialisierung, eine vollständige Ausgabe,
+  die Erholung nach einem Übertragungsfehler und 1.000 periodische Resets.
+  Es bleibt bei einem luma-Gerät/Exit-Hook; höchstens eine Verbindung ist offen,
+  Registeraufzeichnung und RGB-Bild bleiben korrekt. Schließen ist idempotent;
+  der alte Exit-Hook darf keine Pins erneut beschreiben.
+- Der echte luma-Code wird mit einem Backlight-GPIO-Backend geprüft, das nicht
+  aufgerufen werden darf. Ein API-Intervall von einer Stunde wird mit sechs
+  Anzeigezyklen simuliert: Reset und Statusprüfung bleiben aktiv, während
+  Geofox genau einmal abgefragt wird. Startup-Status, Konfigurationswechsel
+  während eines Ausfalls und ein Uhrzeitrücksprung sind ebenfalls abgedeckt.
 - `test_home_assistant.py` liest das ausgelieferte YAML und rendert die echten
   Jinja-Vorlagen für Fehler, Wiederherstellung, Historie, fehlenden/alten Status,
   Dienststillstand und Netzwerkfehler. HTTP-Tests prüfen Anmeldung, Fehlerdaten
@@ -117,13 +164,20 @@ Aus dem Repository-Verzeichnis:
 Diese Tests beweisen den Softwareablauf und die gesendeten Befehle/Bilddaten.
 Sie beweisen keine sichtbare Wiederherstellung eines physischen Panels.
 
-Aktueller Cloud-Prüfstand: **317 Tests bestanden**, **100 % Statement- und
+Zusätzlicher Negativnachweis: Im Testprozess wurde ausschließlich die
+Replay-Methode vorübergehend durch eine Variante ersetzt, die Registerparameter
+auslässt. Der verschärfte Paneltest scheitert dann mit genau einem erwarteten
+Assertion-Fehler. Diese Mutation wurde nicht in Repositorydateien geschrieben;
+der normale vollständige Lauf verwendet den korrigierten Produktionscode.
+
+Aktueller Cloud-Prüfstand: **321 Tests bestanden**, **100 % Statement- und
 Branch-Abdeckung**, **Ruff, Paket-Build, Vorschau und Shell-Syntax bestanden**.
 Der erste Stand (Commit `6114523`, nur Software-Reset) bestand 306 Tests.
-Ein Zwischenlauf traf beim bestehenden HTTP-413-Test auf einen Broken Pipe:
-Der Server schloss die übergroße Anfrage, während der Client noch schrieb.
-Die unveränderte HTTP-Boundary-Suite bestand isoliert; der anschließende
-vollständige Lauf bestand ebenfalls. Die physische Abnahme bleibt getrennt.
+Ein bestehender HTTP-413-Test traf wiederholt auf einen Broken Pipe, weil der
+Server die übergroße Anfrage ablehnte, während der Client noch schrieb. Der
+Test sendet jetzt eine übergroße Content-Length ohne Body und prüft unverändert
+HTTP 413. Damit wird zusätzlich die Ablehnung allein anhand der Header geprüft.
+Die physische Abnahme bleibt getrennt.
 
 ## Abnahme am Raspberry Pi – noch nicht ausgeführt
 

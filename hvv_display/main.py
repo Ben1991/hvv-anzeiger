@@ -34,6 +34,7 @@ from .stations import resolve_stations
 
 LOG = logging.getLogger(__name__)
 SUCCESS_HEARTBEAT_SECONDS = 3600
+DISPLAY_TICK_SECONDS = 15
 
 
 def log_success(
@@ -209,6 +210,12 @@ def run() -> int:
     rate_limit_until = 0.0
     health_values = {"configuration_valid": True}
     display_diagnostics = DisplayDiagnostics()
+    # Replace an old process's healthy snapshot BEFORE SPI or network I/O can
+    # block. No successful frame has been sent by this process yet.
+    publisher.publish(
+        configuration_valid=True, display_available=None,
+        display_diagnostics=display_diagnostics.snapshot() if not args.output else None,
+    )
     notifier.ready()
     while not stopped:
         now = datetime.now(HAMBURG_TZ)
@@ -254,6 +261,8 @@ def run() -> int:
                 error_kind = "none"
                 rate_limit_until = 0.0
                 if display_changed and not args.output:
+                    if display is not None:
+                        display.close()
                     display = None
                 LOG.info(
                     "Gespeicherte Konfiguration direkt übernommen%s",
@@ -266,11 +275,13 @@ def run() -> int:
                     "bisherige Werte bleiben aktiv: %s",
                     exc,
                 )
-        if not args.output and display is None:
+        if not args.output and (display is None or not display.connected):
             if display_diagnostics.needs_recovery:
                 display_diagnostics.recovery_started()
             try:
-                display = Ili9341Display(config.display)
+                if display is None:
+                    display = Ili9341Display(config.display)
+                display.initialize()
                 LOG.info("Displaytreiber initialisiert")
             except (OSError, RuntimeError) as exc:
                 display_diagnostics.failed("initialization", now)
@@ -358,7 +369,7 @@ def run() -> int:
             max_stale_age_minutes=config.api.max_stale_age_minutes,
         )
         display_available = False
-        if args.output or display is not None:
+        if args.output or (display is not None and display.connected):
             display_operation = "reset"
             try:
                 if display is not None and display.recover_if_due():
@@ -396,7 +407,8 @@ def run() -> int:
                     display_operation,
                     exc,
                 )
-                display = None
+                if display is not None:
+                    display.disconnect()
                 last_board_state = None
 
         health_values = {
@@ -415,14 +427,18 @@ def run() -> int:
             "rate_limit_seconds": max(
                 0, math.ceil(rate_limit_until - status_monotonic)
             ),
-            "refresh_seconds": config.api.refresh_seconds,
+            "refresh_seconds": min(config.api.refresh_seconds, DISPLAY_TICK_SECONDS),
             "max_data_age_seconds": config.api.max_stale_age_minutes * 60,
         }
         publisher.publish(**health_values)
         if args.once:
             publisher.publish(**health_values, service_running=False)
+            if display is not None:
+                display.close()
             return 0 if clock_ready and last_error is None and display_available else 1
-        deadline = time.monotonic() + config.api.refresh_seconds
+        deadline = time.monotonic() + min(
+            config.api.refresh_seconds, DISPLAY_TICK_SECONDS
+        )
         while not stopped:
             sleep_now = time.monotonic()
             if sleep_now >= deadline:
@@ -438,6 +454,8 @@ def run() -> int:
                 pass
             time.sleep(min(1.0, deadline - sleep_now))
     publisher.publish(**health_values, service_running=False)
+    if display is not None:
+        display.close()
     return 0
 
 

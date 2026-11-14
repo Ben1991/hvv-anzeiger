@@ -224,6 +224,8 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("Restart=always", service)
         self.assertIn("Type=notify", service)
         self.assertIn("WatchdogSec=90s", service)
+        self.assertIn("StartLimitIntervalSec=0", service)
+        self.assertIn("TimeoutStopSec=10", service)
         self.assertIn("After=network-online.target time-sync.target", service)
         self.assertIn("WantedBy=multi-user.target", service)
         self.assertIn("NoNewPrivileges=true", service)

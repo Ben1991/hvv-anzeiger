@@ -314,7 +314,10 @@ class MainTest(unittest.TestCase):
                     retry_after_seconds=120,
                 )
                 self.assertEqual(run(), 1)
-            state = health.return_value.publish.call_args_list[0].kwargs
+            state = next(
+                call.kwargs for call in health.return_value.publish.call_args_list
+                if call.kwargs.get("error_kind") == "rate_limit"
+            )
             self.assertEqual(state["error_kind"], "rate_limit")
             self.assertEqual(state["rate_limit_seconds"], 120)
             self.assertEqual(state["retry_seconds"], 120)
@@ -519,11 +522,18 @@ class MainTest(unittest.TestCase):
         resolved.assert_called_once()
 
     def test_continuous_mode_applies_changed_configuration_immediately(self) -> None:
+        for initial_failure in (False, True):
+            with self.subTest(initial_failure=initial_failure):
+                self._check_continuous_configuration_changes(initial_failure)
+
+    def _check_continuous_configuration_changes(self, initial_failure):
         handlers = []
         clients = []
         client_credentials = []
         departures_calls = 0
         configuration_changes = 0
+        first_display = Mock()
+        replacement_display = Mock()
 
         def create_client(*args, **_kwargs):
             client = Mock()
@@ -593,7 +603,11 @@ class MainTest(unittest.TestCase):
                 ),
                 patch(
                     "hvv_display.main.Ili9341Display",
-                    side_effect=[Mock(), Mock(), OSError("display disconnected")],
+                    side_effect=[
+                        OSError("initially disconnected") if initial_failure
+                        else first_display,
+                        replacement_display, OSError("display disconnected"),
+                    ],
                 ),
                 patch("hvv_display.main.clock_is_synchronized", return_value=True),
                 patch("hvv_display.main.wifi_connected", return_value=True),
@@ -613,6 +627,9 @@ class MainTest(unittest.TestCase):
                 self.assertEqual(run(), 0)
 
         self.assertEqual(len(clients), 4)
+        if not initial_failure:
+            first_display.close.assert_called_once()
+        replacement_display.close.assert_called_once()
         self.assertEqual(client_credentials[0], ("old-user", "old-password"))
         self.assertEqual(client_credentials[1], ("old-user", "old-password"))
         self.assertEqual(client_credentials[2], ("new-user", "new-password"))
@@ -660,22 +677,30 @@ class MainTest(unittest.TestCase):
             with self.subTest(failure=failure):
                 self._check_periodic_display_recovery(False, failure)
 
-    def _check_periodic_display_recovery(self, night, failure=None):
+    def test_slow_geofox_interval_does_not_delay_display_or_health_recovery(self):
+        self._check_periodic_display_recovery(False, refresh_seconds=3600)
+
+    def _check_periodic_display_recovery(self, night, failure=None, refresh_seconds=15):
         config = load_config("config.example.json")
         config = replace(
             config,
             night_shutdown=replace(config.night_shutdown, enabled=night),
+            api=replace(config.api, refresh_seconds=refresh_seconds),
         )
         now = datetime(2026, 11, 14, 23 if night else 12, tzinfo=HAMBURG_TZ)
         elapsed = 0.0
         handlers = []
         published = []
+        startup = []
 
         def sleep(seconds):
             nonlocal elapsed
             elapsed += seconds
 
         def publish(**values):
+            if values["display_available"] is None:
+                startup.append(values)
+                return
             published.append(values)
             if len(published) == 6:
                 handlers[0](15, None)
@@ -694,6 +719,7 @@ class MainTest(unittest.TestCase):
 
             def create_display(_config):
                 nonlocal injected
+                self.assertEqual(len(startup), 1)
                 if failure == "initialization" and not injected:
                     injected = True
                     raise OSError("secret GPIO path")
@@ -744,6 +770,8 @@ class MainTest(unittest.TestCase):
                 recover.call_count, 5 if failure == "initialization" else 6
             )
             self.assertEqual(show.call_count, 2)
+            self.assertEqual(len(startup), 1)
+            self.assertEqual(startup[0]["display_diagnostics"]["error_count"], 0)
             self.assertEqual(
                 show.call_args_list[0].args[0].tobytes(),
                 show.call_args_list[1].args[0].tobytes(),
@@ -751,6 +779,9 @@ class MainTest(unittest.TestCase):
             if night:
                 self.assertEqual(set(show.call_args.args[0].tobytes()), {0})
                 client.return_value.departure_list.assert_not_called()
+            elif refresh_seconds > 15:
+                client.return_value.departure_list.assert_called_once()
+            self.assertTrue(all(value["refresh_seconds"] == 15 for value in published))
             if failure:
                 failed = [
                     value for value in published if not value["display_available"]

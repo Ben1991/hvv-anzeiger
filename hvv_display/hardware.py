@@ -15,21 +15,36 @@ DISPLAY_RECOVERY_SECONDS = 60
 class _ReplaySerial:
     """Retain the driver's initialization commands, not its pixel transfers."""
 
-    def __init__(self, serial: Any) -> None:
-        self.serial = serial
-        self.initialization: list[tuple[int, ...]] = []
+    def __init__(self) -> None:
+        self.serial: Any = None
+        self.initialization: list[tuple[str, tuple[int, ...]]] = []
         self.recording = True
+        self._recording_command: tuple[int, ...] = ()
 
     def command(self, *command: int) -> None:
-        self.serial.command(*command)
         if self.recording:
-            self.initialization.append(command)
+            self._recording_command = command
+            self.initialization.append(("command", command))
+        else:
+            if self.serial is None:
+                raise RuntimeError("SPI ist nicht verbunden")
+            self.serial.command(*command)
 
     def data(self, data: Any) -> None:
-        self.serial.data(data)
+        if self.recording:
+            # luma sends register arguments as DATA, too. Only RAM pixel
+            # transfers after Memory Write (0x2C) may be omitted from replay.
+            if self._recording_command != (0x2C,):
+                self.initialization.append(("data", tuple(data)))
+        else:
+            if self.serial is None:
+                raise RuntimeError("SPI ist nicht verbunden")
+            self.serial.data(data)
 
     def cleanup(self) -> None:
-        self.serial.cleanup()
+        serial, self.serial = self.serial, None
+        if serial is not None:
+            serial.cleanup()
 
     def hardware_reset(self, pin: int) -> None:
         # luma has no public reset method. Reuse its configured GPIO backend
@@ -55,9 +70,60 @@ class Ili9341Display:
                 "Display-Treiber fehlt. Installation gemäß README ausführen."
             ) from exc
 
-        serial = None
+        self._config = config
+        self._spi_factory = spi
+        self._driver_errors = (DriverError, OSError, RuntimeError)
+        self._serial = _ReplaySerial()
+        self._reset_pin = config.gpio_reset
+        self._ready = False
+        self._closed = False
+        # Capture initialization without touching SPI/GPIO. Failed connection
+        # attempts then reuse this device and its single luma exit hook.
         try:
-            serial = spi(
+            self._device: Any = ili9341(
+                serial_interface=self._serial,
+                width=320,
+                height=240,
+                rotate=config.rotate,
+                bgr=config.bgr,
+                framebuffer=full_frame(),
+                # Documented LED wiring uses 3.3 V, not luma's default GPIO 18.
+                backlight=lambda _enabled: None,
+            )
+        except self._driver_errors as exc:
+            raise RuntimeError(
+                "Displaytreiber konnte nicht initialisiert werden"
+            ) from exc
+        self._serial.recording = False
+        # Old exit hooks must never send hide/clear commands on reused pins.
+        self._device.persist = True
+        self._next_recovery_at = 0.0
+
+    @property
+    def connected(self) -> bool:
+        return self._ready and not self._closed
+
+    def disconnect(self) -> None:
+        """Release a failed SPI handle once, preserving the reusable driver."""
+        self._ready = False
+        self._next_recovery_at = 0.0
+        try:
+            self._serial.cleanup()
+        except self._driver_errors:
+            LOG.debug("SPI nach Displayfehler nicht freigegeben")
+
+    def close(self) -> None:
+        self._closed = True
+        self.disconnect()
+
+    def initialize(self) -> None:
+        if self._closed:
+            raise RuntimeError("Display ist geschlossen")
+        if self.connected:
+            return
+        config = self._config
+        try:
+            self._serial.serial = self._spi_factory(
                 port=config.spi_port,
                 device=config.spi_device,
                 gpio_DC=config.gpio_dc,
@@ -66,27 +132,12 @@ class Ili9341Display:
                 reset_hold_time=0.1,
                 reset_release_time=0.15,
             )
-            self._serial = _ReplaySerial(serial)
-            self._reset_pin = config.gpio_reset
-            self._device: Any = ili9341(
-                serial_interface=self._serial,
-                width=320,
-                height=240,
-                rotate=config.rotate,
-                bgr=config.bgr,
-                framebuffer=full_frame(),
-            )
-        except (DriverError, OSError, RuntimeError) as exc:
-            if serial is not None:
-                try:
-                    serial.cleanup()
-                except (DriverError, OSError, RuntimeError):
-                    LOG.debug("SPI nach Initialisierungsfehler nicht freigegeben")
-            raise RuntimeError(
-                "Displaytreiber konnte nicht initialisiert werden"
-            ) from exc
-        self._serial.recording = False
-        self._next_recovery_at = time.monotonic() + DISPLAY_RECOVERY_SECONDS
+            self._replay_initialization()
+            self._device.clear()
+        except self._driver_errors as exc:
+            self.disconnect()
+            raise RuntimeError("Displayverbindung fehlgeschlagen") from exc
+        self._ready = True
 
     def recover_if_due(self) -> bool:
         """Reset silent controller corruption even when SPI reports success.
@@ -95,20 +146,39 @@ class Ili9341Display:
         would register an unbounded number of atexit hooks. A successful SPI
         write does not prove that a disconnected panel received the command.
         """
+        if not self.connected:
+            self.initialize()
+            return True
         if time.monotonic() < self._next_recovery_at:
             return False
-        self._serial.hardware_reset(self._reset_pin)
-        self._serial.command(0x01)  # ILI9341 software reset
-        time.sleep(0.15)
-        for command in self._serial.initialization:
-            self._serial.command(*command)
-            if command == (0x11,):  # Sleep out: wait before subsequent commands.
-                time.sleep(0.12)
-        self._next_recovery_at = time.monotonic() + DISPLAY_RECOVERY_SECONDS
+        try:
+            self._serial.hardware_reset(self._reset_pin)
+            self._replay_initialization()
+        except self._driver_errors as exc:
+            self.disconnect()
+            raise RuntimeError("Display-Reset fehlgeschlagen") from exc
         LOG.debug("Displaycontroller vorsorglich neu initialisiert")
         return True
 
+    def _replay_initialization(self) -> None:
+        self._serial.command(0x01)  # ILI9341 software reset
+        time.sleep(0.15)
+        for operation, payload in self._serial.initialization:
+            if operation == "command":
+                self._serial.command(*payload)
+                if payload == (0x11,):  # Sleep out requires 120 ms settling.
+                    time.sleep(0.12)
+            else:
+                self._serial.data(list(payload))
+        self._next_recovery_at = time.monotonic() + DISPLAY_RECOVERY_SECONDS
+
     def show(self, image: Image.Image) -> None:
+        if not self.connected:
+            self.initialize()
         if image.size != self._device.size:
             image = image.resize(self._device.size)
-        self._device.display(image.convert("RGB"))
+        try:
+            self._device.display(image.convert("RGB"))
+        except self._driver_errors as exc:
+            self.disconnect()
+            raise RuntimeError("Displayübertragung fehlgeschlagen") from exc

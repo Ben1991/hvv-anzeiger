@@ -170,6 +170,8 @@ def read_health(path: Path, *, now: datetime | None = None) -> dict[str, Any]:
         started = _timestamp(data["started_at"])
         if heartbeat is None or started is None:
             return result
+        if heartbeat > now + timedelta(seconds=5):
+            return result  # A clock rollback must not keep an old heartbeat fresh.
         age = max(0, math.floor((now - heartbeat).total_seconds()))
         running = _boolean(data["service_running"]) and age <= _seconds(
             data["heartbeat_timeout_seconds"]

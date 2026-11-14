@@ -1390,9 +1390,19 @@ Der vorhandene systemd-Watchdog bleibt für einen blockierten Dienst zuständig.
 Die Prüfung erfolgt im normalen Aktualisierungszyklus. Sobald die Kontakte
 wieder zuverlässig verbunden sind, folgt der nächste Reset spätestens nach
 60 Sekunden zuzüglich eines Aktualisierungszyklus und möglicher laufender
-Netzwerkabfragen. Meldet SPI tatsächlich einen Fehler, wird der Treiber wie
-bisher im nächsten Zyklus neu aufgebaut. Die periodische Initialisierung
-verwendet dagegen denselben Treiber und dieselbe SPI-Verbindung weiter.
+Netzwerkabfragen. Meldet SPI tatsächlich einen Fehler, wird die Verbindung
+freigegeben und im nächsten Zyklus erneut geöffnet. Das luma-Treiberobjekt
+bleibt auch bei längerem Ausfall erhalten. Die periodische Initialisierung
+verwendet dieselbe SPI-Verbindung weiter. Bei Konfigurationswechsel und
+regulärem Dienstende werden die bisherigen Verbindungen geschlossen.
+
+Die Anzeige- und Statusschleife schläft höchstens 15 Sekunden, unabhängig vom
+eingestellten Geofox-Abrufintervall; die Zahl der Geofox-Abfragen erhöht sich
+dadurch nicht. Laufende Netzwerkaufrufe können die Schleife weiterhin verzögern.
+Bei blockiertem Prozess greift der systemd-Watchdog nach 90 Sekunden. systemd
+begrenzt das Stoppen auf zehn Sekunden und versucht Neustarts mit zehn Sekunden
+Abstand dauerhaft weiter. Ein festhängender Kernel-/Hardwarezugriff kann
+trotzdem einen physischen Eingriff erfordern.
 
 Das Display liefert keine optische Rückmeldung: Ein erfolgreicher Schreibzugriff
 und der Diagnosewert „Display verfügbar“ beweisen kein sichtbares Bild.
@@ -1666,6 +1676,11 @@ Geheimnisse veröffentlichen.
   Inhalt oder schwarzem Nachtbild; keine zusätzlichen Geofox-Abfragen.
 - Tests mit echtem luma-Treiber und simuliertem SPI/GPIO sowie ein
   dokumentierter Abnahmeablauf für den angeschlossenen Pi-Bildschirm.
+- Vollständige Initialisierung einschließlich der separat als Daten gesendeten
+  Registerparameter; Langzeittests mit 1.000 fehlschlagenden Verbindungen und
+  1.000 periodischen Resets ohne zusätzliche Treiberobjekte oder Exit-Hooks.
+- Freigabe defekter SPI-Verbindungen, kein Zugriff auf den unbenutzten
+  Backlight-GPIO 18 und zunächst unbekannter Displaystatus nach Dienststart.
 - Home-Assistant-Fehler- und Problemsensor mit getrennten Fehler- und
   Wiederherstellungszählern; keine zusätzlichen Geofox-Aufrufe für Diagnosen.
 

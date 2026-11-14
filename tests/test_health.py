@@ -165,6 +165,7 @@ class HealthTest(unittest.TestCase):
             read_health(self.path, now=self.now + timedelta(seconds=91))["status"],
             "unavailable",
         )
+
         self.assertEqual(
             self.read(
                 night_shutdown=True, network_connected=None, last_successful_fetch=None
@@ -175,6 +176,13 @@ class HealthTest(unittest.TestCase):
             self.read(night_shutdown=True, configuration_valid=False)["status"],
             "unavailable",
         )
+
+    def test_clock_rollback_does_not_keep_a_dead_heartbeat_healthy(self):
+        self.publish()
+        status = read_health(self.path, now=self.now - timedelta(hours=1))
+        self.assertFalse(status["snapshot_available"])
+        self.assertFalse(status["service_running"])
+        self.assertEqual(status["status"], "unavailable")
 
     def test_unknown_fields_and_secret_paths_never_leave_the_reader(self):
         self.publish()

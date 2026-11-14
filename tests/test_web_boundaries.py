@@ -414,7 +414,12 @@ class WebBoundariesTest(unittest.TestCase):
         ):
             self.assertEqual(self.request("/settings", values)[0], 429)
         self.assertEqual(
-            self.request("/settings", body="x" * (web.MAX_FORM_BYTES + 1))[0], 413
+            # Reject from headers before sending a body. Sending megabytes
+            # after the server already replied races its connection close.
+            self.request(
+                "/settings", body="",
+                headers={"Content-Length": str(web.MAX_FORM_BYTES + 1)},
+            )[0], 413
         )
 
     def test_run_closes_server_for_normal_and_interrupted_shutdown(self):
