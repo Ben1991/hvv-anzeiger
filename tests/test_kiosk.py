@@ -44,6 +44,9 @@ class KioskTest(unittest.TestCase):
         self.monotonic = self.enterContext(
             patch("hvv_display.web.time.monotonic", return_value=0)
         )
+        self.enterContext(
+            patch("hvv_display.web.time_is_synchronized", return_value=True)
+        )
         self.enterContext(patch.object(self.app, "_client", return_value=self.client))
         self.enterContext(patch("hvv_display.web.resolve_stations", return_value=[]))
 
