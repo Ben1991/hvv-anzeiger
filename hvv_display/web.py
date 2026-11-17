@@ -29,7 +29,7 @@ from threading import BoundedSemaphore, Lock, RLock
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from .clock import in_night_shutdown
+from .clock import in_night_shutdown, time_is_synchronized
 from .config import ConfigError, load_config
 from .config_backup import (
     MAX_CONFIG_BYTES,
@@ -518,6 +518,21 @@ class WebApplication:
     def departures(self) -> tuple[list[dict[str, Any]], str | None]:
         with self._departure_lock:
             config = load_config(self.config_path)
+            if time_is_synchronized() is not True:
+                self._departure_error = "Systemzeit ist noch nicht synchronisiert."
+                self._departure_metadata = {
+                    "last_updated": None,
+                    "last_updated_label": "Systemzeit noch nicht bestätigt",
+                    "data_age_seconds": None,
+                    "stale": True,
+                    "expired": False,
+                    "max_age_seconds": config.api.max_stale_age_minutes * 60,
+                    "retry_in_seconds": max(
+                        1, math.ceil(self._next_fetch - time.monotonic())
+                    ),
+                }
+                return [], self._departure_error
+
             def stamp(path):
                 try:
                     info = path.stat()

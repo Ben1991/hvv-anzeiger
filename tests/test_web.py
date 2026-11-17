@@ -437,6 +437,40 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn("Datenalter:", page)
         self.assertIn("Nächster Versuch in 120 Sekunden", page)
 
+    def test_web_waits_for_clock_before_loading_cache_or_fetching_departures(self):
+        config = load_config(self.config)
+        fetched_at = datetime.now(HAMBURG_TZ) - timedelta(minutes=1)
+        departure = Departure(
+            "21", "U Niendorf Nord", fetched_at + timedelta(minutes=8)
+        )
+        self.app.departure_cache.save(
+            [departure], fetched_at, departure_source(config)
+        )
+        client = type("Client", (), {})()
+        client.departure_list = Mock(
+            side_effect=GeofoxError("network unavailable")
+        )
+        load_cache = Mock(wraps=self.app.departure_cache.load)
+        with (
+            patch("hvv_display.web.time_is_synchronized", side_effect=[False, True]),
+            patch.object(self.app.departure_cache, "load", load_cache),
+            patch.object(self.app, "_client", return_value=client),
+            patch("hvv_display.web.resolve_stations", return_value=config.stations),
+        ):
+            departures, error = self.app.departures()
+
+            self.assertEqual(departures, [])
+            self.assertEqual(error, "Systemzeit ist noch nicht synchronisiert.")
+            self.assertIsNone(self.app._departure_source)
+            load_cache.assert_not_called()
+
+            view = self.app.departure_view()
+
+        load_cache.assert_called_once()
+        client.departure_list.assert_called_once()
+        self.assertEqual(view["departures"][0]["line"], "21")
+        self.assertTrue(view["stale"])
+
     def test_expired_web_cache_is_empty_and_shows_next_retry(self):
         config = load_config(self.config)
         fetched_at = datetime.now(HAMBURG_TZ) - timedelta(minutes=6)
