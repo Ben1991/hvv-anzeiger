@@ -11,6 +11,7 @@ from hvv_display.health import (
     STATUS_CODES,
     DisplayDiagnostics,
     HealthPublisher,
+    boot_id,
     health_path,
     main,
     read_health,
@@ -183,6 +184,34 @@ class HealthTest(unittest.TestCase):
         self.assertFalse(status["snapshot_available"])
         self.assertFalse(status["service_running"])
         self.assertEqual(status["status"], "unavailable")
+
+    def test_previous_boot_is_not_healthy_even_with_a_recent_timestamp(self):
+        first = "11111111-1111-1111-1111-111111111111"
+        second = "22222222-2222-2222-2222-222222222222"
+        with patch("hvv_display.health.boot_id", return_value=first):
+            self.publish()
+            self.assertEqual(read_health(self.path, now=self.now)["status"], "healthy")
+        with patch("hvv_display.health.boot_id", return_value=second):
+            result = read_health(self.path, now=self.now)
+            self.assertEqual(result["status"], "unavailable")
+            self.assertFalse(result["snapshot_available"])
+            self.assertFalse(result["service_running"])
+            data = json.loads(self.path.read_text())
+            data.pop("boot_id")
+            self.path.write_text(json.dumps(data))
+            self.assertFalse(read_health(self.path, now=self.now)["snapshot_available"])
+        with patch("hvv_display.health.boot_id", return_value=None):
+            self.assertTrue(read_health(self.path, now=self.now)["snapshot_available"])
+
+    def test_boot_id_reader_is_bounded_and_handles_unavailable_proc(self):
+        path = Path(self.directory.name) / "boot-id"
+        self.assertIsNone(boot_id(path))
+        for payload in (b"not-a-boot", b"\xff", b"a" * 100):
+            path.write_bytes(payload)
+            self.assertIsNone(boot_id(path))
+        expected = "11111111-1111-1111-1111-111111111111"
+        path.write_text(expected + "\n")
+        self.assertEqual(boot_id(path), expected)
 
     def test_unknown_fields_and_secret_paths_never_leave_the_reader(self):
         self.publish()

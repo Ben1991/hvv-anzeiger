@@ -57,7 +57,7 @@ if [[ "${1:-}" == "install" ]]; then
   exec install "${args[@]}"
 fi
 if [[ "${1:-}" == "$HVV_APP_DIR/.venv/bin/python" &&
-  "${2:-}" == "-m" && "${3:-}" == "pip" ]]; then
+  "${2:-}" == "-m" && "${3:-}" == "hvv_display.preview" ]]; then
   # Simulate the service changing its data after the version switch. The final
   # privileged preview must never use this old, service-controlled output path.
   ln -sf "$HVV_FAKE_PROTECTED_FILE" "$HVV_APP_DIR/var/install-preview.png"
@@ -141,6 +141,11 @@ test -f "$ENV_FILE"
 test "$(stat -c '%a' "$ENV_FILE")" = "600"
 test -f "$HVV_WEB_CERT_DIR/web.crt"
 test -f "$HVV_WEB_CERT_DIR/web.key"
+web_certificate_checksum="$(sha256sum "$HVV_WEB_CERT_DIR/web.crt")"
+web_key_checksum="$(sha256sum "$HVV_WEB_CERT_DIR/web.key")"
+"$SOURCE_DIR/configure-web.sh" --force-certificate
+test "$web_key_checksum" = "$(sha256sum "$HVV_WEB_CERT_DIR/web.key")"
+test "$web_certificate_checksum" != "$(sha256sum "$HVV_WEB_CERT_DIR/web.crt")"
 web_certificate_checksum="$(sha256sum "$HVV_WEB_CERT_DIR/web.crt")"
 grep -q '^GEOFOX_USER="smoke-application"$' "$ENV_FILE"
 grep -q '^GEOFOX_PASSWORD="smoke-password"$' "$ENV_FILE"

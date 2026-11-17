@@ -232,7 +232,9 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("WatchdogSec=90s", service)
         self.assertIn("StartLimitIntervalSec=0", service)
         self.assertIn("TimeoutStopSec=10", service)
-        self.assertIn("After=network-online.target time-sync.target", service)
+        self.assertIn("After=network.target", service)
+        self.assertNotIn("network-online.target", service)
+        self.assertNotIn("time-sync.target", service)
         self.assertIn("WantedBy=multi-user.target", service)
         self.assertIn("NoNewPrivileges=true", service)
         self.assertIn("ProtectSystem=strict", service)
@@ -255,6 +257,12 @@ class ProjectArtifactTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("--host 0.0.0.0", web_service)
+        self.assertIn("After=network.target", web_service)
+        self.assertNotIn("network-online.target", web_service)
+        self.assertNotIn("time-sync.target", web_service)
+        self.assertIn("StartLimitIntervalSec=0", web_service)
+        self.assertIn("Restart=always", web_service)
+        self.assertIn("TimeoutStopSec=10", web_service)
         self.assertIn("--tls-certfile /etc/hvv-anzeiger/web.crt", web_service)
         self.assertIn("--tls-keyfile /etc/hvv-anzeiger/web.key", web_service)
         self.assertIn(

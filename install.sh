@@ -22,7 +22,9 @@ ENV_BACKUP_DIR=""
 WEB_CERT_BACKUP_DIR=""
 PREVIEW_DIR=""
 SERVICE_WAS_ACTIVE=0
+WEB_SERVICE_WAS_ACTIVE=0
 SWITCHED=0
+ACTIVATION_STARTED=0
 INSTALL_SUCCEEDED=0
 
 fail() {
@@ -52,7 +54,8 @@ restore_units() {
     if [[ -e "${UNIT_BACKUP_DIR}/${unit}.missing" ]]; then
       sudo rm -f -- "${SYSTEMD_DIR}/${unit}"
     elif [[ -e "${UNIT_BACKUP_DIR}/${unit}" ]]; then
-      sudo cp -p "${UNIT_BACKUP_DIR}/${unit}" "${SYSTEMD_DIR}/${unit}"
+      sudo python3 "$SOURCE_DIR/hvv_display/install_state.py" --restore-file \
+        "${UNIT_BACKUP_DIR}/${unit}" "${SYSTEMD_DIR}/${unit}"
     fi
   done
   sudo systemctl daemon-reload || true
@@ -62,7 +65,8 @@ restore_credentials() {
   if [[ -e "${ENV_BACKUP_DIR}/credentials.missing" ]]; then
     sudo rm -f -- "$ENV_FILE"
   elif [[ -e "${ENV_BACKUP_DIR}/credentials" ]]; then
-    sudo cp -p "${ENV_BACKUP_DIR}/credentials" "$ENV_FILE"
+    sudo python3 "$SOURCE_DIR/hvv_display/install_state.py" --restore-file \
+      "${ENV_BACKUP_DIR}/credentials" "$ENV_FILE"
   fi
 }
 
@@ -85,7 +89,8 @@ restore_web_certificates() {
     if [[ -e "$WEB_CERT_BACKUP_DIR/$name.missing" ]]; then
       sudo rm -f -- "$path"
     elif [[ -e "$WEB_CERT_BACKUP_DIR/$name" ]]; then
-      sudo cp -p "$WEB_CERT_BACKUP_DIR/$name" "$path"
+      sudo python3 "$SOURCE_DIR/hvv_display/install_state.py" --restore-file \
+        "$WEB_CERT_BACKUP_DIR/$name" "$path"
     fi
   done
 }
@@ -94,13 +99,15 @@ cleanup() {
   local exit_code=$?
   if ((INSTALL_SUCCEEDED == 0)); then
     set +e
-    if ((SWITCHED == 1)); then
+    if ((SWITCHED == 1)) || { ((ACTIVATION_STARTED == 1)) && [[ -e "$BACKUP_DIR" ]]; }; then
       sudo systemctl stop "$SERVICE_NAME"
-      if [[ -e "$APP_DIR" ]]; then
-        safe_remove_tree "$APP_DIR"
-      fi
+      sudo systemctl stop "$WEB_SERVICE"
       if [[ -e "$BACKUP_DIR" ]]; then
-        sudo mv "$BACKUP_DIR" "$APP_DIR"
+        if sudo python3 "$SOURCE_DIR/hvv_display/install_state.py" --rollback "$APP_DIR" "$BACKUP_DIR"; then
+          safe_remove_tree "$BACKUP_DIR"
+        else
+          echo "Rollback konnte nicht bestätigt werden; beide vollständigen Versionen bleiben erhalten." >&2
+        fi
       fi
     elif [[ -n "$STAGING_DIR" && -e "$STAGING_DIR" ]]; then
       safe_remove_tree "$STAGING_DIR"
@@ -117,6 +124,9 @@ cleanup() {
     if ((SERVICE_WAS_ACTIVE == 1)) && [[ -d "$APP_DIR" ]]; then
       echo "Installation fehlgeschlagen; vorherige Version wird gestartet." >&2
       sudo systemctl start "$SERVICE_NAME" || true
+    fi
+    if ((WEB_SERVICE_WAS_ACTIVE == 1)) && [[ -d "$APP_DIR" ]]; then
+      sudo systemctl start "$WEB_SERVICE" || true
     fi
   fi
   if [[ -n "$UNIT_BACKUP_DIR" && -e "$UNIT_BACKUP_DIR" ]]; then
@@ -266,39 +276,40 @@ backup_unit "$SERVICE_NAME.service"
 backup_unit "$WEB_SERVICE"
 backup_unit "$LOG_CLEANUP_SERVICE"
 backup_unit "$LOG_CLEANUP_TIMER"
-sudo install -m 0644 \
-  "$STAGING_DIR/systemd/hvv-anzeiger.service" \
-  "${SYSTEMD_DIR}/${SERVICE_NAME}.service"
-sudo install -m 0644 \
-  "$STAGING_DIR/systemd/$WEB_SERVICE" \
-  "${SYSTEMD_DIR}/${WEB_SERVICE}"
-sudo install -m 0644 \
-  "$STAGING_DIR/systemd/$LOG_CLEANUP_SERVICE" \
-  "$STAGING_DIR/systemd/$LOG_CLEANUP_TIMER" \
-  "$SYSTEMD_DIR/"
-
+if systemctl is-active --quiet "$WEB_SERVICE" 2>/dev/null; then
+  WEB_SERVICE_WAS_ACTIVE=1
+fi
 if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
   SERVICE_WAS_ACTIVE=1
   sudo systemctl stop "$SERVICE_NAME"
 fi
-if [[ -e "$APP_DIR" ]]; then
-  sudo mv "$APP_DIR" "$BACKUP_DIR"
+if ((WEB_SERVICE_WAS_ACTIVE == 1)); then
+  sudo systemctl stop "$WEB_SERVICE"
 fi
+# Capture the final runtime state only after both writers have stopped.
+safe_remove_tree "$STAGING_DIR/var"
+sudo rm -f -- "$STAGING_DIR/config.json"
+sudo install -d -m 0750 "$STAGING_DIR/var"
+sudo install -m 0640 "$STAGING_DIR/config.example.json" "$STAGING_DIR/config.json"
+sudo python3 "$SOURCE_DIR/hvv_display/install_state.py" "$APP_DIR" "$STAGING_DIR"
+sudo mv -T "$STAGING_DIR/config.json" "$STAGING_DIR/var/config.json"
+sudo ln -s var/config.json "$STAGING_DIR/config.json"
+sudo chown -R "$APP_USER:$APP_GROUP" "$STAGING_DIR/var"
+sudo python3 "$SOURCE_DIR/hvv_display/install_state.py" --relocate "$APP_DIR" "$STAGING_DIR"
+sudo chmod 0755 "$STAGING_DIR"
+sudo sync -f -- "$STAGING_DIR"
+ACTIVATION_STARTED=1
+sudo python3 "$SOURCE_DIR/hvv_display/install_state.py" --activate "$APP_DIR" "$STAGING_DIR"
 SWITCHED=1
-sudo mv "$STAGING_DIR" "$APP_DIR"
 STAGING_DIR=""
-sudo chmod 0755 "$APP_DIR"
-# Console scripts contain the absolute venv path. Reinstalling the local package
-# after the move rewrites their shebangs to the final application directory.
-sudo -H "$APP_DIR/.venv/bin/python" -m pip install \
-  --force-reinstall \
-  --no-build-isolation \
-  --no-deps \
-  "$APP_DIR"
 PREVIEW_DIR="$(sudo mktemp -d "${TMPDIR:-/tmp}/hvv-install-preview.XXXXXX")"
 sudo "$APP_DIR/.venv/bin/python" -m hvv_display.preview "$PREVIEW_DIR/preview.png"
 safe_remove_tree "$PREVIEW_DIR"
 PREVIEW_DIR=""
+for unit in "$SERVICE_NAME.service" "$WEB_SERVICE" "$LOG_CLEANUP_SERVICE" "$LOG_CLEANUP_TIMER"; do
+  sudo python3 "$SOURCE_DIR/hvv_display/install_state.py" --publish-unit \
+    "$APP_DIR/systemd/$unit" "$SYSTEMD_DIR/$unit"
+done
 
 echo "[9/10] Webzugriff und aktuelle LAN-Adresse einrichten"
 "$APP_DIR/configure-web.sh"

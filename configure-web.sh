@@ -83,8 +83,8 @@ detect_local_ipv4() {
 }
 
 certificate_contains_ip() {
-  [[ -s "$CERT_FILE" ]] || return 1
-  openssl x509 -in "$CERT_FILE" -noout -ext subjectAltName 2>/dev/null |
+  sudo test -s "$CERT_FILE" || return 1
+  sudo openssl x509 -in "$CERT_FILE" -noout -ext subjectAltName 2>/dev/null |
     grep -Fq "IP Address:${LOCAL_IP}"
 }
 
@@ -141,7 +141,9 @@ raise SystemExit(not encoded or verify_web_password("hvv-anzeiger", encoded))
     sudo tee "$temp_env" >/dev/null
   sudo chown "$APP_USER:$APP_GROUP" "$temp_env"
   sudo chmod 0600 "$temp_env"
+  sudo sync -- "$temp_env"
   sudo mv -f -- "$temp_env" "$WEB_ENV_FILE"
+  sudo sync -- "$(dirname -- "$WEB_ENV_FILE")"
   WEB_PASSWORD_INITIALIZED=1
 }
 
@@ -152,15 +154,25 @@ ensure_certificate() {
   fi
 
   TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hvv-web-certificate.XXXXXX")"
-  openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
-    -keyout "$TEMP_DIR/web.key" \
-    -out "$TEMP_DIR/web.crt" \
-    -subj "/CN=${LOCAL_IP}" \
-    -addext "subjectAltName=IP:${LOCAL_IP},IP:127.0.0.1,DNS:localhost"
-  chmod 0600 "$TEMP_DIR/web.key"
-  sudo install -o root -g "$APP_GROUP" -m 0640 \
-    "$TEMP_DIR/web.key" "$KEY_FILE"
-  sudo install -o root -g "$APP_GROUP" -m 0644 \
+  if sudo test -s "$KEY_FILE"; then
+    # Keep the key during renewal: old and new certificates then both match,
+    # including when power fails between individual file publications.
+    sudo openssl req -x509 -days 825 -key "$KEY_FILE" \
+      -out "$TEMP_DIR/web.crt" -subj "/CN=${LOCAL_IP}" \
+      -addext "subjectAltName=IP:${LOCAL_IP},IP:127.0.0.1,DNS:localhost"
+  else
+    openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
+      -keyout "$TEMP_DIR/web.key" -out "$TEMP_DIR/web.crt" \
+      -subj "/CN=${LOCAL_IP}" \
+      -addext "subjectAltName=IP:${LOCAL_IP},IP:127.0.0.1,DNS:localhost"
+    sudo chown "root:$APP_GROUP" "$TEMP_DIR/web.key"
+    sudo chmod 0640 "$TEMP_DIR/web.key"
+    sudo python3 "$APP_DIR/hvv_display/install_state.py" --restore-file \
+      "$TEMP_DIR/web.key" "$KEY_FILE"
+  fi
+  sudo chown "root:$APP_GROUP" "$TEMP_DIR/web.crt"
+  sudo chmod 0644 "$TEMP_DIR/web.crt"
+  sudo python3 "$APP_DIR/hvv_display/install_state.py" --restore-file \
     "$TEMP_DIR/web.crt" "$CERT_FILE"
 }
 

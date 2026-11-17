@@ -98,8 +98,10 @@ write_credentials() {
   } | sudo tee "$ROOT_TEMP_FILE" >/dev/null
   sudo chown root:root "$ROOT_TEMP_FILE"
   sudo chmod 0600 "$ROOT_TEMP_FILE"
+  sudo sync -- "$ROOT_TEMP_FILE"
   sudo mv -f -- "$ROOT_TEMP_FILE" "$ENV_FILE"
   ROOT_TEMP_FILE=""
+  sudo sync -- "$(dirname -- "$ENV_FILE")"
 }
 
 case "${1:-}" in

@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from hvv_display.models import Route, Station
 from hvv_display.stations import resolve_stations
@@ -64,6 +65,27 @@ class StationResolutionTest(unittest.TestCase):
             cache.write_text("[]", encoding="utf-8")
             result = resolve_stations(client, (self.station(),), cache)
             self.assertEqual(result[0].station_id, "Master:4")
+
+    def test_damaged_cache_and_full_disk_do_not_prevent_live_departures(self):
+        for payload in (b"\xff\xfe", b'{"unfinished"', b'{"hamburg|teststrasse": []}'):
+            with (
+                self.subTest(payload=payload),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                path = Path(directory) / "stations.json"
+                path.write_bytes(payload)
+                client = FakeClient()
+                with patch("hvv_display.stations.atomic_write", side_effect=OSError):
+                    result = resolve_stations(client, (self.station(),), path)
+                self.assertEqual(result[0].station_id, "Master:99")
+                self.assertEqual(client.calls, [("Teststraße", "Hamburg")])
+
+    def test_unreadable_cache_is_optional(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "stations.json"
+            with patch.object(Path, "read_text", side_effect=PermissionError):
+                result = resolve_stations(FakeClient(), (self.station(),), path)
+            self.assertEqual(result[0].station_id, "Master:99")
 
 
 if __name__ == "__main__":

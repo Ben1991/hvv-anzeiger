@@ -55,6 +55,7 @@ from .models import Departure
 from .render import get_line_style, line_style_css, station_label_for_display
 from .smart_home import smart_home_payload
 from .stations import resolve_stations
+from .storage import atomic_write
 from .time_display import format_departure_time, minutes_until
 
 LOG = logging.getLogger(__name__)
@@ -190,24 +191,8 @@ def save_credentials(path: Path, user: str, password: str) -> None:
         character in user or character in password for character in ("\r", "\n", "\x00")
     ):
         raise ValueError("Geofox-Zugangsdaten dürfen keine Zeilenumbrüche enthalten")
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = f"GEOFOX_USER={user.strip()}\nGEOFOX_PASSWORD={password}\n"
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=path.parent,
-        prefix=f".{path.name}.",
-        delete=False,
-    ) as handle:
-        handle.write(payload)
-        temporary = Path(handle.name)
-    try:
-        temporary.chmod(0o600)
-        temporary.replace(path)
-        path.chmod(0o600)
-    except Exception:
-        temporary.unlink(missing_ok=True)
-        raise
+    atomic_write(path, payload.encode("utf-8"))
 
 
 def save_config(path: Path, raw_config: dict[str, Any]) -> None:
@@ -490,12 +475,10 @@ class WebApplication:
             raise ValueError(
                 "Das Webpasswort darf nicht leer sein oder Sonderzeichen für die Env-Datei enthalten"
             )
-        self.web_env_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.web_env_path.with_name(f".{self.web_env_path.name}.tmp")
         encoded = hash_web_password(password)
-        temporary.write_text(f'HVV_WEB_PASSWORD_HASH="{encoded}"\n', encoding="utf-8")
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, self.web_env_path)
+        atomic_write(
+            self.web_env_path, f'HVV_WEB_PASSWORD_HASH="{encoded}"\n'.encode()
+        )
         self.access_token = encoded
 
     def raw_config(self) -> dict[str, Any]:

@@ -7,10 +7,97 @@ descriptor, without following links. Never use a check followed by pathname cp.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import os
 import shutil
 import stat
+import tempfile
 from pathlib import Path
+
+
+def _sync_parent(path: Path) -> None:
+    descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _exchange(first: Path, second: Path) -> None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    rename = libc.renameat2
+    rename.argtypes = [
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    rename.restype = ctypes.c_int
+    if rename(-100, os.fsencode(first), -100, os.fsencode(second), 2) != 0:
+        number = ctypes.get_errno()
+        raise OSError(number, os.strerror(number))
+
+
+def activate_install(application: Path, staging: Path) -> None:
+    """The live name always points to a complete old or prepared new tree."""
+    backup = application.with_name(application.name + ".previous")
+    if (
+        application.is_symlink()
+        or staging.is_symlink()
+        or backup.exists()
+        or application.parent.resolve() != staging.parent.resolve()
+    ):
+        raise ValueError("Unsichere oder nicht benachbarte Aktivierungspfade")
+    if not application.exists():
+        os.replace(staging, application)
+    else:
+        _exchange(application, staging)
+        try:
+            os.replace(staging, backup)
+        except BaseException:
+            _exchange(application, staging)
+            raise
+    _sync_parent(application)
+
+
+def relocate_entrypoints(application: Path, staging: Path) -> None:
+    """Rewrite generated shebangs before publication, never reinstall live code."""
+    old = os.fsencode(staging / ".venv")
+    new = os.fsencode(application / ".venv")
+    for path in (staging / ".venv/bin").iterdir():
+        if path.is_symlink() or not path.is_file():
+            continue
+        payload = path.read_bytes()
+        if old in payload:
+            path.write_bytes(payload.replace(old, new))
+
+
+def rollback_install(application: Path, previous: Path) -> None:
+    if application.is_symlink() or previous.is_symlink():
+        raise ValueError("Installationsverweise werden nicht getauscht")
+    _exchange(application, previous)
+    _sync_parent(application)
+
+
+def publish_unit(source: Path, destination: Path, *, preserve: bool = False) -> None:
+    descriptor, name = tempfile.mkstemp(prefix=".hvv-unit-", dir=destination.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as target:
+            metadata = source.stat()
+            os.fchmod(
+                target.fileno(), stat.S_IMODE(metadata.st_mode) if preserve else 0o644
+            )
+            if preserve and os.geteuid() == 0:
+                os.fchown(target.fileno(), metadata.st_uid, metadata.st_gid)
+            target.write(source.read_bytes())
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, destination)
+        _sync_parent(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _directory(name: str, parent: int | None = None) -> int:
@@ -91,8 +178,25 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Sichere Installationsdatenübernahme")
     parser.add_argument("application", type=Path)
     parser.add_argument("staging", type=Path)
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--activate", action="store_true")
+    action.add_argument("--relocate", action="store_true")
+    action.add_argument("--publish-unit", action="store_true")
+    action.add_argument("--restore-file", action="store_true")
+    action.add_argument("--rollback", action="store_true")
     args = parser.parse_args()
-    copy_install_state(args.application, args.staging)
+    if args.activate:
+        activate_install(args.application, args.staging)
+    elif args.rollback:
+        rollback_install(args.application, args.staging)
+    elif args.relocate:
+        relocate_entrypoints(args.application, args.staging)
+    elif args.publish_unit:
+        publish_unit(args.application, args.staging)
+    elif args.restore_file:
+        publish_unit(args.application, args.staging, preserve=True)
+    else:
+        copy_install_state(args.application, args.staging)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .geofox import GeofoxClient
 from .models import Station
+from .storage import atomic_write
 
 LOG = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def resolve_stations(
     path = Path(cache_path)
     try:
         cache = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError):
         cache = {}
     if not isinstance(cache, dict):
         LOG.warning("Haltestellen-Cache hat ein ungültiges Format und wird ignoriert")
@@ -27,7 +28,10 @@ def resolve_stations(
     changed = False
     for station in stations:
         key = f"{station.city}|{station.name}".casefold()
-        station_id = station.station_id or cache.get(key)
+        cached_id = cache.get(key)
+        if not isinstance(cached_id, str) or not cached_id.strip():
+            cached_id = None
+        station_id = station.station_id or cached_id
         if not station_id:
             match = client.find_station(station.name, station.city)
             station_id = match["id"]
@@ -42,10 +46,15 @@ def resolve_stations(
         resolved.append(replace(station, station_id=str(station_id)))
 
     if changed:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(".tmp")
-        temporary.write_text(
-            json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
-        temporary.replace(path)
+        try:
+            atomic_write(
+                path,
+                (json.dumps(cache, ensure_ascii=False, indent=2) + "\n").encode(
+                    "utf-8"
+                ),
+            )
+        except OSError:
+            # This cache is replaceable. A read-only/full disk must not discard
+            # a successful lookup or prevent live departure requests.
+            LOG.warning("Haltestellen-Cache konnte nicht gespeichert werden")
     return tuple(resolved)
