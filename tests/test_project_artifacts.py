@@ -276,7 +276,11 @@ class ProjectArtifactTest(unittest.TestCase):
         )
 
     def test_dependencies_are_locked_with_hashes_and_audited_in_ci(self) -> None:
-        for filename in ("requirements.txt", "requirements-dev.txt"):
+        for filename in (
+            "requirements.txt",
+            "requirements-dev.txt",
+            "requirements-container.txt",
+        ):
             with self.subTest(filename=filename):
                 lines = (ROOT / filename).read_text(encoding="utf-8").splitlines()
                 requirements = [
@@ -294,10 +298,16 @@ class ProjectArtifactTest(unittest.TestCase):
 
         runtime_lock = (ROOT / "requirements.txt").read_text(encoding="utf-8")
         self.assertIn("pillow==13.0.0", runtime_lock)
+        container_lock = (ROOT / "requirements-container.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("pillow==13.0.0", container_lock)
+        self.assertIn("tzdata==2026.5", container_lock)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
             encoding="utf-8"
         )
         self.assertIn("pip-audit --requirement requirements.txt", workflow)
+        self.assertIn("pip-audit --requirement requirements-container.txt", workflow)
         self.assertIn("--require-hashes --requirement requirements-dev.txt", workflow)
 
     def test_weekly_log_cleanup_has_retention_and_size_limits(self) -> None:

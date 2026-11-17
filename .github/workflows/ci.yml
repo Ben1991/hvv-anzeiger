@@ -104,7 +104,9 @@ jobs:
         run: ruff check .
 
       - name: Audit runtime dependencies
-        run: pip-audit --requirement requirements.txt --disable-pip
+        run: |
+          pip-audit --requirement requirements.txt --disable-pip
+          pip-audit --requirement requirements-container.txt --disable-pip
 
       - name: Build package
         run: python -m build --no-isolation

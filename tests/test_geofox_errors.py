@@ -1,7 +1,10 @@
 import io
+import os
+import tempfile
 import unittest
 import urllib.error
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import patch
 
 from hvv_display.geofox import (
@@ -32,8 +35,18 @@ class FakeResponse:
 
 class GeofoxErrorTest(unittest.TestCase):
     def setUp(self) -> None:
-        GeofoxClient._global_last_request_at = 0.0
-        GeofoxClient._global_retry_until = 0.0
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.environment = patch.dict(
+            os.environ,
+            {
+                "HVV_GEOFOX_RATE_LIMIT_FILE": str(
+                    Path(self.temporary.name) / "gate.json"
+                )
+            },
+        )
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
 
     def client_for(self, response: bytes) -> GeofoxClient:
         return GeofoxClient(
@@ -180,16 +193,73 @@ class GeofoxErrorTest(unittest.TestCase):
             client._post("departureList", {})
 
     def test_rate_limit_waits_only_for_remaining_interval(self) -> None:
-        client = self.client_for(b'{"returnCode":"OK"}')
-        client.min_request_interval = 1.0
-        GeofoxClient._global_last_request_at = 10.0
+        from hvv_display.geofox_rate_limit import GeofoxRequestGate
+
+        gate_path = Path(self.temporary.name) / "pacing.json"
+        gate_path.write_text('{"last_request_at":10,"retry_until":0}')
+        gate = GeofoxRequestGate(gate_path)
         with (
-            patch("hvv_display.geofox.time.monotonic", side_effect=[10.25, 11.25]),
-            patch("hvv_display.geofox.time.sleep") as sleep,
+            patch(
+                "hvv_display.geofox_rate_limit.time.time",
+                side_effect=[10.25, 11.25, 11.25],
+            ),
+            patch("hvv_display.geofox_rate_limit.time.sleep") as sleep,
         ):
-            client._wait_for_rate_limit()
+            with gate.request(1.0):
+                pass
         sleep.assert_called_once_with(0.75)
-        self.assertEqual(GeofoxClient._global_last_request_at, 11.25)
+
+    def test_persisted_retry_after_defers_without_blocking(self) -> None:
+        error = urllib.error.HTTPError(
+            "https://example.test", 429, "Too Many", {"Retry-After": "600"}, None
+        )
+        first = self.client_for(b"")
+        first._urlopen = lambda *_args, **_kwargs: (_ for _ in ()).throw(error)
+        with self.assertRaises(GeofoxError):
+            first.find_stations("Test", "Hamburg")
+
+        second = self.client_for(b"")
+        second._urlopen = lambda *_args, **_kwargs: self.fail(
+            "shared backoff must prevent another API request"
+        )
+        with (
+            patch("hvv_display.geofox_rate_limit.time.sleep") as sleep,
+            self.assertRaises(GeofoxError) as raised,
+        ):
+            second.find_stations("Test", "Hamburg")
+        sleep.assert_not_called()
+        self.assertEqual(raised.exception.kind, "rate_limit")
+        self.assertEqual(raised.exception.http_status, 429)
+        self.assertGreater(raised.exception.retry_after_seconds, 0)
+
+    def test_request_gate_write_failure_is_a_recoverable_geofox_error(self) -> None:
+        client = self.client_for(b'{"returnCode":"OK","results":[]}')
+        with (
+            patch(
+                "hvv_display.geofox_rate_limit.os.write",
+                side_effect=OSError("disk full"),
+            ),
+            self.assertRaises(GeofoxError) as raised,
+        ):
+            client.find_stations("Test", "Hamburg")
+        self.assertEqual(raised.exception.kind, "temporary")
+
+    @unittest.skipIf(os.name == "nt", "Linux services use flock")
+    def test_request_gate_lock_failure_closes_descriptor(self) -> None:
+        import fcntl
+
+        client = self.client_for(b'{"returnCode":"OK","results":[]}')
+        with (
+            patch.object(fcntl, "flock", side_effect=OSError("lock failed")),
+            patch(
+                "hvv_display.geofox_rate_limit.os.close",
+                wraps=os.close,
+            ) as close,
+            self.assertRaises(GeofoxError) as raised,
+        ):
+            client.find_stations("Test", "Hamburg")
+        close.assert_called_once()
+        self.assertEqual(raised.exception.kind, "temporary")
 
     def test_api_error_uses_user_message(self) -> None:
         client = self.client_for(
