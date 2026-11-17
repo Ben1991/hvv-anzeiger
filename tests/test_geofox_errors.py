@@ -209,6 +209,41 @@ class GeofoxErrorTest(unittest.TestCase):
                 pass
         sleep.assert_called_once_with(0.75)
 
+    def test_persisted_retry_after_defers_without_blocking(self) -> None:
+        error = urllib.error.HTTPError(
+            "https://example.test", 429, "Too Many", {"Retry-After": "600"}, None
+        )
+        first = self.client_for(b"")
+        first._urlopen = lambda *_args, **_kwargs: (_ for _ in ()).throw(error)
+        with self.assertRaises(GeofoxError):
+            first.find_stations("Test", "Hamburg")
+
+        second = self.client_for(b"")
+        second._urlopen = lambda *_args, **_kwargs: self.fail(
+            "shared backoff must prevent another API request"
+        )
+        with (
+            patch("hvv_display.geofox_rate_limit.time.sleep") as sleep,
+            self.assertRaises(GeofoxError) as raised,
+        ):
+            second.find_stations("Test", "Hamburg")
+        sleep.assert_not_called()
+        self.assertEqual(raised.exception.kind, "rate_limit")
+        self.assertEqual(raised.exception.http_status, 429)
+        self.assertGreater(raised.exception.retry_after_seconds, 0)
+
+    def test_request_gate_write_failure_is_a_recoverable_geofox_error(self) -> None:
+        client = self.client_for(b'{"returnCode":"OK","results":[]}')
+        with (
+            patch(
+                "hvv_display.geofox_rate_limit.os.write",
+                side_effect=OSError("disk full"),
+            ),
+            self.assertRaises(GeofoxError) as raised,
+        ):
+            client.find_stations("Test", "Hamburg")
+        self.assertEqual(raised.exception.kind, "temporary")
+
     def test_api_error_uses_user_message(self) -> None:
         client = self.client_for(
             b'{"returnCode":"ERROR_TEXT","errorText":"Haltestelle ung\\u00fcltig",'

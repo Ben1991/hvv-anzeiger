@@ -12,7 +12,8 @@ import unicodedata
 import urllib.error
 import urllib.request
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -20,7 +21,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
-from .geofox_rate_limit import GeofoxRequestGate
+from .geofox_rate_limit import GeofoxRequestDeferred, GeofoxRequestGate
 from .models import Departure, LineOption, LineRouteOption, Route, Station
 
 LOG = logging.getLogger(__name__)
@@ -401,6 +402,26 @@ class GeofoxClient:
         digest = hmac.new(self._password, body, hashlib.sha1).digest()
         return base64.b64encode(digest).decode("ascii")
 
+    @contextmanager
+    def _request_slot(self, trace_id: str) -> Iterator[Callable[[int | None], None]]:
+        try:
+            with type(self)._global_request_lock, self._request_gate.request(
+                self.min_request_interval
+            ) as update_retry:
+                yield update_retry
+        except GeofoxRequestDeferred as exc:
+            raise GeofoxError(
+                "Geofox-Anfragelimit aktiv – erneuter Versuch nach Wartezeit.",
+                retry_after_seconds=exc.retry_after_seconds,
+                kind="rate_limit",
+                http_status=429,
+            ) from exc
+        except OSError as exc:
+            LOG.error("Geofox-Anfragesperre nicht verfügbar, Trace-ID %s", trace_id)
+            raise GeofoxError(
+                "Geofox-Anfrage derzeit nicht möglich.", kind="temporary"
+            ) from exc
+
     def _post(
         self,
         method: str,
@@ -425,12 +446,9 @@ class GeofoxClient:
                 "User-Agent": "hvv-anzeiger/0.1",
             },
         )
-        # Waiting and the actual request must be one critical section. Waiting
-        # alone leaves a gap in which another client can send concurrently
-        # while the first request is still in flight.
-        with type(self)._global_request_lock, self._request_gate.request(
-            self.min_request_interval
-        ) as update_retry:
+        # The critical section holds through the request to prevent overlapping
+        # calls. Long Retry-After values are returned to the service loop.
+        with self._request_slot(trace_id) as update_retry:
             try:
                 with self._urlopen(request, timeout=self.timeout) as response:
                     raw = response.read(max_response_bytes + 1)

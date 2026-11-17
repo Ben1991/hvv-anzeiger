@@ -11,6 +11,14 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
+class GeofoxRequestDeferred(Exception):
+    """A persisted Geofox backoff postpones this request without sleeping."""
+
+    def __init__(self, retry_after_seconds: int) -> None:
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__("Geofox request is deferred by the shared backoff")
+
+
 class GeofoxRequestGate:
     """Serialize API calls and persist pacing/backoff across processes."""
 
@@ -25,6 +33,7 @@ class GeofoxRequestGate:
             os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
             0o600,
         )
+        locked = False
         try:
             if os.name == "nt":  # pragma: no cover - Linux services use flock
                 import msvcrt
@@ -33,10 +42,12 @@ class GeofoxRequestGate:
                     os.write(descriptor, b" ")
                 os.lseek(descriptor, 0, os.SEEK_SET)
                 msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+                locked = True
             else:
                 import fcntl
 
                 fcntl.flock(descriptor, fcntl.LOCK_EX)
+                locked = True
 
             def read_state() -> dict[str, float]:
                 os.lseek(descriptor, 0, os.SEEK_SET)
@@ -71,6 +82,10 @@ class GeofoxRequestGate:
 
             while True:
                 now = time.time()
+                if state["retry_until"] > now:
+                    raise GeofoxRequestDeferred(
+                        max(1, math.ceil(state["retry_until"] - now))
+                    )
                 wait_until = max(
                     state["retry_until"], state["last_request_at"] + interval
                 )
@@ -90,13 +105,15 @@ class GeofoxRequestGate:
 
             yield update_retry
         finally:
-            if os.name == "nt":  # pragma: no cover - Linux services use flock
-                import msvcrt
+            try:
+                if locked and os.name == "nt":  # pragma: no cover - Linux uses flock
+                    import msvcrt
 
-                os.lseek(descriptor, 0, os.SEEK_SET)
-                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+                elif locked:
+                    import fcntl
 
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
-            os.close(descriptor)
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
+            finally:
+                os.close(descriptor)
