@@ -128,6 +128,7 @@ def main():
             return urlopen(req, context=context, timeout=3)  # noqa: S310
 
         def ready():
+            last_error = "no response"
             for _ in range(40):
                 try:
                     with request("/api/smart-home") as response:
@@ -140,9 +141,20 @@ def main():
                         if response.status != 204:
                             raise RuntimeError("Container health endpoint is not ready")
                     return
-                except (URLError, ConnectionError, TimeoutError):
+                except (URLError, ConnectionError, TimeoutError) as exc:
+                    last_error = f"{type(exc).__name__}: {exc}"
                     time.sleep(0.5)
-            raise RuntimeError("Compose backend failed TLS/authenticated readiness")
+            logs = subprocess.run(
+                compose + ["logs", "--no-color"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )  # noqa: S603 -- fixed local Compose command
+            raise RuntimeError(
+                "Compose backend failed TLS/authenticated readiness; "
+                f"last request error: {last_error}\n{logs.stdout[-4000:]}\n"
+                f"{logs.stderr[-1000:]}"
+            )
 
         ownership(10001, 10001)
         try:
