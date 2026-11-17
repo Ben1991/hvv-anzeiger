@@ -137,9 +137,30 @@ def main():
                         raise RuntimeError(
                             "Container did not load its preserved config"
                         )
-                    with request("/_healthz", authenticated=False) as response:
-                        if response.status != 204:
-                            raise RuntimeError("Container health endpoint is not ready")
+                    try:
+                        request("/_healthz", authenticated=False)
+                    except HTTPError as exc:
+                        if exc.code != 401:
+                            raise
+                    else:
+                        raise RuntimeError(
+                            "Container health endpoint is exposed remotely"
+                        )
+                    command(
+                        compose
+                        + [
+                            "exec",
+                            "-T",
+                            "hvv",
+                            "python",
+                            "-c",
+                            "import ssl, urllib.request; "
+                            "assert urllib.request.urlopen("
+                            "'https://127.0.0.1:8080/_healthz', "
+                            "context=ssl._create_unverified_context(), timeout=2"
+                            ").status == 204",
+                        ]
+                    )
                     return
                 except (URLError, ConnectionError, TimeoutError) as exc:
                     last_error = f"{type(exc).__name__}: {exc}"
