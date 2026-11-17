@@ -1,3 +1,4 @@
 *
 !hvv_display/
 !hvv_display/*.py
+!requirements-container.txt

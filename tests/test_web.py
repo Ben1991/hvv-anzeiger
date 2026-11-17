@@ -76,6 +76,13 @@ class WebApplicationTest(unittest.TestCase):
                 with self.assertRaises(HTTPError) as private_healthcheck:
                     urlopen(base_url + "/_healthz")  # noqa: S310
                 self.assertEqual(private_healthcheck.exception.code, 401)
+            with patch(
+                "hvv_display.web_transport.ipaddress.ip_address",
+                return_value=Mock(is_loopback=False),
+            ):
+                with self.assertRaises(HTTPError) as remote_healthcheck:
+                    urlopen(base_url + "/_healthz")  # noqa: S310
+                self.assertEqual(remote_healthcheck.exception.code, 401)
             for changes, status, expected in (
                 ({"network_connected": True}, 200, "healthy"),
                 ({"network_connected": False}, 503, "degraded"),
