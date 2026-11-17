@@ -244,6 +244,23 @@ class GeofoxErrorTest(unittest.TestCase):
             client.find_stations("Test", "Hamburg")
         self.assertEqual(raised.exception.kind, "temporary")
 
+    @unittest.skipIf(os.name == "nt", "Linux services use flock")
+    def test_request_gate_lock_failure_closes_descriptor(self) -> None:
+        import fcntl
+
+        client = self.client_for(b'{"returnCode":"OK","results":[]}')
+        with (
+            patch.object(fcntl, "flock", side_effect=OSError("lock failed")),
+            patch(
+                "hvv_display.geofox_rate_limit.os.close",
+                wraps=os.close,
+            ) as close,
+            self.assertRaises(GeofoxError) as raised,
+        ):
+            client.find_stations("Test", "Hamburg")
+        close.assert_called_once()
+        self.assertEqual(raised.exception.kind, "temporary")
+
     def test_api_error_uses_user_message(self) -> None:
         client = self.client_for(
             b'{"returnCode":"ERROR_TEXT","errorText":"Haltestelle ung\\u00fcltig",'
