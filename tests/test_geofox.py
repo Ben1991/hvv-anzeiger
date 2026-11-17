@@ -3,10 +3,16 @@ import hashlib
 import hmac
 import io
 import json
+import os
+import subprocess
+import sys
+import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import patch
 
 from hvv_display.geofox import (
@@ -41,8 +47,18 @@ class FakeResponse:
 
 class GeofoxClientTest(unittest.TestCase):
     def setUp(self) -> None:
-        GeofoxClient._global_last_request_at = 0.0
-        GeofoxClient._global_retry_until = 0.0
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.environment = patch.dict(
+            os.environ,
+            {
+                "HVV_GEOFOX_RATE_LIMIT_FILE": str(
+                    Path(self.temporary.name) / "gate.json"
+                )
+            },
+        )
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
 
     def test_signature_is_hmac_sha1_base64_of_exact_body(self) -> None:
         client = GeofoxClient("https://example.test", "user", "secret")
@@ -416,7 +432,10 @@ class GeofoxClientTest(unittest.TestCase):
             client.find_stations("Test", "Hamburg")
         self.assertEqual(raised.exception.retry_after_seconds, 3)
         self.assertEqual(raised.exception.http_status, 429)
-        self.assertGreater(GeofoxClient._global_retry_until, 0)
+        state = json.loads(
+            (Path(self.temporary.name) / "gate.json").read_text(encoding="ascii")
+        )
+        self.assertGreater(state["retry_until"], time.time())
 
     def test_rate_limit_is_shared_across_client_instances(self) -> None:
         response = FakeResponse(b'{"returnCode":"OK","results":[]}')
@@ -434,17 +453,60 @@ class GeofoxClientTest(unittest.TestCase):
             min_request_interval=1.05,
             urlopen=lambda *_args, **_kwargs: response,
         )
-        with (
-            patch("hvv_display.geofox.time.sleep") as sleep,
-            patch(
-                "hvv_display.geofox.time.monotonic",
-                side_effect=[10.0, 10.0, 10.2, 11.25],
-            ),
-        ):
-            first.find_stations("Test", "Hamburg")
-            second.find_stations("Test", "Hamburg")
-        sleep.assert_called_once()
-        self.assertAlmostEqual(sleep.call_args.args[0], 0.85, places=2)
+        first.find_stations("Test", "Hamburg")
+        started = time.time()
+        second.find_stations("Test", "Hamburg")
+        self.assertGreaterEqual(time.time() - started, 1.0)
+
+    def test_request_gate_serializes_two_service_processes(self) -> None:
+        gate = Path(self.temporary.name) / "shared-gate.json"
+        timestamps = Path(self.temporary.name) / "requests.txt"
+        code = f'''\
+import time
+from hvv_display.geofox import GeofoxClient
+class Response:
+    def __enter__(self): return self
+    def __exit__(self, *_args): return False
+    def read(self, _size=-1): return b'{{"returnCode":"OK","results":[]}}'
+def send(_request, **_kwargs):
+    with open({str(timestamps)!r}, "a", encoding="ascii") as output:
+        output.write(f"{{time.time()}}\\n")
+        output.flush()
+    time.sleep(0.12)
+    return Response()
+GeofoxClient("https://example.test", "user", "secret",
+             min_request_interval=0.1, urlopen=send,
+             rate_limit_path={str(gate)!r}).find_stations("Test", "Hamburg")
+'''
+        processes = [
+            subprocess.Popen(  # noqa: S603 - executes the test's fixed Python snippet
+                [sys.executable, "-c", code], env=os.environ.copy()
+            )
+            for _ in range(2)
+        ]
+        self.assertEqual([process.wait(timeout=5) for process in processes], [0, 0])
+        sent_at = [float(value) for value in timestamps.read_text().splitlines()]
+        self.assertEqual(len(sent_at), 2)
+        self.assertGreaterEqual(abs(sent_at[1] - sent_at[0]), 0.1)
+
+    def test_request_gate_replaces_invalid_persisted_state(self) -> None:
+        gate = Path(self.temporary.name) / "invalid-gate.json"
+        for invalid_state in (b"{", b"[]", b'{"last_request_at":"bad"}'):
+            with self.subTest(invalid_state=invalid_state):
+                gate.write_bytes(invalid_state)
+                client = GeofoxClient(
+                    "https://example.test",
+                    "user",
+                    "secret",
+                    min_request_interval=0,
+                    rate_limit_path=str(gate),
+                    urlopen=lambda *_args, **_kwargs: FakeResponse(
+                        b'{"returnCode":"OK","results":[]}'
+                    ),
+                )
+                client.find_stations("Test", "Hamburg")
+                state = json.loads(gate.read_text())
+                self.assertGreater(state["last_request_at"], 0)
 
     def test_requests_are_serialized_across_client_instances(self) -> None:
         response = FakeResponse(b'{"returnCode":"OK","results":[]}')

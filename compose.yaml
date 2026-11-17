@@ -13,3 +13,13 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import ssl, urllib.request; urllib.request.urlopen('https://127.0.0.1:8080/_healthz', context=ssl._create_unverified_context(), timeout=2).read()"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s

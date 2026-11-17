@@ -6,8 +6,8 @@ import hmac
 import json
 import logging
 import math
+import os
 import threading
-import time
 import unicodedata
 import urllib.error
 import urllib.request
@@ -15,10 +15,12 @@ import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
+from .geofox_rate_limit import GeofoxRequestGate
 from .models import Departure, LineOption, LineRouteOption, Route, Station
 
 LOG = logging.getLogger(__name__)
@@ -352,13 +354,8 @@ def _http_error_body(exc: urllib.error.HTTPError) -> dict[str, Any] | None:
 
 
 class GeofoxClient:
-    # Geofox rate limits apply to the application, not to a Python object. The
-    # web UI creates clients for different operations, therefore all instances
-    # share one request lock and one request timestamp.
+    # Same-process callers share the process-independent file gate below.
     _global_request_lock = threading.Lock()
-    _global_rate_lock = threading.Lock()
-    _global_last_request_at = 0.0
-    _global_retry_until = 0.0
 
     def __init__(
         self,
@@ -370,6 +367,7 @@ class GeofoxClient:
         timeout: float = 8,
         min_request_interval: float = 1.05,
         urlopen: Callable[..., Any] = urllib.request.urlopen,
+        rate_limit_path: str | None = None,
     ) -> None:
         if not user or not password:
             raise GeofoxError(
@@ -384,6 +382,14 @@ class GeofoxClient:
         self.timeout = timeout
         self.min_request_interval = min_request_interval
         self._urlopen = urlopen
+        self._request_gate = GeofoxRequestGate(
+            Path(
+                rate_limit_path
+                or os.environ.get(
+                    "HVV_GEOFOX_RATE_LIMIT_FILE", "var/geofox-rate-limit.json"
+                )
+            )
+        )
 
     @staticmethod
     def encode_body(payload: dict[str, Any]) -> bytes:
@@ -394,26 +400,6 @@ class GeofoxClient:
     def signature(self, body: bytes) -> str:
         digest = hmac.new(self._password, body, hashlib.sha1).digest()
         return base64.b64encode(digest).decode("ascii")
-
-    def _wait_for_rate_limit(self) -> None:
-        with self._global_rate_lock:
-            now = time.monotonic()
-            wait_until = max(
-                self._global_retry_until,
-                self._global_last_request_at + self.min_request_interval,
-            )
-            remaining = wait_until - now
-            if remaining > 0:
-                time.sleep(remaining)
-            type(self)._global_last_request_at = time.monotonic()
-
-    @classmethod
-    def _apply_retry_after(cls, seconds: int | None) -> None:
-        if seconds:
-            with cls._global_rate_lock:
-                cls._global_retry_until = max(
-                    cls._global_retry_until, time.monotonic() + seconds
-                )
 
     def _post(
         self,
@@ -442,8 +428,9 @@ class GeofoxClient:
         # Waiting and the actual request must be one critical section. Waiting
         # alone leaves a gap in which another client can send concurrently
         # while the first request is still in flight.
-        with type(self)._global_request_lock:
-            self._wait_for_rate_limit()
+        with type(self)._global_request_lock, self._request_gate.request(
+            self.min_request_interval
+        ) as update_retry:
             try:
                 with self._urlopen(request, timeout=self.timeout) as response:
                     raw = response.read(max_response_bytes + 1)
@@ -451,7 +438,7 @@ class GeofoxClient:
                 LOG.error("Geofox HTTP %s, Trace-ID %s", exc.code, trace_id)
                 retry_after = _retry_after_seconds(exc.headers.get("Retry-After"))
                 if exc.code == 429:
-                    self._apply_retry_after(retry_after)
+                    update_retry(retry_after)
                     raise GeofoxError(
                         "Geofox-Anfragelimit erreicht – bitte später erneut versuchen.",
                         retry_after_seconds=retry_after,

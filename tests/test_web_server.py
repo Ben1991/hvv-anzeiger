@@ -142,6 +142,42 @@ class WebServerTest(unittest.TestCase):
                     raise
                 time.sleep(0.005)
 
+    def test_per_client_connection_limit_rejects_excess_and_recovers(self):
+        server = WebServer(
+            ("127.0.0.1", 0),
+            Handler,
+            tls_context=None,
+            connection_timeout=0.3,
+            max_workers=4,
+            max_connections_per_client=1,
+        )
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02})
+        thread.start()
+
+        def cleanup():
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.addCleanup(cleanup)
+        with socket.create_connection(server.server_address, timeout=2) as held:
+            deadline = time.monotonic() + 1
+            while server._client_workers.get("127.0.0.1") != 1:
+                if time.monotonic() > deadline:
+                    self.fail("first client connection was not accounted")
+                time.sleep(0.005)
+            with socket.create_connection(server.server_address, timeout=2) as rejected:
+                self.assertEqual(rejected.recv(1), b"")
+            self.assertEqual(server._client_workers["127.0.0.1"], 1)
+            self.assertEqual(held.recv(1), b"")
+        self.request(server, tls=False)
+        deadline = time.monotonic() + 1
+        while server._client_workers:
+            if time.monotonic() > deadline:
+                self.fail("client accounting was not released after request")
+            time.sleep(0.005)
+        self.assertEqual(server._client_workers, {})
+
     def test_lan_start_rejects_shared_initial_password(self):
         with self.assertRaisesRegex(ValueError, "individuelles Webpasswort"):
             run("0.0.0.0", 0, access_token=hash_web_password("hvv-anzeiger"))  # noqa: S104

@@ -1,13 +1,15 @@
 # Backend only: no GPIO, SPI devices or privileged container required.
 FROM python:3.12-slim-bookworm
 WORKDIR /app
-RUN pip install --no-cache-dir Pillow==12.3.0 tzdata==2026.5 \
+COPY requirements-container.txt /tmp/requirements-container.txt
+RUN pip install --no-cache-dir --require-hashes --requirement /tmp/requirements-container.txt \
     && groupadd --gid 10001 hvv \
     && useradd --uid 10001 --gid 10001 --create-home hvv
 COPY hvv_display /app/hvv_display
 USER hvv
 EXPOSE 8080
 ENV HVV_CONFIG=/data/config.json \
+    HVV_GEOFOX_RATE_LIMIT_FILE=/data/geofox-rate-limit.json \
     HVV_CREDENTIALS_FILE=/data/credentials.env \
     HVV_STATION_CACHE=/data/stations.json \
     HVV_DEPARTURE_CACHE=/data/departures.json \

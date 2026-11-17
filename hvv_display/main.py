@@ -194,6 +194,10 @@ def run() -> int:
             credentials.get("GEOFOX_PASSWORD", ""),
             version=config.api.version,
             timeout=config.api.request_timeout_seconds,
+            rate_limit_path=os.environ.get(
+                "HVV_GEOFOX_RATE_LIMIT_FILE",
+                str(departure_cache.path.with_name("geofox-rate-limit.json")),
+            ),
         )
         display = None
         config_mtime_ns = config_path.stat().st_mtime_ns
@@ -269,6 +273,10 @@ def run() -> int:
                     new_credentials.get("GEOFOX_PASSWORD", ""),
                     version=config.api.version,
                     timeout=config.api.request_timeout_seconds,
+                    rate_limit_path=os.environ.get(
+                        "HVV_GEOFOX_RATE_LIMIT_FILE",
+                        str(departure_cache.path.with_name("geofox-rate-limit.json")),
+                    ),
                 )
                 credentials_mtime_ns = current_credentials_mtime_ns
                 config_mtime_ns = current_config_mtime_ns

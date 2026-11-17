@@ -1,7 +1,10 @@
 import io
+import os
+import tempfile
 import unittest
 import urllib.error
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import patch
 
 from hvv_display.geofox import (
@@ -32,8 +35,18 @@ class FakeResponse:
 
 class GeofoxErrorTest(unittest.TestCase):
     def setUp(self) -> None:
-        GeofoxClient._global_last_request_at = 0.0
-        GeofoxClient._global_retry_until = 0.0
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.environment = patch.dict(
+            os.environ,
+            {
+                "HVV_GEOFOX_RATE_LIMIT_FILE": str(
+                    Path(self.temporary.name) / "gate.json"
+                )
+            },
+        )
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
 
     def client_for(self, response: bytes) -> GeofoxClient:
         return GeofoxClient(
@@ -180,16 +193,21 @@ class GeofoxErrorTest(unittest.TestCase):
             client._post("departureList", {})
 
     def test_rate_limit_waits_only_for_remaining_interval(self) -> None:
-        client = self.client_for(b'{"returnCode":"OK"}')
-        client.min_request_interval = 1.0
-        GeofoxClient._global_last_request_at = 10.0
+        from hvv_display.geofox_rate_limit import GeofoxRequestGate
+
+        gate_path = Path(self.temporary.name) / "pacing.json"
+        gate_path.write_text('{"last_request_at":10,"retry_until":0}')
+        gate = GeofoxRequestGate(gate_path)
         with (
-            patch("hvv_display.geofox.time.monotonic", side_effect=[10.25, 11.25]),
-            patch("hvv_display.geofox.time.sleep") as sleep,
+            patch(
+                "hvv_display.geofox_rate_limit.time.time",
+                side_effect=[10.25, 11.25, 11.25],
+            ),
+            patch("hvv_display.geofox_rate_limit.time.sleep") as sleep,
         ):
-            client._wait_for_rate_limit()
+            with gate.request(1.0):
+                pass
         sleep.assert_called_once_with(0.75)
-        self.assertEqual(GeofoxClient._global_last_request_at, 11.25)
 
     def test_api_error_uses_user_message(self) -> None:
         client = self.client_for(

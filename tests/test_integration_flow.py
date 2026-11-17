@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -26,12 +27,15 @@ class FakeResponse:
 class IntegrationFlowTest(unittest.TestCase):
     def test_documented_response_flows_from_api_to_display(self) -> None:
         fixture = (ROOT / "tests/fixtures/departure_list.json").read_bytes()
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
         client = GeofoxClient(
             "https://example.test",
             "user",
             "secret",
             min_request_interval=0,
             urlopen=lambda *_args, **_kwargs: FakeResponse(fixture),
+            rate_limit_path=str(Path(temporary.name) / "rate-limit.json"),
         )
         config = load_config(ROOT / "config.example.json")
         now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)

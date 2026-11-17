@@ -136,6 +136,9 @@ def main():
                         raise RuntimeError(
                             "Container did not load its preserved config"
                         )
+                    with request("/_healthz", authenticated=False) as response:
+                        if response.status != 204:
+                            raise RuntimeError("Container health endpoint is not ready")
                     return
                 except (URLError, ConnectionError, TimeoutError):
                     time.sleep(0.5)
