@@ -95,7 +95,21 @@ Linienfarben und -formen dargestellt; die angezeigten Zeiten sind illustrativ.
   synchronisierter Systemzeit
 - letzter erfolgreicher Datenstand bleibt bei vorübergehenden Fehlern sichtbar
 - begrenzte Wiederholungsversuche mit wachsendem Abstand bei API-Fehlern
+- gemeinsamer, dateibasierter Geofox-Anfragetakt für Display- und Webdienst;
+  Antworten mit `Retry-After` werden prozessübergreifend berücksichtigt
 - optionaler Nachtmodus mit schwarzem Bild und pausierten Geofox-Abfragen
+
+### Weboberfläche, Konfiguration und Diagnose
+
+- geschütztes HTTPS-Dashboard mit Hardwarestatus und kontrollierter
+  Neustartaktion sowie ein reiner, geschützter Displaymodus für Kiosk- und
+  Zweitbildschirme
+- Haltestellen- und Linienauswahl mit Geofox-Vorschlägen, Richtungs- und
+  Zielstationsfiltern sowie editierbarer Konfiguration
+- Konfigurationen sicher exportieren, importieren und aus privaten Backups
+  wiederherstellen; Importe werden vor dem Übernehmen geprüft und bestätigt
+- Gesundheits- und Diagnoseansicht, JSON-Health-API sowie lokale CLI- und
+  systemd-Monitoring-Beispiele
 
 ### Raspberry-Pi-Betrieb
 
@@ -801,6 +815,12 @@ und eine Sperrdatei; eine Bereinigung alter Snapshots ist nicht nötig. Ältere
 Installationen starten ohne Migration und legen die drei Dateien nach dem
 nächsten erfolgreichen Abruf an. Der Installer übernimmt sie bei Updates
 zusammen mit den übrigen regulären Dateien aus `var/`.
+
+Davon getrennt speichert `var/geofox-rate-limit.json` den gemeinsamen
+Anfragetakt und eine aktive Geofox-Wartefrist. Display- und Webdienst verwenden
+dieselbe Datei, damit sie Anfragen nicht parallel oder vor Ablauf von
+`Retry-After` starten. Sie enthält weder Abfahrten noch Zugangsdaten. Im
+Container liegt sie unter `/data/geofox-rate-limit.json`.
 
 Wenn der Cache manuell entfernt werden soll, beide Dienste stoppen und die drei
 Dateien löschen: `var/departures.json`, `var/departures.key` und
@@ -1571,9 +1591,12 @@ Konfiguration mit einem abgeschalteten Dienst meldet ausdrücklich einen Ausfall
 `/api/health` liefert dieselben festen Schlüssel mit `schema_version: 1`.
 Zeitstempel sind UTC, Dauern ganze Sekunden; unbekannte Werte sind `null`.
 Der lokale Webserver bindet standardmäßig an `127.0.0.1`. Bei der eingerichteten
-LAN-Weboberfläche erfordern **auch Diagnose und Health-API** die bestehende
-Anmeldung und TLS. Es gibt keine Ausnahme für Loopback, Proxy-Header oder
-Statusabfragen. Für passwortfreies lokales Monitoring die Datei-CLI verwenden.
+LAN-Weboberfläche erfordern **Diagnose und Health-API** Anmeldung und TLS.
+Auch auf Loopback bleiben diese Status-APIs geschützt. Eine enge Ausnahme ist
+`/_healthz`: Sie liefert ausschließlich HTTP 204 und nur für Loopback-Clients;
+damit prüft Compose den Webprozess, ohne Statusdaten offenzulegen. Auf anderen
+Adressen greift die normale Anmeldung. Für passwortfreies lokales Monitoring
+die Datei-CLI verwenden.
 
 Die Statusdatei wird auf 8 KiB begrenzt gelesen, unbekannte Felder werden
 verworfen. Sie enthält keine Zugangsdaten, Passwort-Hashes, API-Antworten,
@@ -1694,13 +1717,16 @@ bash -n install.sh update.sh configure-credentials.sh configure-web.sh diagnose.
 Bei Pull Requests und Pushes auf `main` prüft GitHub Actions:
 
 - Python 3.11 für Tests und Qualitätsprüfungen
-- Unit- und Integrationstests mit mindestens 85 Prozent Coverage
+- Unit- und Integrationstests mit 100 Prozent Zeilen- und Branch-Coverage
   (gemäß `pyproject.toml`)
-- Ruff sowie Abhängigkeitsprüfung auf bekannte Schwachstellen
-- Shell-Skripte und systemd-Units
-- vollständige Installation und Rollback in einer isolierten Ubuntu-Umgebung
-- Paket-Build und Display-Vorschau
-- CodeQL für Python und GitHub Actions
+- Ruff, Prüfung der Laufzeitabhängigkeiten auf bekannte Schwachstellen,
+  Paket-Build und Display-Vorschau
+- Shell-Syntax, ShellCheck, Installer-Smoke-Test und Prüfung der systemd-Units
+- Backend-Container einschließlich Compose-Konfiguration sowie Installation
+  und Neuerstellung mit privaten Laufzeitdateien
+- Browser-Smoke- und visuelle Regressionstests; vier ESPHome-Profile,
+  Home-Assistant-Paketvorlagen und ESP32-Anzeigelogik auf dem Host
+- CodeQL-Sicherheitsanalyse
 
 Hardwarezugriff und ein authentifizierter Geofox-Vertragstest sind in GitHub
 Actions nicht möglich.
@@ -1739,7 +1765,11 @@ Geheimnisse veröffentlichen.
 
 ## Release Notes
 
-### Noch nicht veröffentlicht – Kaltstart nach Stromunterbrechung
+### Release V2.7.0 – robuster Kaltstart und sichere Wiederherstellung
+
+V2.7.0 stärkt den Start nach Stromunterbrechungen und macht Installation,
+Abfragen und Statusprüfungen zwischen den Diensten zuverlässiger. Die
+Paketversion ist `0.7.0`.
 
 - Dauerhafte, atomare Speicherung von Zugangsdaten, Webpasswort und
   Haltestellen-Cache; beschädigte Cachedateien verhindern keine Live-Abfragen.
@@ -1748,8 +1778,21 @@ Geheimnisse veröffentlichen.
 - Atomarer Versionswechsel und Rollback ohne fehlenden Anwendungspfad,
   vorbereitete virtuelle Umgebung und atomare Veröffentlichung von Units.
 - Zertifikatserneuerung ohne Austausch des vorhandenen privaten Schlüssels.
+- Gemeinsamer, persistenter Geofox-Anfragetakt für Display- und Webdienst;
+  `Retry-After` wird auch nach einem Neustart berücksichtigt. Lange Wartefristen
+  blockieren den überwachten Anzeigedienst nicht.
+- Lokaler Container-Liveness-Endpunkt, der ausschließlich auf Loopback ein
+  inhaltsfreies HTTP-204-Signal liefert; Diagnose-APIs bleiben geschützt.
 - Prozessabbruchtests während Schreibvorgängen und Versionswechseln sowie
   Wiederanlauf mit zunächst fehlender Zeitsynchronisierung.
+- Container-Smoke-Tests für Installation, Neuerstellung und private Laufzeitdateien.
+
+**Update:** Bestehende Raspberry-Pi-Installationen lassen sich wie bisher mit
+`./update.sh` aktualisieren. Einzelheiten zu Kaltstart und Stromausfällen stehen
+unter [Zeitschaltuhr, Stromunterbrechung und Kaltstart](docs/power-loss-recovery.md).
+
+[Änderungen seit V2.6.0](https://github.com/Ben1991/hvv-anzeiger/compare/V2.6.0...V2.7.0) ·
+[Vollständige Release Notes zu V2.7.0](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.7.0)
 
 ### Release V2.6.0 – Offline-Abfahrten und klare Datenfrische
 
