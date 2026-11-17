@@ -10,13 +10,19 @@
 | `V2.2` (veröffentlicht am 23. August 2026) | Ja |
 | `V2.2.1` und `V2.2.2` (veröffentlicht am 23. August 2026) | Ja |
 | `V2.3.0` (veröffentlicht am 13. Oktober 2026) | Ja |
+| `V2.4.0` (veröffentlicht am 24. Oktober 2026) | Ja |
+| `V2.5.0` (veröffentlicht am 14. November 2026) | Ja |
+| `V2.6.0` (veröffentlicht am 14. November 2026) | Ja |
+| `V2.7.0` (geplante Veröffentlichung) | Ja, ab Veröffentlichung |
 | `main` (Entwicklungsstand) | Ja, sofern nicht anders angegeben |
 
-V2.3.0 ist die aktuelle veröffentlichte Version und entspricht dem unveränderlichen
-Git-Tag [`V2.3.0`](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.3.0).
-V1 bleibt als nicht mehr unterstützte Veröffentlichung dokumentiert.
-Sicherheitskorrekturen werden für V2.3.0 und den aktuellen Stand des Branches `main` bereitgestellt,
-soweit die Korrektur auf diese Versionen anwendbar ist.
+V2.6.0 ist die aktuell veröffentlichte Version und entspricht dem unveränderlichen
+Git-Tag [`V2.6.0`](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.6.0).
+V2.7.0 wird mit dem aktuellen Entwicklungsstand vorbereitet und ist ab der
+Veröffentlichung unterstützt. V1 bleibt als nicht mehr unterstützte
+Veröffentlichung dokumentiert. Sicherheitskorrekturen werden für die in der
+Tabelle unterstützten Versionen und den aktuellen Stand von `main` bereitgestellt,
+soweit die jeweilige Korrektur auf diese Versionen anwendbar ist.
 Ältere Commits, Forks und lokal veränderte Installationen werden nicht separat
 unterstützt.
 
