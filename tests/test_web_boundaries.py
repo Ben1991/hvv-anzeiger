@@ -89,7 +89,9 @@ class WebBoundariesTest(unittest.TestCase):
         for user, password in (("", "x"), ("x", "")):
             with self.assertRaises(ValueError):
                 web.save_credentials(self.app.credentials_path, user, password)
-        with patch.object(Path, "replace", side_effect=OSError("disk failed")):
+        with patch(
+            "hvv_display.storage.os.replace", side_effect=OSError("disk failed")
+        ):
             with self.assertRaises(OSError):
                 web.save_credentials(self.app.credentials_path, "user", "password")
         self.assertEqual(list(self.root.glob(".credentials.env.*")), [])

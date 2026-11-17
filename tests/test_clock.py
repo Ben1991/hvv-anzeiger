@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from datetime import datetime, time
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from hvv_display.clock import in_night_shutdown, time_is_synchronized
 from hvv_display.geofox import HAMBURG_TZ
@@ -43,6 +43,26 @@ class ClockTest(unittest.TestCase):
                 run=Mock(side_effect=FileNotFoundError),
             )
         )
+
+    def test_container_uses_host_clock_when_systemd_is_unavailable(self) -> None:
+        with patch("hvv_display.clock._is_container", return_value=True):
+            self.assertTrue(
+                time_is_synchronized(
+                    marker=Path("/definitely/missing/time-sync-marker"),
+                    run=Mock(side_effect=FileNotFoundError),
+                )
+            )
+
+    def test_container_does_not_override_explicit_unsynchronized_state(self) -> None:
+        with patch("hvv_display.clock._is_container", return_value=True):
+            self.assertFalse(
+                time_is_synchronized(
+                    marker=Path("/definitely/missing/time-sync-marker"),
+                    run=Mock(
+                        return_value=subprocess.CompletedProcess([], 0, "no\n", "")
+                    ),
+                )
+            )
 
     def test_night_window_handles_midnight_and_daytime_ranges(self) -> None:
         overnight_start = time(21, 0)

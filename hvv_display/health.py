@@ -27,6 +27,17 @@ DISPLAY_COUNTERS = (
 )
 
 
+def boot_id(path: Path = Path("/proc/sys/kernel/random/boot_id")) -> str | None:
+    """Linux boot identity, not a hostname or persistent machine identifier."""
+    try:
+        with path.open(encoding="ascii") as source:
+            value = source.read(64).strip()
+    except (OSError, UnicodeError):
+        return None
+    pattern = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
+    return value if re.fullmatch(pattern, value) else None
+
+
 @dataclass
 class DisplayDiagnostics:
     """Process-lifetime counts; preventive resets are never detected faults."""
@@ -159,6 +170,9 @@ def read_health(path: Path, *, now: datetime | None = None) -> dict[str, Any]:
         data = json.loads(raw)
         if not isinstance(data, dict) or data.get("schema_version") != 1:
             return result
+        current_boot = boot_id()
+        if current_boot is not None and data.get("boot_id") != current_boot:
+            return result  # Never replay a healthy process status across reboots.
         version = data["version"]
         if (
             not isinstance(version, str)
@@ -247,6 +261,7 @@ class HealthPublisher:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.started_at = datetime.now(timezone.utc)
+        self.boot_id = boot_id()
         self._write_failed = False
 
     def publish(
@@ -270,6 +285,7 @@ class HealthPublisher:
         now = datetime.now(timezone.utc)
         data = {
             "schema_version": 1,
+            "boot_id": self.boot_id,
             "version": __version__,
             "started_at": _iso(self.started_at),
             "heartbeat_at": _iso(now),

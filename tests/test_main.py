@@ -29,6 +29,63 @@ from hvv_display.models import Departure
 
 
 class MainTest(unittest.TestCase):
+    def test_cold_boot_waits_for_clock_before_restoring_cache_and_fetching(self):
+        handlers = []
+        snapshots = []
+        elapsed = 0.0
+
+        def sleep(seconds):
+            nonlocal elapsed
+            elapsed += seconds
+
+        def publish(**values):
+            if "clock_synchronized" in values:
+                snapshots.append(values)
+                if len(snapshots) == 3:
+                    handlers[0](15, None)
+
+        with TemporaryDirectory() as directory:
+            arguments = Namespace(
+                config="config.example.json", cache=str(Path(directory) / "stations"),
+                once=False, output=str(Path(directory) / "board.png"),
+            )
+            with (
+                patch("hvv_display.main._arguments", return_value=arguments),
+                patch("hvv_display.main.HealthPublisher") as health,
+                patch("hvv_display.main.DepartureCache") as cache,
+                patch("hvv_display.main.GeofoxClient") as client,
+                patch("hvv_display.main.resolve_stations", return_value=()),
+                patch(
+                    "hvv_display.main.clock_is_synchronized",
+                    side_effect=[False, False, True],
+                ) as sync,
+                patch("hvv_display.main.wifi_connected", return_value=False),
+                patch(
+                    "hvv_display.main.signal.signal",
+                    side_effect=lambda _, handler: handlers.append(handler),
+                ),
+                patch("hvv_display.main.time.monotonic", side_effect=lambda: elapsed),
+                patch("hvv_display.main.time.sleep", side_effect=sleep),
+            ):
+                def load(*_args, **_kwargs):
+                    self.assertEqual(sync.call_count, 3)
+                    return None
+
+                def fetch(*_args, **_kwargs):
+                    self.assertEqual(sync.call_count, 3)
+                    return []
+
+                cache.return_value.load.side_effect = load
+                client.return_value.departure_list.side_effect = fetch
+                health.return_value.publish.side_effect = publish
+                self.assertEqual(run(), 0)
+            self.assertEqual(
+                [value["clock_synchronized"] for value in snapshots[:3]],
+                [False, False, True],
+            )
+            cache.return_value.load.assert_called_once()
+            client.return_value.departure_list.assert_called_once()
+
     def test_package_entrypoint_is_importable(self) -> None:
         self.assertIsNotNone(importlib.import_module("hvv_display.__main__"))
 

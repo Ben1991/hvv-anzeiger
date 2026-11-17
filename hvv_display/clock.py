@@ -8,6 +8,11 @@ from pathlib import Path
 SYSTEMD_SYNC_MARKER = Path("/run/systemd/timesync/synchronized")
 
 
+def _is_container() -> bool:
+    """Containers use the host kernel clock and usually have no systemd."""
+    return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
+
+
 def time_is_synchronized(
     *,
     marker: Path = SYSTEMD_SYNC_MARKER,
@@ -25,15 +30,15 @@ def time_is_synchronized(
             check=False,
         )
     except (FileNotFoundError, OSError, subprocess.SubprocessError):
-        return None
+        return True if _is_container() else None
     if result.returncode != 0:
-        return None
+        return True if _is_container() else None
     value = result.stdout.strip().lower()
     if value == "yes":
         return True
     if value == "no":
         return False
-    return None
+    return True if _is_container() else None
 
 
 def in_night_shutdown(now: datetime, start: time, end: time) -> bool:

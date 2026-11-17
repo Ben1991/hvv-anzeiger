@@ -1,7 +1,7 @@
 [Unit]
 Description=HVV Abfahrtsanzeige
-After=network-online.target time-sync.target
-Wants=network-online.target time-sync.target
+After=network.target
+Wants=network.target
 StartLimitIntervalSec=0
 
 [Service]

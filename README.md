@@ -1451,6 +1451,41 @@ sein, wenn auch der RST-Pin nicht zuverlässig verbunden ist.
 Automatisierte Nachweise und die noch am Pi auszuführende Abnahme stehen in
 [Display-Wiederherstellung prüfen](docs/display-recovery-validation.md).
 
+### Zeitschaltuhr und Neustart nach Stromunterbrechung
+
+Bei einer abgeschlossenen Installation starten Anzeige und Webdienst nach
+Rückkehr der Versorgung automatisch. Beide Dienste warten nicht auf ein
+vollständig verfügbares WLAN oder den Abschluss der Zeitsynchronisierung.
+Die Pi-Anzeige zeigt zunächst den Wartezustand; Geofox und der persistente
+Abfahrtscache werden erst mit bestätigter Gerätezeit verwendet. Während eines
+Netzwerkausfalls gelten weiterhin die Regeln für Datenalter und Wiederholung.
+
+Zugangsdaten, Webpasswort und Haltestellen-Cache werden über eindeutige temporäre
+Dateien gespeichert, synchronisiert und atomar veröffentlicht. Ein Abbruch
+benötigt keinen nachträglichen Shutdown-Handler, um diese Dateien wieder lesen
+zu können. Ein unlesbarer oder nicht schreibbarer Haltestellen-Cache blockiert
+keine ansonsten erfolgreiche Online-Abfrage. Eine Gesundheitsdatei aus einem
+früheren Linux-Boot wird nicht als aktueller gesunder Dienst ausgegeben.
+
+Auch der Updatepfad wird vor der Veröffentlichung vollständig vorbereitet.
+Der installierte Anwendungspfad bleibt beim Versionswechsel auf Linux mit
+unterstütztem Dateisystem atomar auf eine vollständige alte oder neue Version
+gerichtet; nach der Aktivierung werden keine Pakete mehr in die laufende
+Version hinein neu installiert. Zertifikatserneuerungen behalten den Schlüssel
+bei, sodass beide Zertifikatsstände dazu passen. Neue systemd-Units werden
+ebenfalls atomar ersetzt. Details, Testnachweise und Wiederanlaufprüfung:
+[Stromunterbrechungen und Kaltstart](docs/power-loss-recovery.md).
+
+Das schützt die Anwendung, garantiert aber keinen beliebig oft hart
+abgeschalteten Raspberry Pi: Eine SD-Karte kann durch Stromverlust selbst
+beschädigt werden, und Linux muss sein Root-Dateisystem noch mounten können.
+Für eine höhere Betriebssicherheit sind eine geeignete USV mit sauberem
+Shutdown oder ein gezielt geplantes schreibgeschütztes System sinnvoll.
+Dieser Installer ändert weder Partitionen noch Bootparameter, fsck-Reparaturregeln
+oder das Root-Dateisystem automatisch. Der vorhandene Nachtmodus ist die
+Alternative ohne täglichen Stromverlust, spart bei dauerhaft angeschlossener
+Hintergrundbeleuchtung aber nur wenig Strom.
+
 ### Displayfehler in Home Assistant
 
 Das aktualisierte [Home-Assistant-Paket](home-assistant/hvv.yaml) ergänzt
@@ -1703,6 +1738,18 @@ Geheimnisse veröffentlichen.
   GitHub Actions nicht geprüft werden.
 
 ## Release Notes
+
+### Noch nicht veröffentlicht – Kaltstart nach Stromunterbrechung
+
+- Dauerhafte, atomare Speicherung von Zugangsdaten, Webpasswort und
+  Haltestellen-Cache; beschädigte Cachedateien verhindern keine Live-Abfragen.
+- Bootspezifischer Gesundheitsstatus und Dienststart ohne harte Abhängigkeit
+  von bereits verfügbarem Netzwerk beziehungsweise synchronisierter Uhr.
+- Atomarer Versionswechsel und Rollback ohne fehlenden Anwendungspfad,
+  vorbereitete virtuelle Umgebung und atomare Veröffentlichung von Units.
+- Zertifikatserneuerung ohne Austausch des vorhandenen privaten Schlüssels.
+- Prozessabbruchtests während Schreibvorgängen und Versionswechseln sowie
+  Wiederanlauf mit zunächst fehlender Zeitsynchronisierung.
 
 ### Release V2.6.0 – Offline-Abfahrten und klare Datenfrische
 
