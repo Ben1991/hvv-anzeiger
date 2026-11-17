@@ -144,12 +144,12 @@ def main():
                 except (URLError, ConnectionError, TimeoutError) as exc:
                     last_error = f"{type(exc).__name__}: {exc}"
                     time.sleep(0.5)
-            logs = subprocess.run(
+            logs = subprocess.run(  # noqa: S603 -- fixed local Compose command
                 compose + ["logs", "--no-color"],
                 capture_output=True,
                 text=True,
                 check=False,
-            )  # noqa: S603 -- fixed local Compose command
+            )
             raise RuntimeError(
                 "Compose backend failed TLS/authenticated readiness; "
                 f"last request error: {last_error}\n{logs.stdout[-4000:]}\n"
