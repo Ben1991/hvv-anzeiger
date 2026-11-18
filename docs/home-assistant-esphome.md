@@ -33,6 +33,7 @@ für einen reinen ESP32-Betrieb muss er nicht gestartet werden.
 | Nachtabschaltung | Smart-Home-Endpunkte pausieren Geofox-Abrufe; ESP32 schwarz und Backlight aus |
 | Webkonfiguration, Backups, Diagnose, Pi-Treiber | bestehende Funktionen bleiben verfügbar |
 | Helligkeit, Anzeigeschalter, Neustart, WLAN/Laufzeit | ESPHome-Entitäten in Home Assistant |
+| Freier Heap, größter freier Speicherblock, Minimum seit Start | ESP32-Diagnosesensoren; Aktualisierung alle 30 Sekunden |
 
 Die bestehenden Web-Abfahrtsseiten können weiterhin auf Benutzeranforderung
 Daten abrufen, auch während der Nachtpause des Smart-Home-Endpunkts.

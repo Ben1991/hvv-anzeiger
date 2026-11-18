@@ -24,6 +24,9 @@ wifi:
 
 json:
 
+debug:
+  update_interval: 30s
+
 font:
   - file: gfonts://Roboto
     id: hvv_font
@@ -63,6 +66,16 @@ button:
     name: Neustart
 
 sensor:
+  - platform: debug
+    free:
+      name: Freier Heap
+      entity_category: diagnostic
+    block:
+      name: Größter freier Heap-Block
+      entity_category: diagnostic
+    min_free:
+      name: Minimaler freier Heap
+      entity_category: diagnostic
   - platform: wifi_signal
     name: WLAN Signal
     update_interval: 60s

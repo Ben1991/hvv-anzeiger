@@ -6,6 +6,13 @@ static bool contains(const esphome::display::Display &d, const std::string &s) {
   return std::find(d.texts.begin(), d.texts.end(), s) != d.texts.end();
 }
 
+static std::string formatted_time(const hvv::Board &board, const hvv::Row &row,
+                                 uint32_t now) {
+  char buffer[16]{};
+  board.format_time(row, now, buffer, sizeof(buffer));
+  return buffer;
+}
+
 int main(int argc, char **argv) {
   assert(argc == 2);
   std::ifstream input(argv[1]);
@@ -18,6 +25,10 @@ int main(int argc, char **argv) {
   esphome::font::Font font;
   assert(board.expired(0));
   assert(board.accept(root, 0));
+  const std::string original_shape = root["departures"][0]["shape"].as<std::string>();
+  root["departures"][0]["shape"] = std::string(17, 'x');
+  assert(!board.accept(root, 1));
+  root["departures"][0]["shape"] = original_shape;
   board.draw(display, &font, &font, 0, true);
   assert(contains(display, "Warte auf Systemzeit"));
   board.tick(0, epoch);
@@ -55,16 +66,16 @@ int main(int argc, char **argv) {
     root["minute_unit"] = unit;
     assert(b.accept(root, 0));
     b.tick(0, epoch);
-    assert(b.time_text(row, 0) == std::string("2") +
+    assert(formatted_time(b, row, 0) == std::string("2") +
         (std::string(unit) == "none" ? "" : " " + std::string(unit)));
-    assert(b.time_text(row, 120000) == "sofort");
+    assert(formatted_time(b, row, 120000) == "sofort");
   }
   root["time_mode"] = "departure_time";
   hvv::Board absolute;
   assert(absolute.accept(root, 0));
-  assert(absolute.time_text(row, 0) == "12:02");
+  assert(formatted_time(absolute, row, 0) == "12:02");
   row.cancelled = true;
-  assert(absolute.time_text(row, 0) == "AUS");
+  assert(formatted_time(absolute, row, 0) == "AUS");
 
   // Reject a partial update without replacing the last complete board.
   root["generated_at"] = epoch + 1;
