@@ -337,8 +337,8 @@ eigenen YAML-Datei angepasst werden. Das erste Flashen erfolgt per USB.
    ```
 
    Wenn PowerShell das Aktivieren blockiert, kannst du die Befehle ohne
-   Aktivierung mit `\.venv-esphome\Scripts\python.exe -m pip ...` und
-   `\.venv-esphome\Scripts\python.exe -m esphome ...` ausführen.
+   Aktivierung mit `.\.venv-esphome\Scripts\python.exe -m pip ...` und
+   `.\.venv-esphome\Scripts\python.exe -m esphome ...` ausführen.
 4. **Geheimnisse anlegen:** Kopiere die Vorlage. Die Datei mit WLAN-Passwort
    und API-Schlüssel bleibt lokal und darf nicht veröffentlicht werden:
 
@@ -395,8 +395,10 @@ eigenen YAML-Datei angepasst werden. Das erste Flashen erfolgt per USB.
    USB-Anschlüsse, aber der Platinenaufdruck allein beweist den Displaycontroller
    nicht. Bei ST7789V oder ILI9342 muss `display_model` in deiner lokalen YAML
    auf `ESP32-2432S028-7789` beziehungsweise `ESP32-2432S028-9342` geändert und
-   die Firmware erneut gebaut und per USB übertragen werden. Bei falscher
-   Farbreihenfolge `display_color_order` zwischen `rgb` und `bgr` wechseln.
+   die Firmware erneut gebaut und per USB übertragen werden. Bei ILI9342 muss
+   `display_rotation` zusätzlich auf `'0'` stehen; bei ILI9341 und ST7789V
+   bleibt sie auf `'90'`. Bei falscher Farbreihenfolge `display_color_order`
+   zwischen `rgb` und `bgr` wechseln.
 10. **Home Assistant verbinden:** Füge das neue Gerät über **Einstellungen →
     Geräte & Dienste → Integration hinzufügen → ESPHome** hinzu. Gib den
     Gerätenamen und den selbst erzeugten API-Schlüssel ein. Das Home-Assistant-

@@ -271,7 +271,8 @@ der Displayrevision den Controller prüfen und `display_model` in der eigenen
 Haupt-YAML passend auf `ESP32-2432S028-7789` (ST7789V) oder
 `ESP32-2432S028-9342` (ILI9342) setzen. Bei abweichenden Farben kann
 `display_color_order` auf `bgr` geändert werden. Änderungen nur in der eigenen
-`*.local.yaml` vornehmen.
+`*.local.yaml` vornehmen. Für ILI9342 `display_rotation: '0'` setzen; für
+ILI9341 und ST7789V bleibt die Rotation `90`.
 
 Für den generischen ESP32 gelten folgende GPIOs; die Pins stehen als
 Substitutionen im Hardwareprofil und können in der Hauptdatei überschrieben werden:

@@ -23,13 +23,13 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("display_rotation: '90'", profile)
         self.assertIn("display_color_order: rgb", profile)
         self.assertIn("model: ${display_model}", hardware)
-        self.assertIn("width: 240", hardware)
-        self.assertIn("height: 320", hardware)
+        self.assertNotIn("dimensions:", hardware)
         self.assertIn("cs_pin: GPIO15", hardware)
         self.assertIn("dc_pin: GPIO2", hardware)
         self.assertIn("ESP32-2432S028", guide)
         self.assertIn("Dual-USB", guide)
         self.assertIn("ILI9341", guide)
+        self.assertIn("display_rotation: '0'", guide)
         self.assertIn("Touchscreen wird von diesem Profil nicht verwendet", guide)
 
     def test_container_departure_cache_uses_persistent_data_volume(self) -> None:
@@ -378,6 +378,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("py -3.12 -m venv .venv-esphome", readme)
         self.assertIn("esphome compile esphome\\hvv-cyd.local.yaml", readme)
         self.assertIn("esphome run esphome\\hvv-cyd.local.yaml", readme)
+        self.assertIn("`.\\.venv-esphome\\Scripts\\python.exe", readme)
         self.assertIn("ESP32-2432S028-7789", readme)
         self.assertIn("ESP32-2432S028-9342", readme)
 
