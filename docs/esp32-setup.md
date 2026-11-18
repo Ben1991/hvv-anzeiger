@@ -163,9 +163,9 @@ sind für das vorhandene Layout sinnvoll; für kleinere/runde Displays ist ein
 eigenes Layout nötig.
 
 ```sh
-esphome config esphome/hvv-display.local.yaml
-esphome compile esphome/hvv-display.local.yaml
-esphome run esphome/hvv-display.local.yaml
+esphome config esphome/hvv-cyd.local.yaml
+esphome compile esphome/hvv-cyd.local.yaml
+esphome run esphome/hvv-cyd.local.yaml
 ```
 
 Unter Windows einen kurzen **physischen** Werkzeugpfad vor dem ersten Build
@@ -211,10 +211,10 @@ git status --short
 git pull --ff-only origin main
 . .venv-esphome/bin/activate
 python -m pip install esphome==2026.9.1
-esphome config esphome/hvv-display.local.yaml
-esphome compile esphome/hvv-display.local.yaml
-esphome upload esphome/hvv-display.local.yaml --device hvv-display.local
-esphome logs esphome/hvv-display.local.yaml --device hvv-display.local
+esphome config esphome/hvv-cyd.local.yaml
+esphome compile esphome/hvv-cyd.local.yaml
+esphome upload esphome/hvv-cyd.local.yaml --device hvv-cyd.local
+esphome logs esphome/hvv-cyd.local.yaml --device hvv-cyd.local
 ```
 
 Dateiname und `--device` an das gewählte Profil sowie den eigenen Gerätenamen

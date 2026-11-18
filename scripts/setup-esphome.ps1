@@ -43,7 +43,7 @@ if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
     $venvPython = Join-Path $venvFullPath 'Scripts\python.exe'
 }
 
-$pythonMinor = & $venvPython -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'
+$pythonMinor = & $venvPython -c 'import sys; print(str(sys.version_info[0])+chr(46)+str(sys.version_info[1]))'
 if ($LASTEXITCODE -ne 0 -or $pythonMinor.Trim() -ne '3.12') {
     throw "Die Umgebung '$venvFullPath' verwendet nicht Python 3.12. Bestehende Umgebungen werden nicht überschrieben. Verwende z. B. -VenvPath .venv-esphome-312."
 }

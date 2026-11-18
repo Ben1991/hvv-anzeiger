@@ -383,14 +383,24 @@ class ProjectArtifactTest(unittest.TestCase):
         script = (ROOT / "scripts" / "setup-esphome.ps1").read_text(
             encoding="utf-8"
         )
+        guide = (ROOT / "docs" / "esp32-setup.md").read_text(
+            encoding="utf-8"
+        )
 
         self.assertIn("esphomeVersion = '2026.9.1'", script)
+        self.assertIn(
+            "print(str(sys.version_info[0])+chr(46)+str(sys.version_info[1]))",
+            script,
+        )
         self.assertIn("if (-not (Test-Path -LiteralPath $localProfile", script)
         self.assertIn("if (-not (Test-Path -LiteralPath $secretFile", script)
         self.assertIn("SecureStringToBSTR", script)
         self.assertIn("RandomNumberGenerator", script)
         self.assertIn("ESPHOME_ESP_IDF_PREFIX", script)
         self.assertIn("-m esphome run", script)
+        self.assertIn("cp esphome/hvv-cyd.yaml esphome/hvv-cyd.local.yaml", guide)
+        self.assertIn("esphome config esphome/hvv-cyd.local.yaml", guide)
+        self.assertNotIn("esphome/hvv-display.local.yaml", guide)
 
     def test_home_assistant_and_esp32_guides_have_separate_scope(self) -> None:
         home_assistant = (ROOT / "docs" / "home-assistant.md").read_text(
