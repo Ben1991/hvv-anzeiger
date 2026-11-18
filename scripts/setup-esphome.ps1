@@ -184,7 +184,7 @@ if ($directBackendProfile -and
     }
     if ($backendAuthorization) {
         $secretText = $secretText.Replace(
-            $backendAuthPlaceholder, "backend_authorization: Basic $backendAuthorization")
+            $backendAuthPlaceholder, "Basic $backendAuthorization")
     }
     [System.IO.File]::WriteAllText(
         $secretFile, $secretText, [System.Text.UTF8Encoding]::new($false))

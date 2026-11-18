@@ -432,6 +432,9 @@ class ProjectArtifactTest(unittest.TestCase):
             script,
         )
         self.assertIn("Webpasswort des Hintergrunddienstes", script)
+        self.assertIn(
+            '$backendAuthPlaceholder, "Basic $backendAuthorization")', script
+        )
         self.assertIn("packages/home-assistant\\.yaml", script)
         self.assertIn(".pre-direct-backend.bak", script)
         self.assertIn("$secretText -notmatch '(?m)^backend_url:'", script)
