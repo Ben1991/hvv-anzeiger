@@ -10,8 +10,8 @@
 | Dein nächster Schritt | Abschnitt |
 |---|---|
 | Raspberry Pi erstmals einrichten | [Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Display anschließen](#display-anschließen) → [Installieren](#installieren) |
-| Home Assistant oder ESP32 einrichten | [Separate Anleitung mit Pinbelegung](docs/home-assistant-esphome.md) |
-| CYD-Display per USB flashen | [ESP32-Firmware Schritt für Schritt](#esp32-firmware-schritt-für-schritt) |
+| Home Assistant einrichten | [HA-Anleitung](docs/home-assistant.md) |
+| ESP32 einrichten oder per USB flashen | [ESP32-Schrittfolge und Setup-Skript](#esp32-schritt-für-schritt) |
 | Haltestellen, Linien oder Darstellung ändern | [Konfigurieren](#konfigurieren) |
 | Version aktualisieren oder Dienst steuern | [Betrieb und Updates](#betrieb-und-updates) |
 | Einen Fehler untersuchen | [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose) |
@@ -26,7 +26,7 @@
 - [Geofox-Zugang beantragen](#geofox-zugang-beantragen)
 - [Display anschließen](#display-anschließen)
 - [Installieren](#installieren)
-- [ESP32-Firmware Schritt für Schritt](#esp32-firmware-schritt-für-schritt)
+- [ESP32 Schritt für Schritt](#esp32-schritt-für-schritt)
 - [Konfigurieren](#konfigurieren)
 - [Betrieb und Updates](#betrieb-und-updates)
 - [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose)
@@ -60,7 +60,8 @@ Oberfläche. Zusätzlich sind Home Assistant und ESP32-Displays mit ESPHome mög
 | Du möchtest … | Aufbau | Hier geht es weiter |
 |---|---|---|
 | eine Anzeige direkt am Raspberry Pi | Raspberry Pi mit angeschlossenem SPI-Display | [Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Verdrahtung](#display-anschließen) → [Installation](#installieren) |
-| Abfahrten in Home Assistant oder auf einem ESP32-Display | Python-Hintergrunddienst + HA-Paket und/oder ESPHome | [Home Assistant und ESP32 einrichten](docs/home-assistant-esphome.md) |
+| Abfahrten in Home Assistant | Python-Hintergrunddienst + HA-Paket | [Home-Assistant-Anleitung](docs/home-assistant.md) |
+| Abfahrten auf einem ESP32-Display | Python-Hintergrunddienst + ESPHome | [ESP32-Einrichtungsanleitung](docs/esp32-setup.md) |
 | einen Browser als Kiosk- oder Zweitbildschirm | geschützter Displaymodus des Webdienstes | [Weboberfläche und Displaymodus](#lokale-weboberfläche) |
 
 Ein Geofox-Zugang ist bei allen Varianten erforderlich. Der Python-
@@ -131,8 +132,10 @@ direkter HTTPS-Abruf. Der Hintergrunddienst kann auch ohne GPIO als Container
 laufen. Die bestehende Pi-Anzeige und Webkonfiguration bleiben erhalten.
 Ein konkreter Displayaufbau muss vor Ort geprüft werden.
 
-Die vollständige Einrichtung, Pinbelegung und Funktionsabdeckung stehen in
-[Home Assistant und ESP32 mit ESPHome](docs/home-assistant-esphome.md).
+Einrichtung und Zuständigkeiten sind getrennt dokumentiert:
+[Home Assistant](docs/home-assistant.md) und
+[ESP32 mit ESPHome](docs/esp32-setup.md). Der technische Überblick steht in
+[Home Assistant und ESP32: Überblick](docs/home-assistant-esphome.md).
 
 #### Home Assistant: Schritt für Schritt
 
@@ -194,7 +197,7 @@ beschreibt weitere Installationsarten.
 Das Dashboard ist optional. Die zugehörige Karte steht in
 [`home-assistant/dashboard.yaml`](home-assistant/dashboard.yaml). Weitere
 Hinweise zur TLS-Vertrauenskette, Fehlersuche und zum Hintergrunddienst stehen
-in der [vollständigen Einrichtungsanleitung](docs/home-assistant-esphome.md).
+in der [Home-Assistant-Anleitung](docs/home-assistant.md).
 
 ### Welche Abfahrtszeit wird angezeigt?
 
@@ -297,7 +300,7 @@ auf diese Referenzprofile; nicht jedes Suchergebnis passt dazu.
 | Backlight-Treiber, falls nötig | [MOSFET-/LED-Treibermodul mit 3,3-V-Steuerung suchen (Affiliate-Link)](https://www.amazon.de/s?k=MOSFET+LED+Treiber+Modul+3%2C3V+Logic+Level&tag=bema19910e-21) | nur ohne geeigneten BL-Steuereingang am Display; Treiber muss mit 3,3 V schalten und zum LED-Strom passen; nackte Hintergrundbeleuchtung nicht direkt am GPIO betreiben |
 
 Pinbelegung, Versorgung und Backlight-Anschluss stehen in der
-[ESPHome-Einrichtungsanleitung](docs/home-assistant-esphome.md).
+[ESP32-Einrichtungsanleitung](docs/esp32-setup.md).
 Die Referenzfirmwares wurden kompiliert; die konkreten Amazon-Angebote und
 deren Hardware wurden nicht geprüft. Der Python-Hintergrunddienst bleibt
 auch mit einem ESP32-Display erforderlich.
@@ -307,108 +310,66 @@ auch mit einem ESP32-Display erforderlich.
 > Link einkaufst, kann ich eine Provision erhalten. Für dich entstehen dadurch
 > keine zusätzlichen Kosten.
 
-#### ESP32-Firmware Schritt für Schritt
+#### ESP32 Schritt für Schritt
 
-Diese Anleitung ist für das gelbe CYD-Board `ESP32-2432S028` mit 2,8-Zoll-
-Display und 240×320 Pixeln gedacht. Das Profil verwendet den ILI9341-Treiber,
-den die Produktangabe nennt. Die Firmware erkennt den Displaycontroller nicht
-automatisch; bei einer abweichenden Hardware-Revision muss das Modell in der
-eigenen YAML-Datei angepasst werden. Das erste Flashen erfolgt per USB.
+Für das CYD `ESP32-2432S028` mit 2,8-Zoll-Display und 240×320 Pixeln ist
+`hvv-cyd` das Standardprofil. Der ILI9341-Treiber folgt der Produktangabe;
+eine automatische Controller-Erkennung ist technisch nicht zuverlässig.
 
-1. **Vorbereiten:** Installiere Git und Python 3.12 auf deinem Windows-PC.
-   Verwende ein USB-Datenkabel (ein reines Ladekabel überträgt keine Firmware).
-   Schließe das Board zunächst noch nicht an.
-2. **Repository laden:** Öffne PowerShell und führe diese Befehle aus:
+1. **Vorbereiten:** Installiere Git und Python 3.12 inklusive Python Launcher.
+   Nimm ein USB-Datenkabel. Schließe das Board erst vor dem Flashen an.
+2. **Repository laden:** Öffne PowerShell:
 
    ```powershell
    git clone https://github.com/Ben1991/hvv-anzeiger.git
    cd hvv-anzeiger
    ```
 
-   Wenn das Repository schon vorhanden ist, öffne stattdessen dessen Ordner
-   und hole aktuelle Änderungen mit `git pull --ff-only origin main`.
-3. **ESPHome installieren:** Erstelle eine getrennte Python-Umgebung und
-   installiere die im Projekt verwendete ESPHome-Version:
+3. **Setup automatisieren:** Das Skript erstellt eine getrennte Python-Umgebung,
+   installiert ESPHome in der geprüften Version, legt eine private lokale Kopie
+   des Profils an, generiert den API-Schlüssel und fragt WLAN-Name und Passwort
+   verdeckt ab. Bestehende lokale Profile und Geheimnisse überschreibt es nicht.
+   Zunächst nur einrichten und prüfen:
 
    ```powershell
-   py -3.12 -m venv .venv-esphome
-   .\.venv-esphome\Scripts\Activate.ps1
-   python -m pip install esphome==2026.9.1
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
    ```
 
-   Wenn PowerShell das Aktivieren blockiert, kannst du die Befehle ohne
-   Aktivierung mit `.\.venv-esphome\Scripts\python.exe -m pip ...` und
-   `.\.venv-esphome\Scripts\python.exe -m esphome ...` ausführen.
-4. **Geheimnisse anlegen:** Kopiere die Vorlage. Die Datei mit WLAN-Passwort
-   und API-Schlüssel bleibt lokal und darf nicht veröffentlicht werden:
+   Falls PowerShell bereits im Repository läuft, kannst du auch
+   `Set-ExecutionPolicy -Scope Process Bypass` ausführen und danach
+   `.\scripts\setup-esphome.ps1 -Profile hvv-cyd` starten. Das ändert die
+   Richtlinie nur für dieses Terminal.
+4. **Boardprofil prüfen:** Standard ist ILI9341, 240×320 Pixel, Querformat.
+   Für andere Profile verwende `-Profile hvv-display`, `hvv-s3-ili9488` oder
+   `hvv-direct`. Pins und Controller nur entsprechend deinem Board anpassen;
+   gemeinsame Dateien unter `esphome\boards` und `esphome\packages` bleiben
+   unverändert. Das optionale Profil `hvv-direct` benötigt zusätzlich gültige
+   `backend_url`- und `backend_authorization`-Werte in `esphome\secrets.yaml`.
+5. **Board anschließen und flashen:** Verbinde genau einen USB-Anschluss des
+   CYD. Das Skript baut die Firmware und startet den seriellen Upload:
 
    ```powershell
-   Copy-Item esphome\secrets.example.yaml esphome\secrets.yaml
-   Copy-Item esphome\hvv-cyd.yaml esphome\hvv-cyd.local.yaml
+   .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
    ```
 
-   Öffne `esphome\secrets.yaml` in einem Texteditor. Trage WLAN-Name und
-   WLAN-Passwort ein. Erzeuge einen eigenen API-Schlüssel und trage ihn bei
-   `api_encryption_key` ein:
+   Wähle den neu erschienenen COM-Port. Wenn kein Upload startet, halte BOOT,
+   drücke kurz RESET, lasse RESET und dann BOOT los und wiederhole den Befehl.
+   Nie beide USB-Anschlüsse gleichzeitig verbinden.
+6. **Home Assistant verbinden:** Wenn du den HA-Transport verwendest, füge das
+   Gerät unter **Einstellungen → Geräte & Dienste → Integration hinzufügen →
+   ESPHome** hinzu. Den API-Schlüssel findest du lokal in
+   `esphome\secrets.yaml`; übernimm ihn nur in den geschützten HA-Dialog.
+   Paket und Sensor `sensor.hvv_board` müssen gemäß
+   [HA-Anleitung](docs/home-assistant.md) eingerichtet sein.
+7. **Anzeige prüfen:** Kontrolliere WLAN, Text, Farben, Rotation und
+   Abfahrtszeiten. Bei leerem Bild prüfe zuerst den Controller der konkreten
+   Platinenrevision; ST7789V und ILI9342 benötigen ein angepasstes Profil.
 
-   ```powershell
-   python -c "import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())"
-   ```
-
-   Die Werte `backend_url` und `backend_authorization` werden nur für das
-   optionale Profil `hvv-direct.yaml` benötigt; beim CYD-Profil über Home
-   Assistant bleiben sie ungenutzt. Speichere die Datei.
-5. **Profil prüfen:** Öffne `esphome\hvv-cyd.local.yaml`. Der Standard ist
-   `ILI9341`, `240×320` und Querformat. Ändere `name`, `friendly_name` oder
-   `board_entity` nur bei Bedarf. Die Entität `sensor.hvv_board` muss in Home
-   Assistant vorhanden sein. Den resistiven Touchscreen nutzt diese Firmware
-   nicht.
-6. **Konfiguration kontrollieren und Firmware bauen:** Lass das Terminal im
-   Repository-Ordner geöffnet. Führe zuerst die Prüfung und dann den Build aus:
-
-   ```powershell
-   esphome config esphome\hvv-cyd.local.yaml
-   esphome compile esphome\hvv-cyd.local.yaml
-   ```
-
-   Der erste Build lädt ESP-IDF und Schriftdateien herunter und kann einige
-   Minuten dauern. Bei Erfolg liegt die Firmware im ESPHome-Buildordner.
-7. **Board anschließen:** Verbinde das CYD mit einem USB-Datenkabel mit dem
-   Computer. Bei diesem Board gibt es USB-C und Micro-USB. Verwende zunächst
-   einen Anschluss; stecke nicht beide gleichzeitig ein. Öffne den Windows-
-   Geräte-Manager und suche unter **Anschlüsse (COM & LPT)** den neu
-   hinzugekommenen COM-Port.
-8. **Per USB installieren:** Starte:
-
-   ```powershell
-   esphome run esphome\hvv-cyd.local.yaml
-   ```
-
-   Wähle den COM-Port, wenn ESPHome danach fragt. Falls keine Verbindung
-   zustande kommt, halte **BOOT** gedrückt, drücke kurz **RESET**, lasse
-   **RESET** und dann **BOOT** los und starte den USB-Upload erneut. Bei
-   fehlendem COM-Port probiere ein anderes Datenkabel oder den anderen
-   USB-Anschluss.
-9. **Bild und Verbindung prüfen:** Nach dem Neustart sollten HVV-Anzeige und
-   WLAN-Verbindung erscheinen. Bei einem weißen oder leeren Display kontrolliere
-   zuerst den Controller deiner Revision. Die Produktfotos zeigen zwei
-   USB-Anschlüsse, aber der Platinenaufdruck allein beweist den Displaycontroller
-   nicht. Bei ST7789V oder ILI9342 muss `display_model` in deiner lokalen YAML
-   auf `ESP32-2432S028-7789` beziehungsweise `ESP32-2432S028-9342` geändert und
-   die Firmware erneut gebaut und per USB übertragen werden. Bei ILI9342 muss
-   `display_rotation` zusätzlich auf `'0'` stehen; bei ILI9341 und ST7789V
-   bleibt sie auf `'90'`. Bei falscher Farbreihenfolge `display_color_order`
-   zwischen `rgb` und `bgr` wechseln.
-10. **Home Assistant verbinden:** Füge das neue Gerät über **Einstellungen →
-    Geräte & Dienste → Integration hinzufügen → ESPHome** hinzu. Gib den
-    Gerätenamen und den selbst erzeugten API-Schlüssel ein. Das Home-Assistant-
-    Paket und der Hintergrunddienst müssen eingerichtet sein, damit die
-    Abfahrtsdaten erscheinen; siehe [ESPHome-Anleitung](docs/home-assistant-esphome.md).
-
-Für Linux/macOS, ESPHome Device Builder, externe SPI-Displays, OTA-Updates,
-Diagnose und weitere Profile gilt die ausführlichere
-[ESPHome-Einrichtungsanleitung](docs/home-assistant-esphome.md).
-
+Das Setup-Skript setzt für Firmwarebau einen kurzen ESP-IDF-Pfad `C:\ei`.
+Falls der Ordner nicht angelegt werden darf, übergib einen beschreibbaren
+kurzen lokalen Pfad mit `-EspIdfPrefix`. Linux/macOS, ESPHome Device Builder,
+Pinbelegungen, alle Profile und die Fehlerbehebung stehen in der
+[ESP32-Einrichtungsanleitung](docs/esp32-setup.md).
 ### Unterstütztes Zielsystem
 
 #### Betriebssysteme
@@ -1418,8 +1379,9 @@ haben die Dateirechte `0600`.
 
 ### Anwendung aktualisieren
 
-Für ESP32-Firmware, das Home-Assistant-Paket und den Backend-Container gilt die
-[separate Updateanleitung](docs/home-assistant-esphome.md#updates-für-esphome-home-assistant-und-container).
+Für ESP32-Firmware gilt die [ESP32-Updateanleitung](docs/esp32-setup.md#firmware-aktualisieren).
+Home-Assistant-Paket und Backend werden gemäß
+[Home-Assistant-Anleitung](docs/home-assistant.md#updates-für-hintergrunddienst-und-home-assistant) aktualisiert.
 Die folgenden Schritte aktualisieren die Raspberry-Pi-Installation.
 
 Eine neue Version wird auf dem Raspberry Pi aus dem ursprünglichen Checkout
@@ -1770,7 +1732,7 @@ Für eine relevante Einsparung muss die Hintergrundbeleuchtung elektrisch über
 einen zum Modul passenden Transistor oder Treiber abgeschaltet werden. Diese
 Hardwaresteuerung ist nicht Bestandteil des dokumentierten Pi-Aufbaus.
 Die ESPHome-Referenzprofile enthalten dagegen eine Backlight-Steuerung;
-ihre Verdrahtung steht in der [ESPHome-Anleitung](docs/home-assistant-esphome.md).
+ihre Verdrahtung steht in der [ESP32-Anleitung](docs/esp32-setup.md).
 
 ## Sicherheit und Datenschutz
 
@@ -1779,7 +1741,8 @@ ihre Verdrahtung steht in der [ESPHome-Anleitung](docs/home-assistant-esphome.md
   Anmeldung und HTTPS.
 - Geofox-Abfragen verwenden ausschließlich HTTPS zu `gti.geofox.de`.
   Die zusätzlichen Verbindungen für Home Assistant und ESPHome sind in der
-  [ESPHome-Anleitung](docs/home-assistant-esphome.md) beschrieben.
+  [Home-Assistant-Anleitung](docs/home-assistant.md) und der
+  [ESP32-Anleitung](docs/esp32-setup.md) beschrieben.
 - Geofox-Zugangsdaten stehen weder im Repository noch in Prozessargumenten.
 - Der Dienst läuft als nicht interaktiver Benutzer `hvv-anzeiger`.
 - Programm, virtuelle Python-Umgebung und Konfiguration sind für den Dienst
@@ -1934,7 +1897,7 @@ V2.5.0 macht den Raspberry-Pi-Bildschirm robuster gegen kurzzeitige Kontaktprobl
 - **Home-Assistant-Diagnose:** Fehler- und Problemsensoren führen getrennte Fehler- und Wiederherstellungszähler. Diagnosewerte lösen keine zusätzlichen Geofox-Abfragen aus.
 - **Betrieb und Prüfung:** CI prüft die Display-Wiederherstellung mit dem luma-Treiber und simuliertem SPI/GPIO; ein Abnahmeablauf beschreibt die Prüfung am angeschlossenen Pi-Display. Langzeittests decken 1.000 fehlgeschlagene Verbindungsversuche und 1.000 periodische Resets ab.
 
-**Update:** Bestehende Raspberry-Pi-Installationen lassen sich wie bisher mit `./update.sh` aktualisieren. Die Home-Assistant- und ESPHome-Einrichtung bleibt in der [Einrichtungsanleitung](docs/home-assistant-esphome.md) beschrieben.
+**Update:** Bestehende Raspberry-Pi-Installationen lassen sich wie bisher mit `./update.sh` aktualisieren. Home Assistant und ESP32 haben getrennte [Einrichtungsanleitungen](docs/home-assistant.md) und [Flash-Anleitung](docs/esp32-setup.md).
 
 [Änderungen seit V2.4.0](https://github.com/Ben1991/hvv-anzeiger/compare/V2.4.0...V2.5.0) ·
 [Vollständige Release Notes zu V2.5.0](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.5.0)
@@ -1964,7 +1927,7 @@ ESP32-Displays anzeigen. Die Paketversion ist `0.4.0`.
 
 **Update:** Eine bestehende Raspberry-Pi-Installation lässt sich wie bisher
 mit `./update.sh` aktualisieren. Für Home Assistant und ESP32 gelten die neuen
-[Einrichtungsanleitungen](docs/home-assistant-esphome.md); der
+[HA-Anleitung](docs/home-assistant.md) und der [ESP32-Anleitung](docs/esp32-setup.md); der
 [HA-Schnellstart](#home-assistant-schritt-für-schritt) steht direkt in diesem
 README.
 

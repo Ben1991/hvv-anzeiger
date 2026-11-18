@@ -15,7 +15,7 @@ class ProjectArtifactTest(unittest.TestCase):
         hardware = (ROOT / "esphome" / "boards" / "cyd.yaml").read_text(
             encoding="utf-8"
         )
-        guide = (ROOT / "docs" / "home-assistant-esphome.md").read_text(
+        guide = (ROOT / "docs" / "esp32-setup.md").read_text(
             encoding="utf-8"
         )
 
@@ -30,7 +30,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("Dual-USB", guide)
         self.assertIn("ILI9341", guide)
         self.assertIn("display_rotation: '0'", guide)
-        self.assertIn("Touchscreen wird von diesem Profil nicht verwendet", guide)
+        self.assertIn("Der resistive Touchscreen", guide)
 
     def test_container_departure_cache_uses_persistent_data_volume(self) -> None:
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
@@ -374,13 +374,35 @@ class ProjectArtifactTest(unittest.TestCase):
     def test_readme_documents_cyd_firmware_flash_steps(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-        self.assertIn("ESP32-Firmware Schritt für Schritt", readme)
-        self.assertIn("py -3.12 -m venv .venv-esphome", readme)
-        self.assertIn("esphome compile esphome\\hvv-cyd.local.yaml", readme)
-        self.assertIn("esphome run esphome\\hvv-cyd.local.yaml", readme)
-        self.assertIn("`.\\.venv-esphome\\Scripts\\python.exe", readme)
-        self.assertIn("ESP32-2432S028-7789", readme)
-        self.assertIn("ESP32-2432S028-9342", readme)
+        self.assertIn("ESP32 Schritt für Schritt", readme)
+        self.assertIn("scripts\\setup-esphome.ps1 -Profile hvv-cyd", readme)
+        self.assertIn("scripts\\setup-esphome.ps1 -Profile hvv-cyd -Flash", readme)
+        self.assertIn("docs/esp32-setup.md", readme)
+
+    def test_esp32_setup_script_preserves_existing_local_configuration(self) -> None:
+        script = (ROOT / "scripts" / "setup-esphome.ps1").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("esphomeVersion = '2026.9.1'", script)
+        self.assertIn("if (-not (Test-Path -LiteralPath $localProfile", script)
+        self.assertIn("if (-not (Test-Path -LiteralPath $secretFile", script)
+        self.assertIn("SecureStringToBSTR", script)
+        self.assertIn("RandomNumberGenerator", script)
+        self.assertIn("ESPHOME_ESP_IDF_PREFIX", script)
+        self.assertIn("-m esphome run", script)
+
+    def test_home_assistant_and_esp32_guides_have_separate_scope(self) -> None:
+        home_assistant = (ROOT / "docs" / "home-assistant.md").read_text(
+            encoding="utf-8"
+        )
+        esp32 = (ROOT / "docs" / "esp32-setup.md").read_text(encoding="utf-8")
+
+        self.assertIn("HA-Paketintegration", home_assistant)
+        self.assertIn("ESP32-Einrichtungsanleitung", home_assistant)
+        self.assertIn("Windows-Setup automatisieren", esp32)
+        self.assertIn("Firmware aktualisieren", esp32)
+        self.assertIn("Home Assistant und Hintergrunddienst", esp32)
 
 
 if __name__ == "__main__":

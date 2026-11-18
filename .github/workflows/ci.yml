@@ -14,6 +14,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  esp32-setup-script:
+    name: ESP32 setup script
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Validate PowerShell syntax
+        shell: powershell
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'scripts\setup-esphome.ps1'
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $scriptPath, [ref]$tokens, [ref]$parseErrors
+          ) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+
   esphome:
     name: ESPHome ${{ matrix.firmware }}
     runs-on: ubuntu-latest
