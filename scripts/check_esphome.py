@@ -12,7 +12,13 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIGS = ("hvv-display.yaml", "hvv-cyd.yaml", "hvv-s3-ili9488.yaml", "hvv-direct.yaml")
+CONFIGS = (
+    "hvv-display.yaml",
+    "hvv-cyd.yaml",
+    "hvv-cyd-ha.yaml",
+    "hvv-s3-ili9488.yaml",
+    "hvv-direct.yaml",
+)
 
 
 def main():
