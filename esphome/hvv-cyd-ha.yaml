@@ -1,0 +1,13 @@
+# Optional Home Assistant transport for the CYD ESP32-2432S028.
+substitutions:
+  name: hvv-cyd-ha
+  friendly_name: HVV CYD Home Assistant
+  board_entity: sensor.hvv_board
+  display_model: ILI9341
+  display_rotation: '90'
+  display_color_order: rgb
+
+packages:
+  core: !include packages/core.yaml
+  transport: !include packages/home-assistant.yaml
+  hardware: !include boards/cyd.yaml

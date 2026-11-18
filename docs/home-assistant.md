@@ -1,15 +1,19 @@
-# Home Assistant und der HVV-Anzeiger
+# Hintergrunddienst und optionale Home-Assistant-Integration
 
-Diese Anleitung richtet den Python-Hintergrunddienst und die HA-Paketintegration
-ein. Sie deckt keine ESP32-Hardware, Firmware-Builds oder USB-
-Flashvorgänge ab. Dafür gibt es die separate
+Diese Anleitung deckt zwei getrennte Funktionen ab: Abschnitt 1 richtet den
+gemeinsamen Python-Hintergrunddienst ein; Abschnitt 2 bindet ihn optional als
+HA-Paketintegration in Home Assistant ein. Das CYD kann den Hintergrunddienst
+direkt per HTTPS abfragen und braucht dafür Home Assistant nicht. Das getrennte
+Profil `hvv-cyd-ha` verwendet dagegen die HA-Integration. ESP32-Hardware, Firmwarebau
+und USB-Flashen stehen in der separaten
 [ESP32-Einrichtungsanleitung](esp32-setup.md).
 
 Der Hintergrunddienst bleibt die Quelle für Geofox-Abfragen, Haltestellen-
 auflösung, Linien-/Richtungsfilter und Konfiguration. Er kann auf einem
 Raspberry Pi oder einem Linux-/NAS-Containerhost laufen. Home Assistant bindet
 seine HTTPS-API ein; ein physisches Pi-Display oder der Pi-Anzeigedienst ist
-für Home Assistant und ESP32 nicht erforderlich.
+für Home Assistant und ESP32 nicht erforderlich. Home Assistant ist für die
+direkte ESP32-Anbindung keine Voraussetzung.
 
 ## 1. Hintergrunddienst bereitstellen
 

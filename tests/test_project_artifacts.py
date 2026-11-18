@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 class ProjectArtifactTest(unittest.TestCase):
     def test_cyd_profile_matches_supplied_2_8_inch_board(self) -> None:
         profile = (ROOT / "esphome" / "hvv-cyd.yaml").read_text(encoding="utf-8")
+        ha_profile = (ROOT / "esphome" / "hvv-cyd-ha.yaml").read_text(
+            encoding="utf-8"
+        )
         hardware = (ROOT / "esphome" / "boards" / "cyd.yaml").read_text(
             encoding="utf-8"
         )
@@ -22,6 +25,11 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("display_model: ILI9341", profile)
         self.assertIn("display_rotation: '90'", profile)
         self.assertIn("display_color_order: rgb", profile)
+        self.assertIn("transport: !include packages/https.yaml", profile)
+        self.assertIn(
+            "transport: !include packages/home-assistant.yaml", ha_profile
+        )
+        self.assertIn("hardware: !include boards/cyd.yaml", ha_profile)
         self.assertIn("model: ${display_model}", hardware)
         self.assertNotIn("dimensions:", hardware)
         self.assertIn("cs_pin: GPIO15", hardware)
@@ -379,6 +387,25 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("scripts\\setup-esphome.ps1 -Profile hvv-cyd -Flash", readme)
         self.assertIn("docs/esp32-setup.md", readme)
 
+    def test_esp32_guides_give_beginner_steps_and_recovery_actions(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        guide = (ROOT / "docs" / "esp32-setup.md").read_text(
+            encoding="utf-8"
+        )
+
+        for instruction in (
+            "PowerShell öffnen",
+            "git --version",
+            "py -3.12 --version",
+            "git clone https://github.com/Ben1991/hvv-anzeiger.git",
+            "Schritt 4: ESPHome und das CYD-Profil einrichten",
+            "Wenn kein COM-Port angeboten wird",
+            "Wenn keine Abfahrten erscheinen",
+            "Wenn der Bildschirm leer bleibt oder Farben falsch sind",
+        ):
+            with self.subTest(instruction=instruction):
+                self.assertIn(instruction, readme + guide)
+
     def test_esp32_setup_script_preserves_existing_local_configuration(self) -> None:
         script = (ROOT / "scripts" / "setup-esphome.ps1").read_text(
             encoding="utf-8"
@@ -399,6 +426,21 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("ESPHOME_ESP_IDF_PREFIX", script)
         self.assertIn("$previousErrorActionPreference = $ErrorActionPreference", script)
         self.assertIn("$ErrorActionPreference = 'Continue'", script)
+        self.assertIn("hvv-cyd-ha", script)
+        self.assertIn(
+            "$directBackendProfile = $BoardProfile -in @('hvv-cyd', 'hvv-direct')",
+            script,
+        )
+        self.assertIn("Webpasswort des Hintergrunddienstes", script)
+        self.assertIn("packages/home-assistant\\.yaml", script)
+        self.assertIn(".pre-direct-backend.bak", script)
+        self.assertIn("$secretText -notmatch '(?m)^backend_url:'", script)
+        self.assertIn(
+            "$secretText -notmatch '(?m)^backend_authorization:'", script
+        )
+        self.assertIn(
+            "backendUri.AbsolutePath.TrimEnd('/') -ne '/api/esphome'", script
+        )
         self.assertIn("-m esphome run", script)
         self.assertIn("cp esphome/hvv-cyd.yaml esphome/hvv-cyd.local.yaml", guide)
         self.assertIn("esphome config esphome/hvv-cyd.local.yaml", guide)
@@ -417,9 +459,10 @@ class ProjectArtifactTest(unittest.TestCase):
 
         self.assertIn("HA-Paketintegration", home_assistant)
         self.assertIn("ESP32-Einrichtungsanleitung", home_assistant)
-        self.assertIn("Windows-Setup automatisieren", esp32)
+        self.assertIn("Windows: CYD einrichten und flashen", esp32)
         self.assertIn("Firmware aktualisieren", esp32)
-        self.assertIn("Home Assistant und Hintergrunddienst", esp32)
+        self.assertIn("Home Assistant ist dafür nicht", esp32)
+        self.assertIn("hvv-cyd-ha", esp32)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ test-results/
 esphome/.esphome/
 esphome/secrets.yaml
 esphome/*.local.yaml
+esphome/*.local.yaml.pre-direct-backend.bak
 home-assistant/secrets.yaml
 data/
 .ruff_cache/

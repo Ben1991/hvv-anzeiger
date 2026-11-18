@@ -1,83 +1,252 @@
 # ESP32 mit ESPHome einrichten und flashen
 
 Diese Anleitung behandelt die Board-Auswahl, ESPHome-Konfiguration, Firmware,
-USB-Flashen und ESPHome-Updates. Die Python-API und Home-Assistant-Pakete müssen
-zuerst eingerichtet sein, wenn das Gerät den HA-Transport nutzt: siehe
-[Home Assistant und Hintergrunddienst](home-assistant.md). Beim optionalen
-direkten HTTPS-Profil ist HA für die Abfahrtsdaten nicht erforderlich.
+USB-Flashen und ESPHome-Updates für das CYD. Das Standardprofil fragt den
+Python-Hintergrunddienst direkt per HTTPS ab; **Home Assistant ist dafür nicht
+erforderlich**. Der Hintergrunddienst muss erreichbar sein. Seine Installation
+steht in der Anleitung zum
+[Hintergrunddienst](home-assistant.md#1-hintergrunddienst-bereitstellen).
+Home Assistant ist eine separate optionale Funktion; dafür gibt es das Profil
+`hvv-cyd-ha`.
 
-## 1. Voraussetzungen und Profil wählen
+Vor dem Flashen muss der Python-Hintergrunddienst laufen und ein Webpasswort
+haben. Prüfe im Browser, ob sich seine HTTPS-Weboberfläche öffnen und anmelden
+lässt. Wenn das noch nicht funktioniert, richte zuerst den
+[Hintergrunddienst](home-assistant.md#1-hintergrunddienst-bereitstellen) ein.
 
-Richte zuerst den HTTPS-Hintergrunddienst ein. Für die normale Anbindung muss
-Home Assistant den REST-Sensor `sensor.hvv_board` bereitstellen; der ESP32
-verbindet sich zusätzlich mit der verschlüsselten ESPHome-API. Siehe
-[Home Assistant und Hintergrunddienst](home-assistant.md).
+## Schnellstart für Windows: CYD einrichten und flashen
 
-| Profil | Zielhardware und Display | Transport |
-|---|---|---|
-| `hvv-cyd` | CYD ESP32-2432S028, Dual-USB-Variante wie auf den Produktfotos; 2,8 Zoll, 240×320, ILI9341 als Standard, Querformat | Home Assistant |
-| `hvv-display` | ESP32 DevKit + externes ILI9341, 320×240 quer | Home Assistant |
-| `hvv-s3-ili9488` | ESP32-S3 DevKit + externes ILI9488, 480×320 quer | Home Assistant |
-| `hvv-direct` | ESP32 DevKit + externes ILI9341 | HTTPS direkt zum Hintergrunddienst |
+Dieser Ablauf ist für das **2,8-Zoll-CYD ESP32-2432S028 mit 240×320 Pixeln**,
+einschließlich der abgebildeten Dual-USB-Revision.
+Er verwendet das Profil `hvv-cyd` und setzt den Displaycontroller standardmäßig
+auf ILI9341. Eine automatische Erkennung des Controllers ist bei diesen Boards
+nicht zuverlässig. Für andere Boards siehe [weitere Profile](#weitere-profile).
 
-## 2. Windows-Setup automatisieren
+### Schritt 1: Git und Python installieren
 
-Im Repository liegt `scripts/setup-esphome.ps1`. Das Skript richtet Python 3.12
-und eine getrennte virtuelle Umgebung ein, installiert die im Projekt geprüfte
-ESPHome-Version, legt ein lokales Profil an, erzeugt einen zufälligen
-API-Schlüssel und fragt SSID sowie WLAN-Passwort verdeckt ab. Es verändert keine
-vorhandene `esphome/secrets.yaml` oder `*.local.yaml`.
+1. Installiere [Git für Windows](https://git-scm.com/download/win) mit den
+   vorgeschlagenen Standardoptionen.
+2. Installiere [Python 3.12](https://www.python.org/downloads/windows/). Wähle
+   dort eine Version **3.12.x** und achte darauf, dass der **Python Launcher
+   (`py`)** mitinstalliert wird. Eine neuere Hauptversion reicht für dieses
+   Setup nicht aus.
+3. Verbinde das ESP32-Board noch nicht mit dem Computer.
 
-1. Installiere Git und Python 3.12 mit dem Python Launcher. Verbinde das Board
-   zunächst nicht.
-2. Lade das Repository:
+### Schritt 2: PowerShell öffnen und Installation prüfen
 
-   ```powershell
-   git clone https://github.com/Ben1991/hvv-anzeiger.git
-   cd hvv-anzeiger
-   ```
-
-   Bei einem vorhandenen Checkout zuerst `git status --short` prüfen und lokal
-   angepasste Dateien sichern. Updates nur mit `git pull --ff-only origin main`
-   übernehmen.
-3. Führe das Setup für das CYD aus:
+1. Öffne das Windows-Startmenü.
+2. Tippe `PowerShell` und öffne **Windows PowerShell**. Administratorrechte
+   sind für diese Anleitung nicht nötig.
+3. Kopiere die folgenden zwei Befehle einzeln in das Fenster und drücke nach
+   jedem Befehl die Eingabetaste:
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
+   git --version
+   py -3.12 --version
    ```
 
-   Beim ersten Lauf fragt es nach WLAN-Name und Passwort; die Eingabe des
-   Passworts bleibt verdeckt. Das Skript legt `esphome/secrets.yaml` mit
-   zufälligem API-Schlüssel sowie `esphome/hvv-cyd.local.yaml` an und prüft die
-   ESPHome-Konfiguration. Diese Dateien sind lokal und von Git ausgeschlossen.
-   Eine vorhandene Python-Umgebung mit anderer Version überschreibt es ebenfalls
-   nicht; nutze in dem Fall `-VenvPath .venv-esphome-312`.
-4. Kontrolliere bei Bedarf `esphome/hvv-cyd.local.yaml`. Für andere Boards
-   ersetze `hvv-cyd` in `-Profile` durch `hvv-display`, `hvv-s3-ili9488` oder
-   `hvv-direct`. Eigene Namen, `board_entity` und Pin-Änderungen gehören nur in
-   die lokale YAML. Gemeinsame Dateien in `boards/` und `packages/` nicht
-   editieren. Das direkte Profil verlangt zusätzlich gültige `backend_url`- und
-   `backend_authorization`-Werte; diese vertraulichen Werte musst du selbst in
-   `secrets.yaml` setzen.
-5. Verbinde das Board per USB-Datenkabel. Beim CYD nur einen der beiden
-   USB-Anschlüsse gleichzeitig verwenden. Flashen und Bauen startest du mit:
+   **Erfolg:** Der erste Befehl zeigt eine Git-Version, der zweite `Python 3.12.x`.
+
+   **Wenn ein Befehl als unbekannt gemeldet wird:** Installiere das betreffende
+   Programm erneut, achte bei Python auf den Python Launcher und öffne danach
+   ein neues PowerShell-Fenster. Prüfe dort dieselben Befehle nochmals.
+
+### Schritt 3: Repository herunterladen
+
+Kopiere jede Zeile einzeln in PowerShell und drücke jeweils die Eingabetaste:
+
+```powershell
+git clone https://github.com/Ben1991/hvv-anzeiger.git
+cd hvv-anzeiger
+```
+
+**Erfolg:** Die Eingabeaufforderung endet jetzt mit `hvv-anzeiger>`.
+
+**Wenn `destination path ... already exists` erscheint:** Das Repository liegt
+bereits auf dem Computer. Öffne im Explorer den Ordner `hvv-anzeiger`, klicke
+oben in die Adressleiste, tippe `powershell` und drücke die Eingabetaste. Führe
+im geöffneten Fenster zuerst `git status --short` aus. Eigene Änderungen
+sichern, bevor du Updates mit `git pull --ff-only origin main` übernimmst.
+
+### Schritt 4: ESPHome und das CYD-Profil einrichten
+
+Kopiere den Befehl in dasselbe PowerShell-Fenster und drücke die Eingabetaste:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
+```
+
+Wenn `esphome/secrets.yaml` noch nicht vorhanden ist, fragt das Skript beim
+ersten Lauf nach WLAN-Name und WLAN-Passwort. Für das direkte Profil fragt es
+danach zusätzlich nach der HTTPS-Adresse des Hintergrunddienstes und dem dort
+eingerichteten Webpasswort. Der Benutzername `hvv-anzeiger` wird automatisch
+verwendet; das Passwort bleibt bei der Eingabe verdeckt:
+
+1. Gib den Namen deines WLANs ein und drücke die Eingabetaste.
+2. Gib das WLAN-Passwort ein. Während der Eingabe zeigt PowerShell keine Zeichen
+   an. Drücke danach die Eingabetaste.
+3. Gib beim Profil `hvv-cyd` die HTTPS-Adresse deines Hintergrunddienstes ein.
+   Die Adresse muss auf `/api/esphome` enden.
+4. Gib das Webpasswort des Hintergrunddienstes ein. Auch hier zeigt PowerShell
+   keine Zeichen an.
+5. Warte, bis ESPHome die Konfiguration geprüft hat.
+
+Das Skript richtet Python 3.12, eine getrennte Python-Umgebung und ESPHome ein.
+Es erstellt `esphome/secrets.yaml` mit einem zufälligen ESPHome-API-Schlüssel
+und `esphome/hvv-cyd.local.yaml` als lokale Profilkopie. Vorhandene lokale
+Display- und Pin-Einstellungen überschreibt es nicht. Bei einem Upgrade des
+bisherigen CYD-Profils ändert es nur den Transport auf direkten HTTPS-Abruf,
+entfernt die nicht mehr benötigte `board_entity`-Zeile und legt vorher eine
+Sicherung mit der Endung `.pre-direct-backend.bak` an. Alte
+`secrets.yaml`-Dateien ergänzt das Skript um fehlende Backend-Felder und fragt
+danach nur noch deren Werte ab. Die Dateien enthalten private Zugangsdaten und
+bleiben von Git ausgeschlossen.
+
+Die Backend-Adresse muss mit `https://` beginnen und auf `/api/esphome` enden,
+zum Beispiel `https://anzeige.example.net:8080/api/esphome`. Der Hostname muss
+vom ESP32 erreichbar sein und ein vom Gerät akzeptiertes TLS-Zertifikat
+verwenden. Bei einer eigenen Zertifizierungsstelle siehe den Abschnitt
+[Direktes HTTPS](#direkt-per-https).
+
+**Erfolg:** Am Ende erscheint die Meldung „Konfiguration geprüft.“ ohne Fehlermeldung.
+
+**Wenn `Python 3.12 wurde nicht gefunden` erscheint:** Prüfe in einem neuen
+PowerShell-Fenster `py -3.12 --version`. Installiere Python 3.12 samt Python
+Launcher, falls der Befehl fehlschlägt.
+
+**Wenn eine vorhandene Umgebung nicht Python 3.12 verwendet:** Wiederhole den
+Befehl aus dem Repository-Ordner mit einem neuen Umgebungsnamen:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -VenvPath .venv-esphome-312
+```
+
+**Wenn pip/ESPHome nicht heruntergeladen werden kann:** Prüfe die
+Internetverbindung und einen möglichen Proxy. Starte danach denselben
+Setup-Befehl erneut; vorhandene lokale Profile und Geheimnisse bleiben erhalten.
+
+**Wenn die Backend-Adresse abgelehnt wird:** Gib eine vollständige HTTPS-Adresse
+ein, die mit `/api/esphome` endet. Prüfe außerdem, dass der Hintergrunddienst
+läuft und von deinem WLAN aus erreichbar ist.
+
+**Wenn die Anmeldung am Backend fehlschlägt:** Verwende das aktuelle Webpasswort
+des Hintergrunddienstes für den Benutzer `hvv-anzeiger`. Öffne bei einem
+Tippfehler `esphome/secrets.yaml` und setze die Zeile
+`backend_authorization` auf `Basic REPLACE_WITH_BASE64_CREDENTIALS` zurück.
+Starte danach Schritt 4 erneut; das Skript fragt das Webpasswort erneut ab.
+Zugangsdaten nicht in Issues, Chats oder Screenshots teilen.
+
+**Wenn die Konfiguration wegen Platzhaltern fehlschlägt:** Öffne die Datei mit
+`notepad .\esphome\secrets.yaml`. Ersetze nur die noch vorhandenen Werte
+`REPLACE_WITH_...` durch deine Daten, speichere die Datei und führe den
+Setup-Befehl erneut aus. Für einen noch fehlenden `api_encryption_key` erzeuge
+einen neuen Schlüssel mit diesem Befehl:
+
+```powershell
+py -3.12 -c "import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+```
+
+Kopiere die ausgegebene Zeile in `secrets.yaml`. Poste WLAN-Passwort und
+API-Schlüssel niemals in Issues, Chats oder Screenshots.
+
+### Schritt 5: Board verbinden und Firmware flashen
+
+1. Nimm ein USB-Datenkabel. Ein Ladekabel ohne Datenleitungen funktioniert nicht.
+2. Verbinde das CYD mit dem Computer. Hat dein Board zwei USB-Anschlüsse,
+   verwende nur einen davon gleichzeitig.
+3. Kopiere den Flash-Befehl in PowerShell und drücke die Eingabetaste:
 
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
    ```
 
-   Das Skript prüft die Konfiguration, baut die Firmware und lässt ESPHome den
-   COM-Port wählen. Bei `-Build` wird nur gebaut, noch nicht geflasht. Ohne
-   Parameter `-Build` oder `-Flash` läuft nur Setup und Konfigurationsprüfung.
-   Wenn kein COM-Port erscheint, prüfe im Geräte-Manager, ob für den auf deiner
-   Revision verbauten USB-UART-Chip ein passender Treiber fehlt.
-6. Füge das Gerät bei HA-Transport über **Einstellungen → Geräte & Dienste →
-   Integration hinzufügen → ESPHome** hinzu. Den individuellen API-Schlüssel
-   kannst du lokal in `esphome/secrets.yaml` nachsehen und im geschützten Dialog
-   eingeben. Niemals in Chat, Logs oder öffentliche Issues kopieren.
-7. Prüfe WLAN, angezeigte Abfahrten, Rotation und Farben. Die ESPHome-
-   Diagnosewerte **Freier Heap**, **Größter freier Heap-Block** und
-   **Minimaler freier Heap** werden alle 30 Sekunden an Home Assistant gemeldet.
+4. Warte auf den Firmwarebau. Wähle anschließend in ESPHome den COM-Port aus,
+   der zum angeschlossenen Board gehört.
+
+**Erfolg:** ESPHome meldet den abgeschlossenen Upload. Das Board startet danach
+mit der neuen Firmware.
+
+**Wenn kein COM-Port angeboten wird:** Prüfe, ob das Board eingeschaltet ist,
+verwende ein anderes Datenkabel und kontrolliere im Windows-Geräte-Manager, ob
+bei der seriellen USB-Schnittstelle des Boards ein Treiberfehler angezeigt wird.
+Schließe serielle Monitore
+oder andere Programme, die den COM-Port verwenden, und wiederhole den Flash.
+
+**Wenn der Upload am Board nicht startet:** Halte `BOOT` gedrückt, drücke kurz
+`RESET`, lasse `RESET` los und danach `BOOT`. Starte anschließend den Flash-Befehl
+erneut. Die genaue Tastenfolge kann je nach Platinenrevision abweichen.
+
+### Schritt 6: Anzeige prüfen
+
+Prüfe am eingeschalteten Board, ob Abfahrten, Textausrichtung, Farben und
+Querformat stimmen. Das CYD fragt den Hintergrunddienst alle 15 Sekunden ab.
+
+**Wenn keine Abfahrten erscheinen:** Prüfe, ob das WLAN 2,4 GHz nutzt und der
+Hintergrunddienst erreichbar ist. Öffne `esphome/secrets.yaml` und prüfe
+`wifi_ssid`, `wifi_password`, `backend_url` und `backend_authorization`. Ändere
+falsche WLAN-Werte dort. Bei einem falschen Backendpasswort setze die
+Authorization-Zeile wie oben zurück. Flash danach mit dem Befehl aus Schritt 5
+erneut.
+
+**Wenn der Bildschirm leer bleibt oder Farben falsch sind:** Trenne das Board
+vom USB, prüfe die tatsächliche Displayrevision und passe `display_model`,
+`display_color_order` oder `display_rotation` in
+`esphome/hvv-cyd.local.yaml` an. Produktname und Aufdruck allein identifizieren
+den Displaycontroller nicht immer eindeutig. Verwende nur den Controller, der
+für deine konkrete Platinenrevision angegeben ist: `ESP32-2432S028-7789`
+(ST7789V) oder `ESP32-2432S028-9342` (ILI9342). Hinweise stehen unter
+[Displayrevision und Pinbelegung](#hardware-displayrevision-und-pinbelegung).
+
+**Nur bauen, noch nicht flashen:** In Schritt 5 `-Flash` durch `-Build` ersetzen.
+Das Setup und die Konfigurationsprüfung aus Schritt 4 flashen keine Firmware.
+
+### Optionale Funktion: CYD mit Home Assistant verbinden
+
+Die Standardfirmware `hvv-cyd` zeigt Abfahrten ohne Home Assistant an. Wenn du
+zusätzlich HA-Entitäten und HA-Steuerung möchtest, richte zuerst Hintergrund-
+dienst, HA-Paket und `sensor.hvv_board` nach der
+[Home-Assistant-Anleitung](home-assistant.md) ein. Flash danach das getrennte
+HA-Profil:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd-ha -Flash
+```
+
+Füge das Gerät in Home Assistant unter **Einstellungen → Geräte & Dienste →
+Integration hinzufügen → ESPHome** hinzu. Wenn Home Assistant nach dem
+API-Schlüssel fragt, übernimm lokal `api_encryption_key` aus
+`esphome/secrets.yaml` in den geschützten Dialog. Das HA-Profil bezieht Daten
+über `sensor.hvv_board`; es ersetzt damit den direkten Backendtransport der
+Standardfirmware. Zum Wechsel zurück auf den direkten Betrieb erneut `-Profile
+hvv-cyd` flashen.
+
+**Wenn das Gerät in HA nicht gefunden wird:** Prüfe, ob ESP32 und Home Assistant
+im selben erreichbaren Netzwerk sind und das WLAN 2,4 GHz unterstützt.
+Kontrolliere SSID und Passwort in `esphome/secrets.yaml` und flashe erneut.
+
+### Weitere Profile
+
+| Profil | Zielhardware und Display | Transport |
+|---|---|---|
+| `hvv-cyd` | CYD ESP32-2432S028; 2,8 Zoll, 240×320, ILI9341 als Standard, Querformat | Direkt per HTTPS zum Hintergrunddienst; kein HA nötig |
+| `hvv-cyd-ha` | Dasselbe CYD-Board und Display | Home Assistant, optional |
+| `hvv-display` | ESP32 DevKit + externes ILI9341, 320×240 quer | Home Assistant |
+| `hvv-s3-ili9488` | ESP32-S3 DevKit + externes ILI9488, 480×320 quer | Home Assistant |
+| `hvv-direct` | ESP32 DevKit + externes ILI9341 | Direkt per HTTPS zum Hintergrunddienst |
+
+Für ein anderes Board `-Profile` auf den Profilnamen setzen. Eigene Namen,
+`board_entity` und Pin-Änderungen gehören nur in die zugehörige `*.local.yaml`.
+Gemeinsame Dateien in `boards/` und `packages/` nicht editieren. Die direkten
+Profile `hvv-cyd` und `hvv-direct` benötigen `backend_url` und
+`backend_authorization`. Das Setup-Skript fragt die HTTPS-Adresse und das
+Webpasswort verdeckt ab und erzeugt den Authorization-Wert.
+
+### Wenn der Setup-Befehl nicht startet
+
+Falls Windows meldet, dass das Ausführen von Skripts blockiert ist, den Befehl
+genau wie oben mit `powershell -NoProfile -ExecutionPolicy Bypass -File` starten.
+Diese Einstellung gilt nur für den gestarteten PowerShell-Prozess und ändert
+nicht die Richtlinie für das ganze System.
 
 Der Build verwendet standardmäßig den kurzen ESP-IDF-Pfad `C:\ei`. Wenn dein
 Benutzer ihn nicht erstellen darf, lege einen kurzen beschreibbaren lokalen
@@ -108,6 +277,20 @@ python -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)
 ```
 
 Die Ausgabe ist vertraulich; nicht in öffentliche Logs oder Issues kopieren.
+
+Für `hvv-cyd` zusätzlich `backend_url` auf die erreichbare
+`https://<Hostname>:8080/api/esphome`-Adresse setzen. `backend_authorization` ist
+`Basic` plus Base64 aus `hvv-anzeiger:<Webpasswort>`. Diese Werte sind für den
+direkten CYD-Betrieb nötig; das HA-Profil `hvv-cyd-ha` nutzt sie nicht.
+Den Authorization-Wert kannst du ohne das Passwort in der Shell-History so
+erzeugen:
+
+```sh
+python -c 'import base64,getpass; print("Basic " + base64.b64encode(("hvv-anzeiger:" + getpass.getpass("Backend-Webpasswort: ")).encode()).decode())'
+```
+
+Die Ausgabe kommt in die Zeile `backend_authorization` der lokalen
+`secrets.yaml`. Teile sie nicht in Chats oder Issues.
 
 Im ESPHome Device Builder kopierst du den kompletten Ordner `esphome/` in den
 Konfigurationsordner, einschließlich `hvv_board.h`, `boards/` und `packages/`.
@@ -234,13 +417,16 @@ Logausgabe mit Strg+C beenden; der ESP32 läuft weiter.
    erneute Aktualisierung. Das ist ein Test am realen Aufbau und wird durch
    einen erfolgreichen Compilerlauf nicht ersetzt.
 
-## Optional: direkt per HTTPS
+## Direkt per HTTPS
 
-`hvv-direct.yaml` benötigt kein laufendes HA für die Abfahrtsanzeige, aber
-weiterhin den Python-Hintergrunddienst. In `secrets.yaml` `backend_url` auf
+Das Standardprofil `hvv-cyd.yaml` und das generische Profil `hvv-direct.yaml`
+benötigen kein laufendes HA für die Abfahrtsanzeige, aber weiterhin den
+Python-Hintergrunddienst. In `secrets.yaml` `backend_url` auf
 `https://<Hostname>:8080/api/esphome` und `backend_authorization` auf
 `Basic <Base64 von hvv-anzeiger:Webpasswort>` setzen. Base64 ist keine
-Verschlüsselung; diese Zugangsdaten nur über HTTPS übertragen.
+Verschlüsselung; diese Zugangsdaten nur über HTTPS übertragen. Das Windows-
+Setup-Skript fragt Adresse und Webpasswort ab und erzeugt den Authorization-Wert.
+Manuelle Installationen tragen diese Werte selbst ein.
 Bei eigener CA `ca_certificate_path: backend-ca.pem` in der `http_request:`-
 Konfiguration ergänzen und das CA-Zertifikat neben die Haupt-YAML kopieren.
 Weiterhin `verify_ssl: true` und `follow_redirects: false` verwenden.

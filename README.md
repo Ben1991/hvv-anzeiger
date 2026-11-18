@@ -61,12 +61,14 @@ Oberfläche. Zusätzlich sind Home Assistant und ESP32-Displays mit ESPHome mög
 |---|---|---|
 | eine Anzeige direkt am Raspberry Pi | Raspberry Pi mit angeschlossenem SPI-Display | [Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Verdrahtung](#display-anschließen) → [Installation](#installieren) |
 | Abfahrten in Home Assistant | Python-Hintergrunddienst + HA-Paket | [Home-Assistant-Anleitung](docs/home-assistant.md) |
-| Abfahrten auf einem ESP32-Display | Python-Hintergrunddienst + ESPHome | [ESP32-Einrichtungsanleitung](docs/esp32-setup.md) |
+| Abfahrten auf einem ESP32-Display | Python-Hintergrunddienst + ESPHome, direkt per HTTPS; kein Home Assistant nötig | [ESP32-Einrichtungsanleitung](docs/esp32-setup.md) |
 | einen Browser als Kiosk- oder Zweitbildschirm | geschützter Displaymodus des Webdienstes | [Weboberfläche und Displaymodus](#lokale-weboberfläche) |
 
 Ein Geofox-Zugang ist bei allen Varianten erforderlich. Der Python-
-Hintergrunddienst bleibt auch bei ESPHome nötig; er kann auf dem vorhandenen
-Pi oder als Container laufen. Der ESP32 übernimmt die Anzeige.
+Hintergrunddienst bleibt auch beim ESP32 nötig; das CYD fragt ihn direkt über
+HTTPS ab und zeigt die Abfahrten ohne Home Assistant an. HA ist eine optionale,
+separate Integration. Der Hintergrunddienst kann auf dem vorhandenen Pi oder
+als Container laufen.
 Die folgenden Hardware-, Installations- und systemd-Anleitungen beschreiben
 das Raspberry-Pi-Setup. Für ESPHome gelten die separate Anleitung und deren
 [Prüfgrenzen](docs/home-assistant-esphome-validation.md).
@@ -122,15 +124,15 @@ Linienfarben und -formen dargestellt; die angezeigten Zeiten sind illustrativ.
 - wöchentliche Begrenzung der Systemprotokolle
 - Diagnosewerkzeug und PNG-Vorschau für Betrieb ohne angeschlossenes Display
 
-### Home Assistant und ESPHome auf ESP32
+### ESP32-Anzeige und optionale Home-Assistant-Integration
 
-Zusätzlich zur Pi-Anzeige können Home Assistant und ESP32-Displays denselben
-Abfahrtsdienst nutzen. Enthalten sind ein HA-Paket mit Dashboardbeispiel,
-separate Fehler- und Problemsensoren mit Fehler- und Wiederherstellungszählern,
-ESPHome-Profile für ILI9341, CYD und ESP32-S3/ILI9488 sowie ein optionaler
-direkter HTTPS-Abruf. Der Hintergrunddienst kann auch ohne GPIO als Container
-laufen. Die bestehende Pi-Anzeige und Webkonfiguration bleiben erhalten.
-Ein konkreter Displayaufbau muss vor Ort geprüft werden.
+Das CYD-Profil `hvv-cyd` fragt den Python-Hintergrunddienst direkt per HTTPS ab.
+Es benötigt kein laufendes Home Assistant. Das separate Profil `hvv-cyd-ha`
+bindet dasselbe CYD über die ESPHome-Integration an Home Assistant an. Auch
+dieser Weg braucht den Python-Hintergrunddienst für Geofox-Daten. HA-Paket,
+Dashboardbeispiel und Sensoren sind eine optionale Zusatzfunktion. Der Dienst
+kann ohne GPIO als Container laufen; die bestehende Pi-Anzeige bleibt davon
+unabhängig. Einen konkreten Displayaufbau vor Ort prüfen.
 
 Einrichtung und Zuständigkeiten sind getrennt dokumentiert:
 [Home Assistant](docs/home-assistant.md) und
@@ -139,8 +141,11 @@ Einrichtung und Zuständigkeiten sind getrennt dokumentiert:
 
 #### Home Assistant: Schritt für Schritt
 
-Diese Schritte binden den vorhandenen HVV-Webdienst als Sensor in Home
-Assistant ein. Für die Dateiablage wird im Beispiel Home Assistant OS verwendet.
+Dieser Abschnitt ist nur nötig, wenn du Abfahrten zusätzlich in Home Assistant
+sehen oder die HA-Integration für ein ESP32-Board verwenden möchtest. Das
+Standard-CYD zeigt Abfahrten ohne HA an. Diese Schritte binden den vorhandenen
+HVV-Webdienst als Sensor in Home Assistant ein. Für die Dateiablage wird im
+Beispiel Home Assistant OS verwendet.
 Die offizielle HA-Anleitung zu [Dateizugriff und `configuration.yaml`](https://www.home-assistant.io/docs/configuration/)
 beschreibt weitere Installationsarten.
 
@@ -315,55 +320,79 @@ auch mit einem ESP32-Display erforderlich.
 Für das CYD `ESP32-2432S028` mit 2,8-Zoll-Display und 240×320 Pixeln ist
 `hvv-cyd` das Standardprofil. Der ILI9341-Treiber folgt der Produktangabe;
 eine automatische Controller-Erkennung ist technisch nicht zuverlässig.
+Das CYD fragt den Python-Hintergrunddienst direkt per HTTPS ab. Home Assistant
+ist dafür nicht nötig. Der Hintergrunddienst muss bereits laufen; die
+[Backend-Anleitung](docs/home-assistant.md#1-hintergrunddienst-bereitstellen)
+beschreibt die Einrichtung. Halte seine HTTPS-Adresse und das Webpasswort bereit.
 
-1. **Vorbereiten:** Installiere Git und Python 3.12 inklusive Python Launcher.
-   Nimm ein USB-Datenkabel. Schließe das Board erst vor dem Flashen an.
-2. **Repository laden:** Öffne PowerShell:
+1. **Git und Python installieren:** Installiere Git für Windows und Python
+   3.12 samt Python Launcher (`py`). Nimm ein USB-Datenkabel; schließe das Board
+   erst vor dem Flashen an. Details stehen in der
+   [vollständigen ESP32-Anleitung](docs/esp32-setup.md#schnellstart-für-windows-cyd-einrichten-und-flashen).
+2. **PowerShell öffnen:** Öffne das Startmenü, tippe `PowerShell` und starte
+   **Windows PowerShell**. Kopiere diese Befehle einzeln hinein und drücke nach
+   jedem die Eingabetaste:
+
+   ```powershell
+   git --version
+   py -3.12 --version
+   ```
+
+   Erwartet werden eine Git-Version und `Python 3.12.x`. Ist ein Befehl
+   unbekannt, installiere das betreffende Programm und öffne PowerShell neu.
+3. **Repository laden:** Führe die Befehle einzeln in PowerShell aus:
 
    ```powershell
    git clone https://github.com/Ben1991/hvv-anzeiger.git
    cd hvv-anzeiger
    ```
 
-3. **Setup automatisieren:** Das Skript erstellt eine getrennte Python-Umgebung,
-   installiert ESPHome in der geprüften Version, legt eine private lokale Kopie
-   des Profils an, generiert den API-Schlüssel und fragt WLAN-Name und Passwort
-   verdeckt ab. Bestehende lokale Profile und Geheimnisse überschreibt es nicht.
-   Zunächst nur einrichten und prüfen:
+   Die Eingabeaufforderung sollte jetzt mit `hvv-anzeiger>` enden. Wenn der
+   Ordner bereits existiert, klone ihn nicht erneut. Öffne stattdessen den
+   Ordner `hvv-anzeiger` im Explorer, tippe `powershell` in die Adressleiste
+   und drücke die Eingabetaste. Prüfe eigene Änderungen mit `git status --short`.
+4. **Setup starten:** Kopiere den vollständigen Befehl und drücke die
+   Eingabetaste:
 
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
    ```
 
-   Falls PowerShell bereits im Repository läuft, kannst du auch
-   `Set-ExecutionPolicy -Scope Process Bypass` ausführen und danach
-   `.\scripts\setup-esphome.ps1 -Profile hvv-cyd` starten. Das ändert die
-   Richtlinie nur für dieses Terminal.
-4. **Boardprofil prüfen:** Standard ist ILI9341, 240×320 Pixel, Querformat.
-   Für andere Profile verwende `-Profile hvv-display`, `hvv-s3-ili9488` oder
-   `hvv-direct`. Pins und Controller nur entsprechend deinem Board anpassen;
-   gemeinsame Dateien unter `esphome\boards` und `esphome\packages` bleiben
-   unverändert. Das optionale Profil `hvv-direct` benötigt zusätzlich gültige
-   `backend_url`- und `backend_authorization`-Werte in `esphome\secrets.yaml`.
-5. **Board anschließen und flashen:** Verbinde genau einen USB-Anschluss des
-   CYD. Das Skript baut die Firmware und startet den seriellen Upload:
+   Gib bei der Abfrage WLAN-Name und WLAN-Passwort ein. Danach fragt das Skript
+   die HTTPS-Adresse des Hintergrunddienstes und das Webpasswort ab; bei beiden
+   Passwörtern werden keine Zeichen angezeigt. Warte auf die Meldung
+   „Konfiguration geprüft.“. Das Skript installiert ESPHome, erzeugt einen
+   API-Schlüssel und legt lokale Dateien an, ohne vorhandene Geheimnisse zu
+   überschreiben.
+   Bei einem Fehler hilft die
+   [Schritt-für-Schritt-Anleitung](docs/esp32-setup.md#schritt-4-esphome-und-das-cyd-profil-einrichten).
+5. **Board flashen:** Verbinde das CYD mit einem USB-Datenkabel. Bei zwei USB-
+   Anschlüssen nur einen gleichzeitig verwenden. Führe diesen Befehl aus:
 
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
    ```
 
-   Wähle den neu erschienenen COM-Port. Wenn kein Upload startet, halte BOOT,
-   drücke kurz RESET, lasse RESET und dann BOOT los und wiederhole den Befehl.
-   Nie beide USB-Anschlüsse gleichzeitig verbinden.
-6. **Home Assistant verbinden:** Wenn du den HA-Transport verwendest, füge das
-   Gerät unter **Einstellungen → Geräte & Dienste → Integration hinzufügen →
-   ESPHome** hinzu. Den API-Schlüssel findest du lokal in
-   `esphome\secrets.yaml`; übernimm ihn nur in den geschützten HA-Dialog.
-   Paket und Sensor `sensor.hvv_board` müssen gemäß
-   [HA-Anleitung](docs/home-assistant.md) eingerichtet sein.
-7. **Anzeige prüfen:** Kontrolliere WLAN, Text, Farben, Rotation und
-   Abfahrtszeiten. Bei leerem Bild prüfe zuerst den Controller der konkreten
-   Platinenrevision; ST7789V und ILI9342 benötigen ein angepasstes Profil.
+   Wähle anschließend den COM-Port des Boards. Wenn keiner erscheint, prüfe
+   Kabel, USB-UART-Treiber und Geräte-Manager. Wenn der Upload nicht beginnt,
+   folge der [Fehlerhilfe zum Flashen](docs/esp32-setup.md#schritt-5-board-verbinden-und-firmware-flashen).
+6. **Anzeige prüfen:** Kontrolliere WLAN, Abfahrtszeiten, Textausrichtung,
+   Farben und Querformat. Bei leerem oder falschfarbigem Display prüfe zuerst
+   die konkrete Displayrevision. Das CYD-Profil nimmt ILI9341 als Standard an;
+   eine zuverlässige automatische Controller-Erkennung ist nicht möglich.
+
+**Home Assistant optional:** Wenn du das CYD zusätzlich in HA einbinden
+möchtest, richte das HA-Paket nach der
+[HA-Anleitung](docs/home-assistant.md) ein und flashe die getrennte HA-Firmware:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd-ha -Flash
+```
+
+Füge das Gerät danach unter **Einstellungen → Geräte & Dienste → Integration
+hinzufügen → ESPHome** hinzu und übernimm bei Nachfrage den `api_encryption_key`
+aus `esphome\secrets.yaml`. Die HA-Integration ist eine Zusatzfunktion; sie ist
+nicht erforderlich, damit das CYD Abfahrten anzeigt.
 
 Das Setup-Skript setzt für Firmwarebau einen kurzen ESP-IDF-Pfad `C:\ei`.
 Falls der Ordner nicht angelegt werden darf, übergib einen beschreibbaren

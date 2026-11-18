@@ -40,7 +40,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        firmware: [hvv-display.yaml, hvv-cyd.yaml, hvv-s3-ili9488.yaml, hvv-direct.yaml]
+        firmware:
+          - hvv-display.yaml
+          - hvv-cyd.yaml
+          - hvv-cyd-ha.yaml
+          - hvv-s3-ili9488.yaml
+          - hvv-direct.yaml
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
