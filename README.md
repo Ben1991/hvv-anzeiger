@@ -11,6 +11,7 @@
 |---|---|
 | Raspberry Pi erstmals einrichten | [Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Display anschließen](#display-anschließen) → [Installieren](#installieren) |
 | Home Assistant oder ESP32 einrichten | [Separate Anleitung mit Pinbelegung](docs/home-assistant-esphome.md) |
+| CYD-Display per USB flashen | [ESP32-Firmware Schritt für Schritt](#esp32-firmware-schritt-für-schritt) |
 | Haltestellen, Linien oder Darstellung ändern | [Konfigurieren](#konfigurieren) |
 | Version aktualisieren oder Dienst steuern | [Betrieb und Updates](#betrieb-und-updates) |
 | Einen Fehler untersuchen | [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose) |
@@ -25,6 +26,7 @@
 - [Geofox-Zugang beantragen](#geofox-zugang-beantragen)
 - [Display anschließen](#display-anschließen)
 - [Installieren](#installieren)
+- [ESP32-Firmware Schritt für Schritt](#esp32-firmware-schritt-für-schritt)
 - [Konfigurieren](#konfigurieren)
 - [Betrieb und Updates](#betrieb-und-updates)
 - [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose)
@@ -285,7 +287,7 @@ auf diese Referenzprofile; nicht jedes Suchergebnis passt dazu.
 |---|---|---|
 | ESP32 DevKit | [ESP32-DevKit-Board suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32+DevKit+ESP32-WROOM-32+Entwicklungsboard&tag=bema19910e-21) | klassischer ESP32 für `hvv-display.yaml`; herausgeführte GPIOs müssen zur dokumentierten Pinbelegung passen |
 | ILI9341-SPI-Display | [ILI9341-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=ILI9341+SPI+Display+240x320+3%2C3V&tag=bema19910e-21) | externes Display zum ESP32 DevKit; 240 × 320 Pixel, SPI und 3,3-V-kompatible Logik |
-| CYD mit integriertem Display | [ESP32-2432S028 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-2432S028+ILI9341+2.8+Display&tag=bema19910e-21) | `hvv-cyd.yaml` ist für das Original mit Micro-USB und ILI9341 vorgesehen; Varianten mit ST7789/ILI9342 benötigen das passende Profilmodell |
+| CYD mit integriertem Display | [ESP32-2432S028 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-2432S028+ILI9341+2.8+Display&tag=bema19910e-21) | `hvv-cyd.yaml` ist standardmäßig auf 2,8 Zoll, 240×320 Pixel und den ILI9341 laut Produktangabe eingestellt; Dual-USB-Varianten können andere Displaycontroller haben |
 | ESP32-S3 DevKit | [ESP32-S3-DevKitC-1 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-S3+DevKitC-1+Entwicklungsboard&tag=bema19910e-21) | für `hvv-s3-ili9488.yaml`; GPIOs, USB-Anschluss und konkrete Boardvariante prüfen |
 | ILI9488-SPI-Display | [ILI9488-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=ILI9488+SPI+Display+320x480+3%2C3V&tag=bema19910e-21) | externes Display zum S3-Referenzaufbau; 320 × 480 Pixel und SPI, nicht die ähnlich angebotene parallele Schnittstelle |
 | USB-Netzteil | [5-V-USB-Netzteil mit 2 A suchen (Affiliate-Link)](https://www.amazon.de/s?k=USB+Netzteil+5V+2A&tag=bema19910e-21) | stabile Versorgung und Anschluss passend zum Kabel; Spannungs- und Stromvorgaben von Board und Display beachten |
@@ -304,6 +306,108 @@ auch mit einem ESP32-Display erforderlich.
 > qualifizierten Verkäufen. Wenn du über einen entsprechend gekennzeichneten
 > Link einkaufst, kann ich eine Provision erhalten. Für dich entstehen dadurch
 > keine zusätzlichen Kosten.
+
+#### ESP32-Firmware Schritt für Schritt
+
+Diese Anleitung ist für das gelbe CYD-Board `ESP32-2432S028` mit 2,8-Zoll-
+Display und 240×320 Pixeln gedacht. Das Profil verwendet den ILI9341-Treiber,
+den die Produktangabe nennt. Die Firmware erkennt den Displaycontroller nicht
+automatisch; bei einer abweichenden Hardware-Revision muss das Modell in der
+eigenen YAML-Datei angepasst werden. Das erste Flashen erfolgt per USB.
+
+1. **Vorbereiten:** Installiere Git und Python 3.12 auf deinem Windows-PC.
+   Verwende ein USB-Datenkabel (ein reines Ladekabel überträgt keine Firmware).
+   Schließe das Board zunächst noch nicht an.
+2. **Repository laden:** Öffne PowerShell und führe diese Befehle aus:
+
+   ```powershell
+   git clone https://github.com/Ben1991/hvv-anzeiger.git
+   cd hvv-anzeiger
+   ```
+
+   Wenn das Repository schon vorhanden ist, öffne stattdessen dessen Ordner
+   und hole aktuelle Änderungen mit `git pull --ff-only origin main`.
+3. **ESPHome installieren:** Erstelle eine getrennte Python-Umgebung und
+   installiere die im Projekt verwendete ESPHome-Version:
+
+   ```powershell
+   py -3.12 -m venv .venv-esphome
+   .\.venv-esphome\Scripts\Activate.ps1
+   python -m pip install esphome==2026.9.1
+   ```
+
+   Wenn PowerShell das Aktivieren blockiert, kannst du die Befehle ohne
+   Aktivierung mit `.\.venv-esphome\Scripts\python.exe -m pip ...` und
+   `.\.venv-esphome\Scripts\python.exe -m esphome ...` ausführen.
+4. **Geheimnisse anlegen:** Kopiere die Vorlage. Die Datei mit WLAN-Passwort
+   und API-Schlüssel bleibt lokal und darf nicht veröffentlicht werden:
+
+   ```powershell
+   Copy-Item esphome\secrets.example.yaml esphome\secrets.yaml
+   Copy-Item esphome\hvv-cyd.yaml esphome\hvv-cyd.local.yaml
+   ```
+
+   Öffne `esphome\secrets.yaml` in einem Texteditor. Trage WLAN-Name und
+   WLAN-Passwort ein. Erzeuge einen eigenen API-Schlüssel und trage ihn bei
+   `api_encryption_key` ein:
+
+   ```powershell
+   python -c "import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+   ```
+
+   Die Werte `backend_url` und `backend_authorization` werden nur für das
+   optionale Profil `hvv-direct.yaml` benötigt; beim CYD-Profil über Home
+   Assistant bleiben sie ungenutzt. Speichere die Datei.
+5. **Profil prüfen:** Öffne `esphome\hvv-cyd.local.yaml`. Der Standard ist
+   `ILI9341`, `240×320` und Querformat. Ändere `name`, `friendly_name` oder
+   `board_entity` nur bei Bedarf. Die Entität `sensor.hvv_board` muss in Home
+   Assistant vorhanden sein. Den resistiven Touchscreen nutzt diese Firmware
+   nicht.
+6. **Konfiguration kontrollieren und Firmware bauen:** Lass das Terminal im
+   Repository-Ordner geöffnet. Führe zuerst die Prüfung und dann den Build aus:
+
+   ```powershell
+   esphome config esphome\hvv-cyd.local.yaml
+   esphome compile esphome\hvv-cyd.local.yaml
+   ```
+
+   Der erste Build lädt ESP-IDF und Schriftdateien herunter und kann einige
+   Minuten dauern. Bei Erfolg liegt die Firmware im ESPHome-Buildordner.
+7. **Board anschließen:** Verbinde das CYD mit einem USB-Datenkabel mit dem
+   Computer. Bei diesem Board gibt es USB-C und Micro-USB. Verwende zunächst
+   einen Anschluss; stecke nicht beide gleichzeitig ein. Öffne den Windows-
+   Geräte-Manager und suche unter **Anschlüsse (COM & LPT)** den neu
+   hinzugekommenen COM-Port.
+8. **Per USB installieren:** Starte:
+
+   ```powershell
+   esphome run esphome\hvv-cyd.local.yaml
+   ```
+
+   Wähle den COM-Port, wenn ESPHome danach fragt. Falls keine Verbindung
+   zustande kommt, halte **BOOT** gedrückt, drücke kurz **RESET**, lasse
+   **RESET** und dann **BOOT** los und starte den USB-Upload erneut. Bei
+   fehlendem COM-Port probiere ein anderes Datenkabel oder den anderen
+   USB-Anschluss.
+9. **Bild und Verbindung prüfen:** Nach dem Neustart sollten HVV-Anzeige und
+   WLAN-Verbindung erscheinen. Bei einem weißen oder leeren Display kontrolliere
+   zuerst den Controller deiner Revision. Die Produktfotos zeigen zwei
+   USB-Anschlüsse, aber der Platinenaufdruck allein beweist den Displaycontroller
+   nicht. Bei ST7789V oder ILI9342 muss `display_model` in deiner lokalen YAML
+   auf `ESP32-2432S028-7789` beziehungsweise `ESP32-2432S028-9342` geändert und
+   die Firmware erneut gebaut und per USB übertragen werden. Bei ILI9342 muss
+   `display_rotation` zusätzlich auf `'0'` stehen; bei ILI9341 und ST7789V
+   bleibt sie auf `'90'`. Bei falscher Farbreihenfolge `display_color_order`
+   zwischen `rgb` und `bgr` wechseln.
+10. **Home Assistant verbinden:** Füge das neue Gerät über **Einstellungen →
+    Geräte & Dienste → Integration hinzufügen → ESPHome** hinzu. Gib den
+    Gerätenamen und den selbst erzeugten API-Schlüssel ein. Das Home-Assistant-
+    Paket und der Hintergrunddienst müssen eingerichtet sein, damit die
+    Abfahrtsdaten erscheinen; siehe [ESPHome-Anleitung](docs/home-assistant-esphome.md).
+
+Für Linux/macOS, ESPHome Device Builder, externe SPI-Displays, OTA-Updates,
+Diagnose und weitere Profile gilt die ausführlichere
+[ESPHome-Einrichtungsanleitung](docs/home-assistant-esphome.md).
 
 ### Unterstütztes Zielsystem
 
