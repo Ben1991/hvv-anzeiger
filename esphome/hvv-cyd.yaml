@@ -1,10 +1,12 @@
-# Sunton original micro-USB ESP32-2432S028 with ILI9341.
-# For the dual-USB ST7789/ILI9342 versions use the matching model below.
+# ESP32-2432S028 CYD, 2.8-inch 240x320 display, dual USB revision shown in
+# the supplied product photos. The listing specifies an ILI9341 controller.
 substitutions:
   name: hvv-cyd
   friendly_name: HVV CYD
   board_entity: sensor.hvv_board
-  display_model: ESP32-2432S028
+  display_model: ILI9341
+  display_rotation: '90'
+  display_color_order: rgb
 
 packages:
   core: !include packages/core.yaml

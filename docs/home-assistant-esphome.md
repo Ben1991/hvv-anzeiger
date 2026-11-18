@@ -250,15 +250,28 @@ python -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)
 | Datei | Referenzhardware / Anpassung |
 |---|---|
 | `hvv-display.yaml` | ESP32 DevKit + externes ILI9341, 320×240 quer |
-| `hvv-cyd.yaml` | CYD ESP32-2432S028, Original mit Micro-USB / ILI9341 |
+| `hvv-cyd.yaml` | CYD ESP32-2432S028, 2,8 Zoll / 240×320 Pixel, Dual-USB wie auf den Produktfotos; Standardtreiber ILI9341 laut Produktangabe, im Profil um 90° ins Querformat gedreht |
 | `hvv-s3-ili9488.yaml` | ESP32-S3 DevKit + externes ILI9488, 480×320 quer |
 | `hvv-direct.yaml` | ESP32 DevKit + ILI9341 mit direktem HTTPS-Abruf |
 
-Die CYD-Varianten mit zwei USB-Anschlüssen brauchen je nach Controller
-`display_model: ESP32-2432S028-7789` oder `ESP32-2432S028-9342`.
-Beim ILI9342 gegebenenfalls `display_rotation: '0'` unter `substitutions`
-in der eigenen Haupt-YAML setzen.
-Ein ähnlicher Produktname garantiert keine identische Pinbelegung.
+Der resistive Touchscreen wird von diesem Profil nicht verwendet; die
+Abfahrtsanzeige läuft als reine Anzeige.
+
+Das Profil verwendet für die eingesandte Dual-USB-Revision standardmäßig den
+ILI9341-Treiber und die 240×320-Panelmaße. Die Pinbelegung für SPI-Takt,
+SPI-Daten, Chip-Select, Data/Command und Hintergrundbeleuchtung ist im
+Hardwareprofil gesetzt.
+
+Eine zuverlässige automatische Erkennung des Displaycontrollers ist nicht
+konfiguriert: ESPHome wählt die Controller-Initialisierung beim Firmware-Build,
+und Produktname sowie Platinenaufdruck unterscheiden die Displayrevisionen
+nicht eindeutig. Die Firmware ist auf die ILI9341-Angabe der Produktseite
+eingestellt. Falls das Display nach dem Flashen leer bleibt, zuerst anhand
+der Displayrevision den Controller prüfen und `display_model` in der eigenen
+Haupt-YAML passend auf `ESP32-2432S028-7789` (ST7789V) oder
+`ESP32-2432S028-9342` (ILI9342) setzen. Bei abweichenden Farben kann
+`display_color_order` auf `bgr` geändert werden. Änderungen nur in der eigenen
+`*.local.yaml` vornehmen.
 
 Für den generischen ESP32 gelten folgende GPIOs; die Pins stehen als
 Substitutionen im Hardwareprofil und können in der Hauptdatei überschrieben werden:

@@ -1,5 +1,6 @@
 substitutions:
   display_rotation: '90'
+  display_color_order: rgb
 
 esp32:
   board: esp32dev
@@ -28,6 +29,12 @@ display:
     id: hvv_screen
     model: ${display_model}
     rotation: ${display_rotation}
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    dimensions:
+      width: 240
+      height: 320
+    color_order: ${display_color_order}
     color_depth: 8
     buffer_size: 25%
     update_interval: 1s

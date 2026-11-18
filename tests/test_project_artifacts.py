@@ -10,6 +10,28 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProjectArtifactTest(unittest.TestCase):
+    def test_cyd_profile_matches_supplied_2_8_inch_board(self) -> None:
+        profile = (ROOT / "esphome" / "hvv-cyd.yaml").read_text(encoding="utf-8")
+        hardware = (ROOT / "esphome" / "boards" / "cyd.yaml").read_text(
+            encoding="utf-8"
+        )
+        guide = (ROOT / "docs" / "home-assistant-esphome.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("display_model: ILI9341", profile)
+        self.assertIn("display_rotation: '90'", profile)
+        self.assertIn("display_color_order: rgb", profile)
+        self.assertIn("model: ${display_model}", hardware)
+        self.assertIn("width: 240", hardware)
+        self.assertIn("height: 320", hardware)
+        self.assertIn("cs_pin: GPIO15", hardware)
+        self.assertIn("dc_pin: GPIO2", hardware)
+        self.assertIn("ESP32-2432S028", guide)
+        self.assertIn("Dual-USB", guide)
+        self.assertIn("ILI9341", guide)
+        self.assertIn("Touchscreen wird von diesem Profil nicht verwendet", guide)
+
     def test_container_departure_cache_uses_persistent_data_volume(self) -> None:
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
@@ -348,6 +370,16 @@ class ProjectArtifactTest(unittest.TestCase):
         for field in fields:
             with self.subTest(field=field):
                 self.assertIn(f"`{field}`", readme)
+
+    def test_readme_documents_cyd_firmware_flash_steps(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("ESP32-Firmware Schritt für Schritt", readme)
+        self.assertIn("py -3.12 -m venv .venv-esphome", readme)
+        self.assertIn("esphome compile esphome\\hvv-cyd.local.yaml", readme)
+        self.assertIn("esphome run esphome\\hvv-cyd.local.yaml", readme)
+        self.assertIn("ESP32-2432S028-7789", readme)
+        self.assertIn("ESP32-2432S028-9342", readme)
 
 
 if __name__ == "__main__":
