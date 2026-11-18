@@ -63,7 +63,7 @@ vorhandene `esphome/secrets.yaml` oder `*.local.yaml`.
    USB-Anschlüsse gleichzeitig verwenden. Flashen und Bauen startest du mit:
 
    ```powershell
-   .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
    ```
 
    Das Skript prüft die Konfiguration, baut die Firmware und lässt ESPHome den
@@ -201,7 +201,7 @@ Unter Windows übernimmt das Setup-Skript Prüfung, Build und USB-Flash:
 ```powershell
 git status --short
 git pull --ff-only origin main
-.\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
 ```
 
 Unter Linux/macOS mit dem eigenen `*.local.yaml` und den separat gesicherten Geheimnissen:

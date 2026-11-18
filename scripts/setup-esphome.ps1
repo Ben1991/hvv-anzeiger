@@ -48,8 +48,15 @@ if ($LASTEXITCODE -ne 0 -or $pythonMinor.Trim() -ne '3.12') {
     throw "Die Umgebung '$venvFullPath' verwendet nicht Python 3.12. Bestehende Umgebungen werden nicht überschrieben. Verwende z. B. -VenvPath .venv-esphome-312."
 }
 
-$installedVersion = & $venvPython -c "import importlib.metadata as m; print(m.version('esphome'))" 2>$null
-if ($LASTEXITCODE -ne 0 -or $installedVersion.Trim() -ne $esphomeVersion) {
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    $installedVersion = & $venvPython -c "import importlib.metadata as m; print(m.version('esphome'))" 2>$null
+    $installedVersionExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+}
+if ($installedVersionExitCode -ne 0 -or $installedVersion.Trim() -ne $esphomeVersion) {
     & $venvPython -m pip install "esphome==$esphomeVersion"
     if ($LASTEXITCODE -ne 0) { throw "ESPHome $esphomeVersion konnte nicht installiert werden." }
 }

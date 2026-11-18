@@ -349,7 +349,7 @@ eine automatische Controller-Erkennung ist technisch nicht zuverlässig.
    CYD. Das Skript baut die Firmware und startet den seriellen Upload:
 
    ```powershell
-   .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
    ```
 
    Wähle den neu erschienenen COM-Port. Wenn kein Upload startet, halte BOOT,

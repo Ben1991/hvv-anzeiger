@@ -397,10 +397,17 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("SecureStringToBSTR", script)
         self.assertIn("RandomNumberGenerator", script)
         self.assertIn("ESPHOME_ESP_IDF_PREFIX", script)
+        self.assertIn("$previousErrorActionPreference = $ErrorActionPreference", script)
+        self.assertIn("$ErrorActionPreference = 'Continue'", script)
         self.assertIn("-m esphome run", script)
         self.assertIn("cp esphome/hvv-cyd.yaml esphome/hvv-cyd.local.yaml", guide)
         self.assertIn("esphome config esphome/hvv-cyd.local.yaml", guide)
         self.assertNotIn("esphome/hvv-display.local.yaml", guide)
+        self.assertIn(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File "
+            ".\\scripts\\setup-esphome.ps1 -Profile hvv-cyd -Flash",
+            guide,
+        )
 
     def test_home_assistant_and_esp32_guides_have_separate_scope(self) -> None:
         home_assistant = (ROOT / "docs" / "home-assistant.md").read_text(
