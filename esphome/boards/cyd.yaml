@@ -33,7 +33,9 @@ display:
     dc_pin: GPIO2
     color_order: ${display_color_order}
     color_depth: 8
-    buffer_size: 25%
+    # The CYD has no configured PSRAM. 12.5% uses about 9.4 KiB at 240x320
+    # with 8-bit color, leaving more internal heap for Wi-Fi and the API.
+    buffer_size: 12.5%
     update_interval: 1s
     lambda: |-
       hvv_board.draw(it, id(hvv_font), id(hvv_small_font), millis(),

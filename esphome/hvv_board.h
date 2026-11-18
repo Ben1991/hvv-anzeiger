@@ -5,6 +5,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <string>
 
 namespace hvv {
@@ -53,7 +55,7 @@ class Board {
       r.time = item["time"].as<std::string>();
       r.shape = item["shape"].as<std::string>();
       if (r.line.size() > 48 || r.destination.size() > 256 || r.station.size() > 48 ||
-          r.time.size() != 5) return false;
+          r.time.size() != 5 || r.shape.size() > 16) return false;
       r.departure = item["departure_epoch"].as<int64_t>();
       r.cancelled = item["cancelled"].as<bool>();
       r.delay = item["delay_seconds"].as<int>();
@@ -97,13 +99,25 @@ class Board {
            static_cast<uint32_t>(now - received_) > 45000;
   }
 
-  std::string time_text(const Row &row, uint32_t now) const {
-    if (row.cancelled) return "AUS";
-    if (mode_ == "departure_time") return row.time;
+  void format_time(const Row &row, uint32_t now, char *buffer, size_t size) const {
+    if (size == 0) return;
+    if (row.cancelled) {
+      std::snprintf(buffer, size, "%s", "AUS");
+      return;
+    }
+    if (mode_ == "departure_time") {
+      std::snprintf(buffer, size, "%s", row.time.c_str());
+      return;
+    }
     const auto seconds = row.departure - (generated_ + age(now));
     const int minutes = static_cast<int>(std::max<int64_t>(0, (seconds + 59) / 60));
-    if (minutes == 0) return "sofort";
-    return std::to_string(minutes) + (unit_ == "none" ? "" : " " + unit_);
+    if (minutes == 0) {
+      std::snprintf(buffer, size, "%s", "sofort");
+      return;
+    }
+    const bool show_unit = unit_ != "none";
+    std::snprintf(buffer, size, "%d%s%s", minutes, show_unit ? " " : "",
+                  show_unit ? unit_.c_str() : "");
   }
 
   void draw(esphome::display::Display &it, esphome::font::Font *font,
@@ -146,14 +160,27 @@ class Board {
       it.start_clipping(62, y, w - 83, y + 20);
       it.print(62, y, font, white, r.destination.c_str());
       it.end_clipping();
-      std::string detail = r.station.empty() ? r.time : r.station + "  " + r.time;
-      if (r.delay) detail += "  " + std::string(r.delay > 0 ? "+" : "") +
-          std::to_string(static_cast<int>(std::ceil(r.delay / 60.0))) + " min";
+      char detail[96];
+      if (r.station.empty()) {
+        std::snprintf(detail, sizeof(detail), "%s", r.time.c_str());
+      } else {
+        std::snprintf(detail, sizeof(detail), "%s  %s", r.station.c_str(), r.time.c_str());
+      }
+      if (r.delay) {
+        const size_t used = std::strlen(detail);
+        if (used < sizeof(detail)) {
+          const int delay_minutes = static_cast<int>(std::ceil(r.delay / 60.0));
+          std::snprintf(detail + used, sizeof(detail) - used, "  %s%d min",
+                        r.delay > 0 ? "+" : "", delay_minutes);
+        }
+      }
       it.start_clipping(62, y + 19, w - 83, y + 35);
-      it.print(62, y + 19, small, muted, detail.c_str());
+      it.print(62, y + 19, small, muted, detail);
       it.end_clipping();
+      char time[16];
+      format_time(r, now, time, sizeof(time));
       it.print(w - 3, y + 3, font, r.cancelled ? red : white,
-               display::TextAlign::TOP_RIGHT, time_text(r, now).c_str());
+               display::TextAlign::TOP_RIGHT, time);
       it.horizontal_line(3, y + row_height - 2, w - 6, Color(48, 55, 62));
     }
     if (!shown) it.print(5, 40, font, muted, "Keine passenden Abfahrten");
