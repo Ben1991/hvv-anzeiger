@@ -208,7 +208,11 @@ exec "$@"
         )
 
     def encoded_password(self):
-        return self.env_file.read_text().strip().split("=", 1)[1].strip('"')
+        for line in self.env_file.read_text().splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key == "HVV_WEB_PASSWORD_HASH":
+                return value.strip().strip('"')
+        self.fail("Webpasswort-Hash fehlt in web.env")
 
     def test_first_run_sets_bootstrap_password_and_random_device_key(self):
         result = self.run_configure("")
@@ -249,10 +253,11 @@ exec "$@"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(verify_web_password("hvv-anzeiger", self.encoded_password()))
 
-    def test_aborted_input_and_unknown_option_fail_safely(self):
+    def test_first_run_needs_no_input_and_unknown_option_fails(self):
         result = self.run_configure("")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertFalse(self.env_file.exists())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(verify_web_password("hvv-anzeiger", self.encoded_password()))
+        self.assertIn('HVV_WEB_PASSWORD_MUST_CHANGE="1"', self.env_file.read_text())
         result = self.run_configure("", "--unknown")
         self.assertNotEqual(result.returncode, 0)
 
