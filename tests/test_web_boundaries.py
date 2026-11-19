@@ -83,7 +83,7 @@ class WebBoundariesTest(unittest.TestCase):
         self.app.access_token = "unused"
         for value in ("!", base64.b64encode(b"\xff").decode(), "bm9jb2xvbg=="):
             self.assertFalse(self.app.authorize({"Authorization": "Basic " + value}))
-        for password in ("", "a\nb", 'a"b'):
+        for password in ("", "a\nb", 'a"b', "a\\b"):
             with self.assertRaises(ValueError):
                 self.app.save_web_password(password)
         for user, password in (("", "x"), ("x", "")):
@@ -132,6 +132,45 @@ class WebBoundariesTest(unittest.TestCase):
         self.assertIn(b"Erstpasswort", page)
         new_password = "my-long-unique-password"
         status, _, _ = self.request(
+            "/settings",
+            body="",
+            headers={"Authorization": auth},
+        )
+        self.assertEqual(status, 403)
+        status, _, headers = self.request(
+            "/change-password",
+            values={
+                "csrf_token": self.app.csrf_token,
+                "new_password": "my-long-unique-password",
+                "confirmation": "different-password",
+            },
+            headers={"Authorization": auth},
+        )
+        self.assertEqual(status, 400)
+        status, _, headers = self.request(
+            "/change-password",
+            values={
+                "csrf_token": self.app.csrf_token,
+                "new_password": "short",
+                "confirmation": "short",
+            },
+            headers={"Authorization": auth},
+        )
+        self.assertEqual(status, 400)
+        with patch.object(
+            self.app, "save_web_password", side_effect=OSError("disk full")
+        ):
+            status, _, _ = self.request(
+                "/change-password",
+                values={
+                    "csrf_token": self.app.csrf_token,
+                    "new_password": "another-unique-password",
+                    "confirmation": "another-unique-password",
+                },
+                headers={"Authorization": auth},
+            )
+        self.assertEqual(status, 400)
+        status, _, headers = self.request(
             "/change-password",
             values={
                 "csrf_token": self.app.csrf_token,
@@ -140,10 +179,20 @@ class WebBoundariesTest(unittest.TestCase):
             },
             headers={"Authorization": auth},
         )
-        self.assertEqual(status, 200)
+        self.assertEqual(status, 303)
+        self.assertEqual(headers["Location"], "/")
         self.assertFalse(self.app.must_change_password)
         self.assertTrue(web.verify_web_password(new_password, self.app.access_token))
         self.assertIn("HVV_ESPHOME_API_TOKEN", (self.root / "web.env").read_text())
+        changed_auth = "Basic " + base64.b64encode(
+            f"hvv-anzeiger:{new_password}".encode()
+        ).decode()
+        status, settings, _ = self.request(
+            "/settings", headers={"Authorization": changed_auth}
+        )
+        self.assertEqual(status, 200)
+        self.assertIn(b"CYD-Verbindung", settings)
+        self.assertIn(self.app.device_token.encode(), settings)
 
     def test_raw_config_and_reboot_failures(self):
         self.assertEqual(self.app.raw_config(), self.raw)

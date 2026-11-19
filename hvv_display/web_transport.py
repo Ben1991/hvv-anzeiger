@@ -389,11 +389,9 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                     if new_password != confirmation:
                         raise ValueError("Die beiden Passwörter stimmen nicht überein.")
                     application.save_web_password(new_password)
-                    self._send(
-                        application.password_change_page(
-                            "Passwort geändert. Melde dich jetzt mit dem neuen Passwort erneut an."
-                        )
-                    )
+                    self.send_response(HTTPStatus.SEE_OTHER)
+                    self.send_header("Location", "/")
+                    self.end_headers()
                 except (ValueError, PermissionError) as exc:
                     self._send(
                         application.password_change_page(str(exc)),
