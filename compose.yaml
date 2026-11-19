@@ -2,8 +2,10 @@ services:
   hvv:
     build: .
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    # mDNS multicast discovery needs the container on the host network.
+    network_mode: host
+    environment:
+      HVV_WEB_DISCOVERY_HOSTNAME: ${HVV_WEB_DISCOVERY_HOSTNAME:-}
     volumes:
       - ./data:/data
     read_only: true

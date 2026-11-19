@@ -10,10 +10,11 @@
 | Dein nächster Schritt | Abschnitt |
 |---|---|
 | Raspberry Pi als Display und Backend installieren | [Pi-Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Pi-Display anschließen](#display-anschließen) → [Pi installieren](#installieren) |
-| CYD/ESP32 am bestehenden Backend einrichten | [ESP32-Schrittfolge und Setup-Skript](#esp32-schritt-für-schritt) |
-| ESP32-Backend und Weboberfläche verstehen | [Plattformen und gemeinsame Funktionen](#plattformen-und-gemeinsame-funktionen) |
+| eigenständiges ESP32/CYD-System einrichten | [ESP32-Schrittfolge und Setup-Skript](#esp32-schritt-für-schritt) |
+| Pi+ILI und ESP32+CYD unterscheiden | [Plattformen und gemeinsame Funktionen](#plattformen-und-gemeinsame-funktionen) |
 | Home Assistant einrichten | [HA-Anleitung](docs/home-assistant.md) |
 | Haltestellen, Linien oder Darstellung ändern | [Konfigurieren](#konfigurieren) |
+| ESP32-Haltestellen ändern und neu flashen | [CYD-Haltestellen anpassen](docs/esp32-stations.md) |
 | Version aktualisieren oder Dienst steuern | [Betrieb und Updates](#betrieb-und-updates) |
 | Einen Fehler untersuchen | [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose) |
 
@@ -60,16 +61,18 @@ Oberfläche. Zusätzlich sind Home Assistant und ESP32-Displays mit ESPHome mög
 
 | Du möchtest … | Aufbau | Hier geht es weiter |
 |---|---|---|
-| eine Anzeige direkt am Raspberry Pi | Raspberry Pi mit angeschlossenem SPI-Display; Backend und Browseroberfläche laufen dort | [Pi-Installation](#installieren) |
-| Abfahrten in Home Assistant | Python-Hintergrunddienst + HA-Paket | [Home-Assistant-Anleitung](docs/home-assistant.md) |
-| Abfahrten auf einem ESP32-Display | CYD-Firmware + Python-Backend auf Pi/Container, direkt per HTTPS; kein Home Assistant nötig | [ESP32-Einrichtungsanleitung](docs/esp32-setup.md) |
+| eine Anzeige direkt am Raspberry Pi | Raspberry Pi mit ILI-Display; Backend und Browseroberfläche laufen gemeinsam auf dem Pi | [Pi-Installation](#installieren) |
+| Abfahrten in Home Assistant vom Pi | Pi-Python-Backend + native HA-Integration oder REST-Paket | [Home-Assistant-Anleitung](docs/home-assistant.md) |
+| ein eigenständiges ESP32-Display | CYD führt Backend und Anzeige in einer schlanken Firmware aus; kein Pi oder HA nötig | [ESP32-Einrichtungsanleitung](docs/esp32-setup.md) |
 | einen Browser als Kiosk- oder Zweitbildschirm | geschützter Displaymodus des Webdienstes | [Weboberfläche und Displaymodus](#lokale-weboberfläche) |
 
-Ein Geofox-Zugang ist bei allen Varianten erforderlich. Der Python-
-Hintergrunddienst bleibt auch beim ESP32 nötig; das CYD fragt ihn direkt über
-HTTPS ab und zeigt die Abfahrten ohne Home Assistant an. HA ist eine optionale,
-separate Integration. Der Hintergrunddienst kann auf dem vorhandenen Pi oder
-als Container laufen.
+Ein Geofox-Zugang ist bei beiden Varianten erforderlich. Pi+ILI ist ein
+vollständiges System mit Python-Backend, Weboberfläche und lokaler Display-
+Ansteuerung. ESP32+CYD ist ein zweites, unabhängiges System: Die Firmware fragt
+Geofox direkt ab, rendert die Abfahrten und stellt Status und Daten über die
+verschlüsselte ESPHome-API bereit. Es braucht weder Pi noch Python-Webdienst.
+Home Assistant kann beide Systeme optional konsumieren; HA ist keine
+Voraussetzung für die jeweilige Anzeige.
 Die Abschnitte **Voraussetzungen**, **Geofox-Zugang**, **Display anschließen**,
 **Installieren**, **Betrieb und Updates** und **Fehlerverhalten** beschreiben
 die Installation auf dem Raspberry Pi. Die CYD-Firmware und ihr USB-Setup sind
@@ -77,25 +80,27 @@ in [ESP32 mit ESPHome](docs/esp32-setup.md) getrennt dokumentiert.
 
 ## Plattformen und gemeinsame Funktionen
 
-Pi und ESP32 sind getrennte Installationen mit gemeinsamem Datenvertrag. Der
-Python-Backenddienst lädt Geofox-Daten und stellt dieselbe gefilterte,
-chronologisch sortierte Abfahrtsstruktur bereit. Das Pi-Display nutzt die
-Python-Anwendung direkt; das CYD ruft denselben Backend-Datensatz alle 15
-Sekunden über HTTPS ab. Die Browser-Weboberfläche läuft auf dem Backend-Rechner
-(Raspberry Pi oder Container), nicht auf dem CYD.
+Pi+ILI und ESP32+CYD sind zwei eigenständige Systeme. Beide beziehen Geofox-
+Daten, filtern und sortieren Abfahrten und zeigen sie lokal an. Das Pi-System
+nutzt den Python-Dienst und seine Weboberfläche. Das CYD enthält einen
+schlanken ESPHome-Backendteil mit festen Haltestellen in seinem lokalen Profil;
+es ruft Geofox direkt ab und hat keine Weboberfläche. Der Pi-Dienst und ein
+Containerhost sind für diesen ESP32-Betrieb nicht beteiligt.
 
-| Funktion | Pi-Display | CYD/ESP32 | Backend-Weboberfläche |
+| Funktion | Pi+ILI | ESP32+CYD | Pi-Weboberfläche |
 |---|---:|---:|---:|
-| Haltestellen, Linien und Ziele aus der gemeinsamen Konfiguration | ✓ | ✓ | Konfigurieren |
-| Sortierung, Countdown oder Uhrzeit, Nachtmodus und Datenalter | ✓ | ✓ | Anzeigen/konfigurieren |
-| Geofox-Abrufe, Offline-Cache und Fehlerstatus | ✓ | ✓ | ✓ |
+| Haltestellen, Linien und Ziele | `config.json` | lokales ESPHome-Profil | Pi-Konfiguration editieren |
+| Geofox-Abruf und Sortierung | Python-Backend | ESP32-Firmware | ✓ |
+| Display und Nachtmodus | ILI direkt am Pi | CYD-Firmware | Browseranzeige |
 | Helligkeit und Neustart | Pi-Hardware/systemd | ESPHome-Steuerung/OTA | Dienststeuerung |
-| HTTPS-Login und Konfigurationsverwaltung | — | — | ✓ |
+| Weboberfläche und Backups | ✓ | — | ✓ |
+| Optionale Home-Assistant-Anbindung | mDNS + HVV-Integration | ESPHome-API/mDNS | Abfahrten/Status |
 
-Gemeinsame Abfahrtsregeln werden im Backend gepflegt. Eine Änderung am
-Abfahrtsformat muss den Python-Test und den nativen Firmware-Protokolltest
-bestehen. Pi-Installer/Update und ESP32-Setup werden in getrennten CI-Jobs
-geprüft; ihre persistenten Dateien und Profile bleiben voneinander getrennt.
+Die Ausgaben beider Systeme folgen demselben versionierten Display-Datenmodell;
+Konfiguration und Laufzeit bleiben getrennt. Pi-Änderungen erfolgen über die
+Weboberfläche oder `config.json`. CYD-Haltestellen liegen in
+`esphome/hvv-cyd.local.yaml` und werden erst nach einem neuen Firmware-Flash
+aktiv. Siehe [Haltestellen im ESP32-Profil ändern](docs/esp32-stations.md).
 
 ![Beispielhafte Abfahrten ab Jungfernstieg Richtung Hauptbahnhof mit Bus, U-Bahn und S-Bahn](docs/hvv-anzeiger-preview.png)
 
@@ -150,13 +155,12 @@ Linienfarben und -formen dargestellt; die angezeigten Zeiten sind illustrativ.
 
 ### ESP32-Anzeige und optionale Home-Assistant-Integration
 
-Das CYD-Profil `hvv-cyd` fragt den Python-Hintergrunddienst direkt per HTTPS ab.
-Es benötigt kein laufendes Home Assistant. Das separate Profil `hvv-cyd-ha`
-bindet dasselbe CYD über die ESPHome-Integration an Home Assistant an. Auch
-dieser Weg braucht den Python-Hintergrunddienst für Geofox-Daten. HA-Paket,
-Dashboardbeispiel und Sensoren sind eine optionale Zusatzfunktion. Der Dienst
-kann ohne GPIO als Container laufen; die bestehende Pi-Anzeige bleibt davon
-unabhängig. Einen konkreten Displayaufbau vor Ort prüfen.
+Das Standardprofil `hvv-cyd` ist ein eigenständiges ESP32-Backend mit Display.
+Es fragt Geofox direkt ab; Home Assistant und Pi sind nicht erforderlich. Über
+ESPHome-mDNS wird das eingeschaltete CYD in Home Assistant als ESPHome-Gerät
+entdeckt. Die Entities liefern Abfahrten und Gerätestatus. Die optionale
+benutzerdefinierte HVV-Integration ist dagegen für den Pi-Python-Dienst gedacht.
+Die Pi-Anzeige bleibt unabhängig davon.
 
 Einrichtung und Zuständigkeiten sind getrennt dokumentiert:
 [Home Assistant](docs/home-assistant.md) und
@@ -165,10 +169,9 @@ Einrichtung und Zuständigkeiten sind getrennt dokumentiert:
 
 #### Home Assistant: Schritt für Schritt
 
-Dieser Abschnitt ist nur nötig, wenn du Abfahrten zusätzlich in Home Assistant
-sehen oder die HA-Integration für ein ESP32-Board verwenden möchtest. Das
-Standard-CYD zeigt Abfahrten ohne HA an. Diese Schritte binden den vorhandenen
-HVV-Webdienst als Sensor in Home Assistant ein. Für die Dateiablage wird im
+Dieser Abschnitt richtet Home Assistant als Client des Pi-Python-Backends ein.
+Das Standard-CYD zeigt Abfahrten ohne HA an und wird separat über die integrierte
+ESPHome-Integration erkannt. Für die Dateiablage wird im
 Beispiel Home Assistant OS verwendet.
 Die offizielle HA-Anleitung zu [Dateizugriff und `configuration.yaml`](https://www.home-assistant.io/docs/configuration/)
 beschreibt weitere Installationsarten.
@@ -344,14 +347,11 @@ auch mit einem ESP32-Display erforderlich.
 Für das CYD `ESP32-2432S028` mit 2,8-Zoll-Display und 320×240 Pixeln im
 Querformat ist `hvv-cyd` das Standardprofil. Es verwendet die getestete
 Dual-USB-Revision mit ILI9342 und 90°-Drehung im Querformat. Eine
-automatische Controller-Erkennung ist technisch nicht zuverlässig.
-Das CYD fragt den Python-Hintergrunddienst direkt per HTTPS ab. Home Assistant
-ist dafür nicht nötig. Der Hintergrunddienst muss bereits laufen; die
-[Backend-Anleitung](docs/home-assistant.md#1-hintergrunddienst-bereitstellen)
-beschreibt die Einrichtung. Starte mit dem Backend: Beim ersten Login ist das
-Webpasswort `hvv-anzeiger` und muss direkt geändert werden. Der CYD-Schlüssel
-ist ein eigener zufälliger Schlüssel in den Backend-Einstellungen; er ist nicht
-das Webpasswort. Das Setup-Skript übernimmt Schlüssel und TLS-Zertifikat.
+automatische Controller-Erkennung ist technisch nicht zuverlässig. Die
+Firmware enthält Geofox-Zugang und feste Haltestellenkonfiguration und fragt
+Geofox direkt ab. Ein Pi-Webdienst, CYD-API-Schlüssel oder TLS-Zertifikat vom Pi
+ist dafür nicht erforderlich. Das Setup speichert WLAN- und Geofox-Daten lokal
+in der ignorierten `esphome/secrets.yaml` und erstellt eine lokale Profilkopie.
 
 1. **Git und Python installieren:** Installiere Git für Windows und Python
    3.12 samt Python Launcher (`py`). Nimm ein USB-Datenkabel; schließe das Board
@@ -386,11 +386,9 @@ das Webpasswort. Das Setup-Skript übernimmt Schlüssel und TLS-Zertifikat.
    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
    ```
 
-   Gib bei der Abfrage WLAN-Name und WLAN-Passwort ein. Danach fragt das Skript
-   den CYD-Schlüssel aus den Backend-Einstellungen ab; die Eingabe bleibt
-   verdeckt. Vergleiche den TLS-Fingerabdruck mit dem Wert aus der
-   Backendinstallation. Warte auf „Konfiguration geprüft.“. WLAN-Daten,
-   Schlüssel und bestätigtes Zertifikat werden lokal abgelegt und nicht
+   Gib bei der Abfrage WLAN-Name, WLAN-Passwort und Geofox-Zugang ein. Das
+   Passwort bleibt verdeckt. Warte auf „Konfiguration geprüft.“. Zugangsdaten
+   und API-Verschlüsselungsschlüssel werden lokal abgelegt und nicht
    überschrieben.
    Bei einem Fehler hilft die
    [Schritt-für-Schritt-Anleitung](docs/esp32-setup.md#schritt-4-esphome-und-das-cyd-profil-einrichten).
@@ -410,18 +408,12 @@ das Webpasswort. Das Setup-Skript übernimmt Schlüssel und TLS-Zertifikat.
    Dual-USB-Revision mit ILI9342 und nativer 0°-Querformat-Ausrichtung als
    Standard an; eine automatische Controller-Erkennung ist nicht möglich.
 
-**Home Assistant optional:** Wenn du das CYD zusätzlich in HA einbinden
-möchtest, richte das HA-Paket nach der
-[HA-Anleitung](docs/home-assistant.md) ein und flashe die getrennte HA-Firmware:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd-ha -Flash
-```
-
-Füge das Gerät danach unter **Einstellungen → Geräte & Dienste → Integration
-hinzufügen → ESPHome** hinzu und übernimm bei Nachfrage den `api_encryption_key`
-aus `esphome\secrets.yaml`. Die HA-Integration ist eine Zusatzfunktion; sie ist
-nicht erforderlich, damit das CYD Abfahrten anzeigt.
+**Home Assistant optional:** Das eingeschaltete CYD sollte in Home Assistant
+unter **Einstellungen → Geräte & Dienste** als ESPHome-Gerät auftauchen. Beim
+Hinzufügen den `api_encryption_key` aus `esphome\secrets.yaml` eingeben. Es ist
+keine separate HA-Firmware und kein Pi-Backend nötig. Die benutzerdefinierte
+Integration in der [HA-Anleitung](docs/home-assistant.md) verbindet stattdessen
+das eigenständige Pi-Backend.
 
 Das Setup-Skript setzt für Firmwarebau einen kurzen ESP-IDF-Pfad `C:\ei`.
 Falls der Ordner nicht angelegt werden darf, übergib einen beschreibbaren

@@ -3,6 +3,7 @@
 import base64
 import json
 import os
+import socket
 import ssl
 import subprocess
 import tempfile
@@ -126,6 +127,9 @@ def main():
 
         auth = "Basic " + base64.b64encode(f"hvv-anzeiger:{password}".encode()).decode()
         device_auth = "Bearer container-smoke-device-key-1"
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as connection:
+            connection.connect(("224.0.0.251", 5353))
+            lan_address = connection.getsockname()[0]
 
         def request(route, authenticated=True, authorization=None):
             headers = {"Authorization": authorization or auth} if authenticated else {}
@@ -143,7 +147,12 @@ def main():
                             "Container did not load its preserved config"
                         )
                     try:
-                        request("/_healthz", authenticated=False)
+                        health = Request(f"https://{lan_address}:8080/_healthz")
+                        urlopen(  # noqa: S310
+                            health,
+                            context=ssl._create_unverified_context(),  # noqa: S323
+                            timeout=3,
+                        )
                     except HTTPError as exc:
                         if exc.code != 401:
                             raise

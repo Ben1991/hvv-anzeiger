@@ -1,22 +1,16 @@
 # ESP32 mit ESPHome einrichten und flashen
 
-Diese Anleitung behandelt die Board-Auswahl, ESPHome-Konfiguration, Firmware,
-USB-Flashen und ESPHome-Updates für das CYD. Das Standardprofil fragt den
-Python-Hintergrunddienst direkt per HTTPS ab; **Home Assistant ist dafür nicht
-erforderlich**, und es gibt keinen automatischen Fallback zu Home Assistant.
-Der Hintergrunddienst muss erreichbar sein. Seine Installation
-steht in der Anleitung zum
-[Hintergrunddienst](home-assistant.md#1-hintergrunddienst-bereitstellen).
-Home Assistant ist eine separate optionale Funktion; dafür gibt es das Profil
-`hvv-cyd-ha`.
+Diese Anleitung richtet das **eigenständige ESP32+CYD-System** ein. Die Firmware
+fragt Geofox direkt ab, filtert die lokal konfigurierten Haltestellen und zeigt
+Abfahrten an. Dafür sind weder Pi-Backend, Weboberfläche noch Home Assistant
+erforderlich. ESPHome-API und mDNS erlauben Home Assistant, dasselbe CYD
+optional als Gerät zu erkennen und Status/Abfahrten zu konsumieren.
 
-Vor dem Flashen muss der Python-Hintergrunddienst laufen und seine Geofox- und
-Haltestellenkonfiguration besitzen. Öffne zuerst die HTTPS-Weboberfläche und
-melde dich mit `hvv-anzeiger` / `hvv-anzeiger` an; beim ersten Login musst du
-ein eigenes Webpasswort setzen. Danach findest du in den Einstellungen den
-separaten zufälligen CYD-Schlüssel. Das Display verwendet diesen Schlüssel,
-nicht das Webpasswort. Wenn das Backend noch nicht funktioniert, richte zuerst den
-[Hintergrunddienst](home-assistant.md#1-hintergrunddienst-bereitstellen) ein.
+Das **Pi+ILI-System** ist separat: Python-Backend, Weboberfläche und ILI-Display
+laufen auf dem Pi. Dessen HA-Integration steht unter
+[Raspberry-Pi-Backend und Home Assistant](home-assistant.md). Die Systeme teilen
+ein versioniertes Display-Datenmodell, aber keine Laufzeit, Stationseinstellung
+oder Geofox-Zugangsdaten.
 
 ## Schnellstart für Windows: CYD einrichten und flashen
 
@@ -82,12 +76,10 @@ Kopiere den Befehl in dasselbe PowerShell-Fenster und drücke die Eingabetaste:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
 ```
 
-Voraussetzung für `hvv-cyd`: Der Backenddienst läuft bereits im selben LAN auf
-dem Raspberry Pi. Der Installer macht ihn unter `hvv-anzeiger.local` auffindbar
-und zeigt den SHA-256-Fingerabdruck seines TLS-Zertifikats an. Das Setup-Skript
-verwendet diesen festen Backendnamen, fragt den zufälligen CYD-Schlüssel aus
-den Backend-Einstellungen verdeckt ab und übernimmt das Zertifikat erst nach
-Bestätigung des Fingerabdrucks. Webpasswort und CYD-Schlüssel sind getrennt.
+Für `hvv-cyd` brauchst du einen gültigen Geofox-Zugang. Das Setup-Skript fragt
+den Geofox-Benutzernamen und das Passwort ab und legt sie lokal in der ignorierten
+`esphome/secrets.yaml` ab. Es baut keine Pi-URL ein und verlangt weder ein
+Pi-Zertifikat noch einen CYD-Geräteschlüssel.
 
 Wenn `esphome/secrets.yaml` noch nicht vorhanden ist, fragt das Skript beim
 ersten Lauf nach WLAN-Name und WLAN-Passwort:
@@ -95,29 +87,16 @@ ersten Lauf nach WLAN-Name und WLAN-Passwort:
 1. Gib den Namen deines WLANs ein und drücke die Eingabetaste.
 2. Gib das WLAN-Passwort ein. Während der Eingabe zeigt PowerShell keine Zeichen
    an. Drücke danach die Eingabetaste.
-3. Öffne auf dem Backend-Rechner `https://hvv-anzeiger.local:8080/` und melde
-   dich mit `hvv-anzeiger` an. Ändere beim ersten Login das Webpasswort.
-4. Öffne Einstellungen, kopiere den CYD-Schlüssel und füge ihn in PowerShell
-   ein. Die Eingabe bleibt verdeckt.
-5. Vergleiche den angezeigten Zertifikats-Fingerabdruck mit dem Wert aus dem
-   Backend-Installationsfenster und bestätige ihn.
-6. Warte, bis ESPHome die Konfiguration geprüft hat.
+3. Gib deinen Geofox-Benutzernamen ein.
+4. Gib dein Geofox-Passwort ein. Währenddessen zeigt PowerShell keine Zeichen.
+5. Warte, bis ESPHome die Konfiguration geprüft hat.
 
 Das Skript richtet Python 3.12, eine getrennte Python-Umgebung und ESPHome ein.
 Es erstellt `esphome/secrets.yaml` mit einem zufälligen ESPHome-API-Schlüssel
 und `esphome/hvv-cyd.local.yaml` als lokale Profilkopie. Vorhandene lokale
-Display- und Pin-Einstellungen überschreibt es nicht. Bei einem Upgrade des
-bisherigen CYD-Profils ändert es nur den Transport auf direkten HTTPS-Abruf,
-entfernt die nicht mehr benötigte `board_entity`-Zeile und legt vorher eine
-Sicherung mit der Endung `.pre-direct-backend.bak` an. Alte
-`secrets.yaml`-Dateien ergänzt das Skript um fehlende Backend-Felder und fragt
-danach nur noch deren Werte ab. Die Dateien enthalten private Zugangsdaten und
-bleiben von Git ausgeschlossen.
-
-Das Setup verwendet standardmäßig `https://hvv-anzeiger.local:8080/api/esphome`.
-Der Raspberry Pi muss im selben LAN sein; mDNS muss im WLAN zugelassen sein.
-Das Setup hinterlegt das lokal bestätigte Zertifikat als private CA und lässt
-`verify_ssl: true` aktiv.
+Display- und Pin-Einstellungen überschreibt es nicht. Ältere Pi-Backend-Secrets
+werden nicht gelöscht, aber vom Profil `hvv-cyd` nicht verwendet. Alle lokalen
+Zugangsdaten bleiben von Git ausgeschlossen.
 
 **Erfolg:** Am Ende erscheint die Meldung „Konfiguration geprüft.“ ohne Fehlermeldung.
 
@@ -136,15 +115,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 
 Internetverbindung und einen möglichen Proxy. Starte danach denselben
 Setup-Befehl erneut; vorhandene lokale Profile und Geheimnisse bleiben erhalten.
 
-**Wenn `hvv-anzeiger.local` nicht erreichbar ist:** Prüfe, dass der
-Backenddienst läuft, der Rechner im selben Netz ist und der Router mDNS-/
-Multicast-Verkehr zwischen WLAN und LAN nicht blockiert.
-
-**Wenn der Displayzugriff am Backend fehlschlägt:** Kopiere den aktuellen
-CYD-Schlüssel aus Einstellungen erneut. Er ist unabhängig vom Webpasswort.
-Setze in `esphome/secrets.yaml` `backend_authorization` auf
-`Bearer REPLACE_WITH_CYD_API_KEY` zurück und führe das Setup erneut aus.
-Zugangsdaten nicht in Issues, Chats oder Screenshots teilen.
+**Wenn Geofox-Zugangsdaten abgelehnt werden:** Prüfe Benutzername und Passwort
+lokal in `esphome/secrets.yaml` und starte das Setup-Skript erneut. Zugangsdaten
+nicht in Issues, Chats oder Screenshots kopieren.
 
 **Wenn die Konfiguration wegen Platzhaltern fehlschlägt:** Öffne die Datei mit
 `notepad .\esphome\secrets.yaml`. Ersetze nur die noch vorhandenen Werte
@@ -189,19 +162,13 @@ erneut. Die genaue Tastenfolge kann je nach Platinenrevision abweichen.
 ### Schritt 6: Anzeige prüfen
 
 Prüfe am eingeschalteten Board, ob Abfahrten, Textausrichtung, Farben und
-Querformat stimmen. Das CYD fragt den Hintergrunddienst alle 15 Sekunden ab.
+Querformat stimmen. Das CYD fragt Geofox ungefähr alle 15 Sekunden direkt ab.
 
-**Wenn keine Abfahrten erscheinen:** Das Standardprofil `hvv-cyd` liest nur
-vom HTTPS-Backend; es verwendet Home Assistant nicht als Datenquelle. Prüfe,
-ob das WLAN 2,4 GHz nutzt und der Hintergrunddienst läuft. Die Adresse aus
-`backend_url` muss vom CYD aus per DNS auflösbar und über HTTPS erreichbar sein
-und auf `/api/esphome` enden. Öffne `esphome/secrets.yaml` und prüfe außerdem
-`wifi_ssid`, `wifi_password` und `backend_authorization`. Ein lokal auf dem PC
-funktionierender Hostname oder `localhost` ist für das CYD nicht automatisch
-erreichbar. Bei falschen WLAN-Werten korrigiere sie dort; bei einem falschen
-CYD-Schlüssel setze die Authorization-Zeile auf
-`Bearer REPLACE_WITH_CYD_API_KEY` zurück. Flash danach mit dem Befehl aus
-Schritt 5 erneut.
+**Wenn keine Abfahrten erscheinen:** Prüfe 2,4-GHz-WLAN, Zeit-Synchronisierung,
+Geofox-Zugangsdaten und das Feld `hvv_stations_json` in
+`esphome/hvv-cyd.local.yaml`. Jede Haltestelle muss eine gültige Geofox-ID
+enthalten. Für Stationsänderungen den Ablauf unter
+[Haltestellen ändern](esp32-stations.md) verwenden. Danach neu bauen und flashen.
 
 **Wenn der Bildschirm leer bleibt oder Farben falsch sind:** Trenne das Board
 vom USB, prüfe die tatsächliche Displayrevision und passe `display_model`,
@@ -215,25 +182,19 @@ für deine konkrete Platinenrevision angegeben ist: `ESP32-2432S028-7789`
 **Nur bauen, noch nicht flashen:** In Schritt 5 `-Flash` durch `-Build` ersetzen.
 Das Setup und die Konfigurationsprüfung aus Schritt 4 flashen keine Firmware.
 
-### Optionale Funktion: CYD mit Home Assistant verbinden
+### CYD in Home Assistant erkennen
 
-Die Standardfirmware `hvv-cyd` zeigt Abfahrten ohne Home Assistant an. Wenn du
-zusätzlich HA-Entitäten und HA-Steuerung möchtest, richte zuerst Hintergrund-
-dienst, HA-Paket und `sensor.hvv_board` nach der
-[Home-Assistant-Anleitung](home-assistant.md) ein. Flash danach das getrennte
-HA-Profil:
+Das Profil `hvv-cyd` veröffentlicht die ESPHome-Native-API mit Verschlüsselung
+und mDNS. Home Assistant entdeckt das eingeschaltete CYD unter
+**Einstellungen → Geräte & Dienste** und bietet die integrierte ESPHome-
+Integration an. Beim Einrichten wird `api_encryption_key` aus der lokalen
+`esphome/secrets.yaml` benötigt. Es ist kein Pi-Backend, keine zusätzliche
+benutzerdefinierte HVV-Integration und kein Wechsel zu `hvv-cyd-ha` nötig.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd-ha -Flash
-```
-
-Füge das Gerät in Home Assistant unter **Einstellungen → Geräte & Dienste →
-Integration hinzufügen → ESPHome** hinzu. Wenn Home Assistant nach dem
-API-Schlüssel fragt, übernimm lokal `api_encryption_key` aus
-`esphome/secrets.yaml` in den geschützten Dialog. Das HA-Profil bezieht Daten
-über `sensor.hvv_board`; es ersetzt damit den direkten Backendtransport der
-Standardfirmware. Zum Wechsel zurück auf den direkten Betrieb erneut `-Profile
-hvv-cyd` flashen.
+Wenn automatische Erkennung nicht angeboten wird, zuerst prüfen, ob ESP32 und
+HA dasselbe LAN/mDNS erreichen. Alternativ die lokale Geräte-IP im Dialog der
+ESPHome-Integration angeben. `hvv-cyd-ha` bleibt ein separates Profil für
+Setups, die Daten aus der HA-Entität `sensor.hvv_board` beziehen.
 
 **Wenn das Gerät in HA nicht gefunden wird:** Prüfe, ob ESP32 und Home Assistant
 im selben erreichbaren Netzwerk sind und das WLAN 2,4 GHz unterstützt.
@@ -243,19 +204,17 @@ Kontrolliere SSID und Passwort in `esphome/secrets.yaml` und flashe erneut.
 
 | Profil | Zielhardware und Display | Transport |
 |---|---|---|
-| `hvv-cyd` | Dual-USB-CYD ESP32-2432S028; 2,8 Zoll, 320×240 nativ, ILI9342, Querformat | Direkt per HTTPS zum Hintergrunddienst; kein HA nötig |
-| `hvv-cyd-ha` | Dasselbe CYD-Board und Display | Home Assistant, optional |
-| `hvv-display` | ESP32 DevKit + externes ILI9341, 320×240 quer | Home Assistant |
-| `hvv-s3-ili9488` | ESP32-S3 DevKit + externes ILI9488, 480×320 quer | Home Assistant |
-| `hvv-direct` | ESP32 DevKit + externes ILI9341 | Direkt per HTTPS zum Hintergrunddienst |
+| `hvv-cyd` | Dual-USB-CYD ESP32-2432S028; 2,8 Zoll, 320×240 nativ, ILI9342, Querformat | Eigenständiger Geofox-Backenddienst + Display; HA optional über ESPHome |
+| `hvv-cyd-ha` | Dasselbe CYD-Board und Display | HA-Entität `sensor.hvv_board` als Datenquelle |
+| `hvv-display` | ESP32 DevKit + externes ILI9341, 320×240 quer | HA-Entität als Datenquelle |
+| `hvv-s3-ili9488` | ESP32-S3 DevKit + externes ILI9488, 480×320 quer | HA-Entität als Datenquelle |
+| `hvv-direct` | ESP32 DevKit + externes ILI9341 | Direkter HTTPS-Zugriff auf Pi-Backend |
 
 Für ein anderes Board `-Profile` auf den Profilnamen setzen. Eigene Namen,
-`board_entity` und Pin-Änderungen gehören nur in die zugehörige `*.local.yaml`.
-Gemeinsame Dateien in `boards/` und `packages/` nicht editieren. Die direkten
-Profile `hvv-cyd` und `hvv-direct` benötigen `backend_url`,
-`backend_authorization` und `backend-ca.pem`. Das Setup-Skript setzt den
-Backendnamen auf `hvv-anzeiger.local`, fragt den separaten CYD-Schlüssel
-verdeckt ab und übernimmt nach Fingerabdruckbestätigung das TLS-Zertifikat.
+Stationsdaten und Pin-Änderungen gehören nur in die zugehörige `*.local.yaml`.
+Gemeinsame Dateien in `boards/` und `packages/` nicht editieren. `hvv-cyd`
+verlangt Geofox-Zugangsdaten; `hvv-direct` benötigt Pi-Backend-URL, separaten
+CYD-Schlüssel und private CA.
 
 ### Wenn der Setup-Befehl nicht startet
 
@@ -294,13 +253,13 @@ python -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)
 
 Die Ausgabe ist vertraulich; nicht in öffentliche Logs oder Issues kopieren.
 
-Für `hvv-cyd` und `hvv-direct` `backend_url` auf
+Für `hvv-direct` `backend_url` auf
 `https://hvv-anzeiger.local:8080/api/esphome` setzen und den zufälligen
 CYD-Schlüssel aus der Backend-Weboberfläche als `Bearer <Schlüssel>` in
 `backend_authorization` eintragen. `backend-ca.pem` muss das lokale
-Backendzertifikat enthalten. Das HA-Profil `hvv-cyd-ha` benötigt diese Werte
-nicht. Der CYD-Schlüssel ist unabhängig vom Webpasswort und nur für den
-Abfahrtsfeed gültig.
+Backendzertifikat enthalten. Die Profile `hvv-cyd` und `hvv-cyd-ha` benötigen
+diese Werte nicht. Das Profil `hvv-cyd` fragt Geofox direkt ab und hält seine
+Geofox-Zugangsdaten lokal.
 
 Im ESPHome Device Builder kopierst du den kompletten Ordner `esphome/` in den
 Konfigurationsordner, einschließlich `hvv_board.h`, `boards/` und `packages/`.
@@ -426,11 +385,11 @@ Logausgabe mit Strg+C beenden; der ESP32 läuft weiter.
    erneute Aktualisierung. Das ist ein Test am realen Aufbau und wird durch
    einen erfolgreichen Compilerlauf nicht ersetzt.
 
-## Direkt per HTTPS
+## Direkter HTTPS-Transport zum Pi-Backend
 
-Das Standardprofil `hvv-cyd.yaml` und das generische Profil `hvv-direct.yaml`
-benötigen kein laufendes HA für die Abfahrtsanzeige, aber weiterhin den
-Python-Hintergrunddienst. `backend_url` auf
+Nur das generische Profil `hvv-direct.yaml` fragt das separate Pi-Backend per
+HTTPS ab. Das Standardprofil `hvv-cyd.yaml` nutzt diesen Transport nicht.
+`backend_url` auf
 `https://hvv-anzeiger.local:8080/api/esphome` und `backend_authorization` auf
 `Bearer <zufälliger CYD-Schlüssel>` setzen. Das lokale Backendzertifikat als
 `backend-ca.pem` neben die Haupt-YAML kopieren. Der Schlüssel ist vom

@@ -69,6 +69,8 @@ jobs:
           python tests/firmware/make_snapshot.py /tmp/hvv-snapshot.json
           g++ -std=c++17 -Wall -Wextra -Werror -I tests/firmware -I /tmp/arduinojson/src tests/firmware/test_board.cpp -o /tmp/test-board
           /tmp/test-board /tmp/hvv-snapshot.json
+          g++ -std=c++17 -Wall -Wextra -Werror -I tests/firmware -I /tmp/arduinojson/src tests/firmware/test_geofox.cpp -o /tmp/test-geofox
+          /tmp/test-geofox
 
   backend-container:
     name: Backend container

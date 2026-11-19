@@ -1,26 +1,33 @@
-# Home Assistant und ESP32: Überblick
+# Zwei getrennte HVV-Anzeiger-Systeme: Pi+ILI und ESP32+CYD
 
-Der Python-Hintergrunddienst übernimmt Geofox-Zugriff, Haltestellenauflösung
-und Konfiguration. Ein CYD-ESP32 kann seine Abfahrtsdaten direkt per HTTPS vom
-Dienst holen und sie ohne Home Assistant anzeigen. Optional kann eine separate
-ESPHome-Firmware das CYD über die HA-Integration einbinden. Der Pi bleibt nur
-als Diensthost nötig, nicht als physisches Display.
+Pi+ILI und ESP32+CYD sind unabhängige Geräte und Backend-Systeme. Jedes bezieht
+Geofox-Daten und zeigt Abfahrten ohne Home Assistant an. Ein System ist nicht
+Backend des anderen.
 
 ## Funktionsumfang
 
-- Gemeinsame Abfahrtsdaten und Linienfilter für Pi, Home Assistant und ESP32.
-- ESPHome-Profile für ILI9341, CYD ESP32-2432S028 sowie ESP32-S3/ILI9488.
-- ESP32-Diagnosewerte für Heap-Speicher sowie Verbindungs- und Datenstatus.
-- Standard: direkter HTTPS-Transport vom CYD zum Hintergrunddienst, ohne HA.
-- Separate optionale CYD-Firmware mit Home-Assistant-Transport.
+- **Pi+ILI:** Python-Backend, Geofox-Zugang, Weboberfläche, Konfiguration,
+  Sicherungen und Displayausgabe auf dem Pi. HA kann das Backend optional über
+  die benutzerdefinierte, mDNS-entdeckbare Pi-Integration konsumieren.
+- **ESP32+CYD:** schlanke ESPHome-Firmware mit direktem Geofox-Abruf,
+  festgelegten Stationen und lokaler Displayausgabe. Keine Pi-Abhängigkeit,
+  keine Weboberfläche und kein Home Assistant für den Anzeigebetrieb.
+- HA erkennt das CYD über die integrierte ESPHome-Integration und empfängt
+  Abfahrten, Status und Steuerungen über die verschlüsselte native API.
+- Für beide Systeme getrennte Konfiguration und Geheimnisse; nur das
+  versionierte Display-Datenmodell ist gemeinsam.
 
 ## Welche Anleitung brauche ich?
 
-- [Hintergrunddienst und optionale Home-Assistant-Integration](home-assistant.md):
-  Backend, TLS, REST-Sensor, HA-Paketdatei, Dashboard und HA-Updates.
+- [Raspberry-Pi-Backend und HA-Integration](home-assistant.md):
+  Pi-Backend, TLS, REST-Sensor, automatische Erkennung, HA-Paketdatei und
+  Dashboard.
 - [ESP32 einrichten und flashen](esp32-setup.md):
   Hardwareprofile, automatisiertes Windows-Setup, Firmwarebau, USB-Flashen,
   Fehlerbehebung und OTA-Updates.
+- [Haltestellen im ESP32/CYD-Profil ändern](esp32-stations.md):
+  lokale Konfiguration prüfen, anpassen und Firmware neu flashen.
 
-Für ein reines Raspberry-Pi-Display gelten weiter die
-[Pi-Installation und -Dokumentation](../README.md#installieren).
+Für Installation und Updates des Pi-Systems gelten die
+[Pi-Anleitung](../README.md#installieren). CYD-Stationen werden ausschließlich
+im lokalen ESPHome-Profil gepflegt.

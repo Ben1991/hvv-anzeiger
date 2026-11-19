@@ -4,6 +4,7 @@ esphome:
   min_version: 2026.9.1
   includes:
     - hvv_board.h
+    - hvv_geofox.h
 
 logger:
 
@@ -12,6 +13,9 @@ api:
     key: !secret api_encryption_key
   # Preserve the cached display when Home Assistant is temporarily offline.
   reboot_timeout: 0s
+
+mdns:
+  disabled: false
 
 ota:
   - platform: esphome
@@ -45,7 +49,6 @@ globals:
   - id: hvv_blanked
     type: bool
     initial_value: 'false'
-
 switch:
   - platform: template
     name: Anzeige

@@ -1,13 +1,15 @@
-# ESP32-2432S028 dual-USB CYD, 2.8-inch 240x320 ILI9342 display. Fetches data
-# directly from the HVV backend, so Home Assistant is not required.
+# ESP32-2432S028 dual-USB CYD, 2.8-inch 240x320 ILI9342 display. This profile
+# requests Geofox directly; no Pi backend, web interface, or Home Assistant is required.
 substitutions:
   name: hvv-cyd
   friendly_name: HVV CYD
   display_model: ESP32-2432S028-9342
   display_rotation: '90'
   display_color_order: rgb
+  # JSON array edited in hvv-cyd.local.yaml; see docs/esp32-stations.md.
+  hvv_stations_json: '[{"name":"Weistritzstraße","city":"Hamburg","id":"Master:82039","label":"W","routes":[{"line":"186","destination":"S Othmarschen"},{"line":"184","destination":"S Halstenbek"},{"line":"384","destination":"Elbgaustraße"}]},{"name":"Recknitzstraße","city":"Hamburg","id":"Master:82015","label":"R","routes":[{"line":"21","destination":"U Niendorf Nord"}]}]'
 
 packages:
   core: !include packages/core.yaml
-  transport: !include packages/https.yaml
+  transport: !include packages/geofox.yaml
   hardware: !include boards/cyd.yaml
