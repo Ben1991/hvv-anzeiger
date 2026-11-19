@@ -676,6 +676,15 @@ sudo systemctl enable --now hvv-anzeiger
 
 ### Weboberfläche: Verbindung abgelehnt
 
+Wenn du ein ESP32/CYD verwendest, beachte: Das Display selbst stellt keine
+Weboberfläche auf Port 8080 bereit. Dieser Abschnitt und die folgenden
+`systemctl`-Befehle betreffen den Python-Hintergrunddienst auf dem Raspberry Pi
+oder Containerhost. Für die Browseroberfläche verwende dessen HTTPS-Adresse
+`https://<backend-host>:8080/` – nicht die IP-Adresse des ESP32. Das CYD fragt
+denselben Dienst direkt unter `https://<backend-host>:8080/api/esphome` ab.
+Die Firmware-Adresse wird bei der ESP32-Einrichtung konfiguriert; siehe
+[ESP32-Einrichtungsanleitung](docs/esp32-setup.md).
+
 Wenn `https://<raspberry-pi-ip>:8080` mit „Verbindung abgelehnt“ antwortet,
 prüfe zuerst die aktuelle Adresse des Raspberry Pi:
 
