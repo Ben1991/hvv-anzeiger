@@ -320,8 +320,9 @@ Revision mit ILI9342 und `display_rotation: '0'`. Beim ILI9342 ist das native
 320×240-Querformat bereits 0°; 90° würde Hochformat ergeben. Für die ILI9341-
 Revision oder die Dual-USB-Revision mit ST7789V muss `display_model` in der
 eigenen `*.local.yaml` auf `ILI9341` beziehungsweise `ESP32-2432S028-7789`
-gesetzt werden. Bei abweichenden Farben kann `display_color_order` auf `bgr`
-geändert werden. Änderungen nur in der eigenen `*.local.yaml` vornehmen.
+gesetzt und `display_rotation: '90'` für Querformat ergänzt werden. Bei
+abweichenden Farben kann `display_color_order` auf `bgr` geändert werden.
+Änderungen nur in der eigenen `*.local.yaml` vornehmen.
 
 Für den generischen ESP32 gelten folgende GPIOs; die Pins stehen als
 Substitutionen im Hardwareprofil und können in der Hauptdatei überschrieben werden:

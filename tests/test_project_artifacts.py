@@ -40,6 +40,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("Dual-USB", guide)
         self.assertIn("ILI9342", guide)
         self.assertIn("display_rotation: '0'", guide)
+        self.assertIn("display_rotation: '90'", guide)
         self.assertIn("Der resistive Touchscreen", guide)
 
     def test_container_departure_cache_uses_persistent_data_volume(self) -> None:
