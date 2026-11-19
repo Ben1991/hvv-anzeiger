@@ -1,9 +1,9 @@
-# ESP32-2432S028 CYD, 2.8-inch 240x320 display. Fetches data directly from the
-# HVV backend, so Home Assistant is not required for the display.
+# ESP32-2432S028 dual-USB CYD, 2.8-inch 240x320 ILI9342 display. Fetches data
+# directly from the HVV backend, so Home Assistant is not required.
 substitutions:
   name: hvv-cyd
   friendly_name: HVV CYD
-  display_model: ILI9341
+  display_model: ESP32-2432S028-9342
   display_rotation: '90'
   display_color_order: rgb
 

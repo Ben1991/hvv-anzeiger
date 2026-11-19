@@ -1,9 +1,10 @@
-# Optional Home Assistant transport for the CYD ESP32-2432S028.
+# Optional Home Assistant transport for the dual-USB CYD ESP32-2432S028 with
+# ILI9342 display.
 substitutions:
   name: hvv-cyd-ha
   friendly_name: HVV CYD Home Assistant
   board_entity: sensor.hvv_board
-  display_model: ILI9341
+  display_model: ESP32-2432S028-9342
   display_rotation: '90'
   display_color_order: rgb
 
