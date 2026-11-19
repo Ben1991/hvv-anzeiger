@@ -140,6 +140,16 @@ class ProjectArtifactTest(unittest.TestCase):
         )
         self.assertNotIn("Raspberry Pi OS/Debian", installer)
 
+    def test_latest_python_uses_system_gpio_compatibility(self) -> None:
+        project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+        installer = (ROOT / "install.sh").read_text(encoding="utf-8")
+
+        self.assertIn("python_version < '3.13'", project)
+        self.assertIn("python_version < '3.13'", requirements)
+        self.assertIn("python3-rpi-lgpio", installer)
+        self.assertIn("venv --system-site-packages", installer)
+
     def test_station_adjustment_skill_is_complete(self) -> None:
         skill = ROOT / ".agents" / "skills" / "adjust-hvv-stations"
         instructions = (skill / "SKILL.md").read_text(encoding="utf-8")
@@ -272,7 +282,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("ReadWritePaths=/opt/hvv-anzeiger/var", service)
         self.assertIn("User=hvv-anzeiger", service)
         self.assertIn("Group=hvv-anzeiger", service)
-        self.assertNotIn("WorkingDirectory=", service)
+        self.assertIn("WorkingDirectory=/opt/hvv-anzeiger/var", service)
         self.assertIn(
             "--cache /opt/hvv-anzeiger/var/stations.json",
             service,

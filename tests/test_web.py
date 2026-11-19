@@ -5,7 +5,7 @@ import os
 import stat
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
@@ -140,7 +140,7 @@ class WebApplicationTest(unittest.TestCase):
         from hvv_display.health import DisplayDiagnostics
 
         details = DisplayDiagnostics()
-        details.failed("reset", datetime.now(timezone.utc))
+        details.failed("reset", datetime.now(UTC))
         HealthPublisher(self.app.health_file).publish(
             configuration_valid=True, display_available=False,
             display_diagnostics=details.snapshot(),
@@ -181,7 +181,7 @@ class WebApplicationTest(unittest.TestCase):
         self.assertIn("2 Tage 3 Std.", page)
         self.assertIn("1 Min. 15 Sek.", page)
         self.assertIn("1 Std. 0 Min.", page)
-        self.assertIn(now.astimezone(timezone.utc).strftime("%d.%m.%Y"), page)
+        self.assertIn(now.astimezone(UTC).strftime("%d.%m.%Y"), page)
 
     def test_due_departure_shows_sofort_for_every_countdown_unit(self) -> None:
         now = datetime(2026, 7, 27, 12, 0, tzinfo=HAMBURG_TZ)

@@ -1,5 +1,5 @@
 # Backend only: no GPIO, SPI devices or privileged container required.
-FROM python:3.12-slim-bookworm
+FROM python:3.15.2-slim-trixie
 WORKDIR /app
 COPY requirements-container.txt /tmp/requirements-container.txt
 RUN pip install --no-cache-dir --require-hashes --requirement /tmp/requirements-container.txt \

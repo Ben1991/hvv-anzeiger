@@ -1,6 +1,6 @@
 """Shared retry and expiry rules for hardware and browser displays."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from .models import Departure
 
@@ -33,5 +33,5 @@ def departures_for_display(
         return departures
     if last_updated is None:
         return []
-    age = now.astimezone(timezone.utc) - last_updated.astimezone(timezone.utc)
+    age = now.astimezone(UTC) - last_updated.astimezone(UTC)
     return [] if age >= timedelta(minutes=max_stale_age_minutes) else departures

@@ -14,7 +14,7 @@ import urllib.request
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
@@ -86,8 +86,8 @@ def _retry_after_seconds(value: Any, *, now: datetime | None = None) -> int | No
         try:
             retry_at = parsedate_to_datetime(raw)
             if retry_at.tzinfo is None:
-                retry_at = retry_at.replace(tzinfo=timezone.utc)
-            reference = now or datetime.now(timezone.utc)
+                retry_at = retry_at.replace(tzinfo=UTC)
+            reference = now or datetime.now(UTC)
             seconds = math.ceil((retry_at - reference).total_seconds())
         except (TypeError, ValueError, OverflowError):
             return None
@@ -731,7 +731,7 @@ class GeofoxClient:
                 LOG.warning("Abfahrt ohne gültige Zeitangabe ignoriert")
                 continue
             departure_time = (
-                reference.astimezone(timezone.utc)
+                reference.astimezone(UTC)
                 + timedelta(minutes=offset, seconds=delay_seconds)
             ).astimezone(HAMBURG_TZ)
             departures.append(

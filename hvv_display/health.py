@@ -11,7 +11,7 @@ import re
 import stat
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -95,7 +95,7 @@ def _timestamp(value: Any) -> datetime | None:
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         raise ValueError("Timestamp needs timezone")
-    return parsed.astimezone(timezone.utc)
+    return parsed.astimezone(UTC)
 
 
 def _seconds(value: Any) -> int:
@@ -111,7 +111,7 @@ def _boolean(value: Any, *, optional: bool = False) -> bool | None:
 
 
 def _iso(value: datetime | None) -> str | None:
-    return value.astimezone(timezone.utc).isoformat() if value else None
+    return value.astimezone(UTC).isoformat() if value else None
 
 
 def _display_diagnostics(value: Any) -> dict[str, Any] | None:
@@ -159,7 +159,7 @@ def _empty_status() -> dict[str, Any]:
 def read_health(path: Path, *, now: datetime | None = None) -> dict[str, Any]:
     """Read only a small regular file; never query Geofox, systemd or the network."""
     result = _empty_status()
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     try:
         if not stat.S_ISREG(path.lstat().st_mode):
             return result
@@ -260,7 +260,7 @@ def read_health(path: Path, *, now: datetime | None = None) -> dict[str, Any]:
 class HealthPublisher:
     def __init__(self, path: Path) -> None:
         self.path = path
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = datetime.now(UTC)
         self.boot_id = boot_id()
         self._write_failed = False
 
@@ -282,7 +282,7 @@ class HealthPublisher:
         max_data_age_seconds: int = 300,
         service_running: bool = True,
     ) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         data = {
             "schema_version": 1,
             "boot_id": self.boot_id,

@@ -448,6 +448,7 @@ Installationen sind als
 #### Weitere Voraussetzungen
 
 - Python 3.11 oder neuer
+- Ab Python 3.13 nutzt der Pi-Installer die GPIO-API aus Raspberry Pi OS; bei älteren Versionen kommt `RPi.GPIO` aus der Python-Umgebung.
 - [microSD-Karte (Affiliate-Link)](https://www.amazon.de/s?k=microSD+32GB+High+Endurance&tag=bema19910e-21)
 - [zuverlässiges 5-V-Netzteil mit mindestens 2 A (Affiliate-Link)](https://www.amazon.de/s?k=5V+2A+Micro+USB+Netzteil+Raspberry+Pi+Zero+2+W&tag=bema19910e-21)
 - WLAN mit Internetzugang
@@ -1812,7 +1813,7 @@ bash -n install.sh update.sh configure-credentials.sh configure-web.sh diagnose.
 
 Bei Pull Requests und Pushes auf `main` prüft GitHub Actions:
 
-- Python 3.11 für Tests und Qualitätsprüfungen
+- Python 3.11 und 3.15 für Tests und Qualitätsprüfungen
 - Unit- und Integrationstests mit 100 Prozent Zeilen- und Branch-Coverage
   (gemäß `pyproject.toml`)
 - Ruff, Prüfung der Laufzeitabhängigkeiten auf bekannte Schwachstellen,

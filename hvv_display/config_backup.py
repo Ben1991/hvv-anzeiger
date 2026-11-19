@@ -16,7 +16,7 @@ import tempfile
 import time
 from contextlib import contextmanager
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -521,7 +521,7 @@ class ConfigStore:
             (self.backups / name).unlink()
         name = (
             "backup-"
-            + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+            + datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
             + "-"
             + secrets.token_hex(6)
             + ".json"
