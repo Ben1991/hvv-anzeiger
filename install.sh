@@ -162,6 +162,10 @@ sudo -H python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' ||
 
 echo "[1/10] Systempakete installieren"
 sudo apt-get update
+GPIO_PACKAGES=()
+if python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 13))'; then
+  GPIO_PACKAGES+=(python3-rpi-lgpio)
+fi
 sudo apt-get install -y \
   git \
   iproute2 \
@@ -171,7 +175,8 @@ sudo apt-get install -y \
   fonts-dejavu-core \
   libjpeg-dev \
   zlib1g-dev \
-  libfreetype6-dev
+  libfreetype6-dev \
+  "${GPIO_PACKAGES[@]}"
 
 echo "[2/10] SPI aktivieren"
 sudo raspi-config nonint do_spi 0
@@ -246,7 +251,7 @@ sudo mv -T "$STAGING_DIR/config.json" "$STAGING_DIR/var/config.json"
 sudo ln -s var/config.json "$STAGING_DIR/config.json"
 
 echo "[6/10] Python-Umgebung installieren und lokal prüfen"
-sudo python3 -m venv "$STAGING_DIR/.venv"
+sudo python3 -m venv --system-site-packages "$STAGING_DIR/.venv"
 sudo -H "$STAGING_DIR/.venv/bin/pip" install \
   --require-hashes \
   --requirement "$STAGING_DIR/requirements.txt"
