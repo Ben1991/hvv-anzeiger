@@ -517,12 +517,13 @@ class WebApplication:
         encoded = hash_web_password(password)
         existing = {}
         try:
-            for line in self.web_env_path.read_text(encoding="utf-8").splitlines():
-                key, separator, value = line.partition("=")
-                if separator and key in {"HVV_ESPHOME_API_TOKEN"}:
-                    existing[key] = value.strip().strip("\"'")
+            existing_text = self.web_env_path.read_text(encoding="utf-8")
         except FileNotFoundError:
-            pass
+            existing_text = ""
+        for line in existing_text.splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key in {"HVV_ESPHOME_API_TOKEN"}:
+                existing[key] = value.strip().strip("\"'")
         device_token = self.device_token or existing.get("HVV_ESPHOME_API_TOKEN", "")
         payload = (
             f'HVV_WEB_PASSWORD_HASH="{encoded}"\nHVV_WEB_PASSWORD_MUST_CHANGE="0"\n'
