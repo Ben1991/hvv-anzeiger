@@ -16,9 +16,10 @@ lässt. Wenn das noch nicht funktioniert, richte zuerst den
 
 ## Schnellstart für Windows: CYD einrichten und flashen
 
-Dieser Ablauf ist für das **2,8-Zoll-CYD ESP32-2432S028 mit 240×320 Pixeln**,
-einschließlich der abgebildeten Dual-USB-Revision.
-Es verwendet `hvv-cyd` mit dem ILI9342-Profil und 90° Rotation für Querformat.
+Dieser Ablauf ist für das **2,8-Zoll-CYD ESP32-2432S028 mit 320×240 Pixeln im
+Querformat**, einschließlich der abgebildeten Dual-USB-Revision.
+Es verwendet `hvv-cyd` mit dem ILI9342-Profil und nativer 0°-Ausrichtung im
+Querformat.
 Eine automatische Erkennung des Controllers ist bei diesen Boards nicht
 zuverlässig. Für andere Displayrevisionen siehe
 [Displayrevision und Pinbelegung](#hardware-displayrevision-und-pinbelegung).
@@ -229,7 +230,7 @@ Kontrolliere SSID und Passwort in `esphome/secrets.yaml` und flashe erneut.
 
 | Profil | Zielhardware und Display | Transport |
 |---|---|---|
-| `hvv-cyd` | Dual-USB-CYD ESP32-2432S028; 2,8 Zoll, 240×320, ILI9342, 90° Rotation / Querformat | Direkt per HTTPS zum Hintergrunddienst; kein HA nötig |
+| `hvv-cyd` | Dual-USB-CYD ESP32-2432S028; 2,8 Zoll, 320×240 nativ, ILI9342, Querformat | Direkt per HTTPS zum Hintergrunddienst; kein HA nötig |
 | `hvv-cyd-ha` | Dasselbe CYD-Board und Display | Home Assistant, optional |
 | `hvv-display` | ESP32 DevKit + externes ILI9341, 320×240 quer | Home Assistant |
 | `hvv-s3-ili9488` | ESP32-S3 DevKit + externes ILI9488, 480×320 quer | Home Assistant |
@@ -302,20 +303,20 @@ Geheimnisse zusammenführen statt überschreiben. Anschließend Profil prüfen u
 
 ## Hardware, Displayrevision und Pinbelegung
 
-Das CYD-Profil verwendet ILI9342 und 240×320 Pixel im Querformat (90° Rotation).
-Der resistive Touchscreen
-wird nicht verwendet; die Abfahrtsanzeige läuft als reine Anzeige. SPI-Pins und
-Hintergrundbeleuchtung sind im Hardwareprofil gesetzt.
+Das CYD-Profil verwendet ILI9342 und 320×240 Pixel im Querformat (0° Rotation).
+Der resistive Touchscreen wird nicht verwendet; die Abfahrtsanzeige läuft als
+reine Anzeige. SPI-Pins und Hintergrundbeleuchtung sind im Hardwareprofil gesetzt.
 
 Eine zuverlässige automatische Erkennung des Displaycontrollers ist nicht
 konfiguriert: ESPHome wählt die Controller-Initialisierung beim Firmware-Build,
 und Produktname sowie Platinenaufdruck unterscheiden die Displayrevisionen
 nicht eindeutig. Das Standardprofil zielt auf die hier getestete Dual-USB-
-Revision mit ILI9342 und `display_rotation: '90'`. Für die ILI9341-Revision
-oder die Dual-USB-Revision mit ST7789V muss `display_model` in der eigenen
-`*.local.yaml` auf `ILI9341` beziehungsweise `ESP32-2432S028-7789` gesetzt
-werden. Bei abweichenden Farben kann `display_color_order` auf `bgr` geändert
-werden. Änderungen nur in der eigenen `*.local.yaml` vornehmen.
+Revision mit ILI9342 und `display_rotation: '0'`. Beim ILI9342 ist das native
+320×240-Querformat bereits 0°; 90° würde Hochformat ergeben. Für die ILI9341-
+Revision oder die Dual-USB-Revision mit ST7789V muss `display_model` in der
+eigenen `*.local.yaml` auf `ILI9341` beziehungsweise `ESP32-2432S028-7789`
+gesetzt werden. Bei abweichenden Farben kann `display_color_order` auf `bgr`
+geändert werden. Änderungen nur in der eigenen `*.local.yaml` vornehmen.
 
 Für den generischen ESP32 gelten folgende GPIOs; die Pins stehen als
 Substitutionen im Hardwareprofil und können in der Hauptdatei überschrieben werden:

@@ -4,7 +4,7 @@ substitutions:
   name: hvv-cyd
   friendly_name: HVV CYD
   display_model: ESP32-2432S028-9342
-  display_rotation: '90'
+  display_rotation: '0'
   display_color_order: rgb
 
 packages:
