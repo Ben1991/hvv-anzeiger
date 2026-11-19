@@ -116,7 +116,6 @@ class ProjectArtifactTest(unittest.TestCase):
         for expected in (
             "Raspberry Pi OS Lite, 64 Bit, Trixie",
             "Raspberry Pi OS Lite, 32 Bit, Trixie",
-            "Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm",
             "Raspberry Pi Zero 2 W",
             "Raspberry Pi 3A+, 3B und 3B+",
             "Raspberry Pi 4B und Raspberry Pi 400",
@@ -131,22 +130,31 @@ class ProjectArtifactTest(unittest.TestCase):
             "Raspberry Pi OS (Lite oder Desktop)",
             installer,
         )
-        self.assertIn("sys.version_info < (3, 11)", installer)
-        self.assertIn("Python 3.11 oder neuer ist erforderlich", installer)
+        self.assertIn(
+            "| Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm | "
+            "nicht unterstützt",
+            readme,
+        )
+        self.assertIn("sys.version_info < (3, 13)", installer)
+        self.assertIn("Python 3.13 oder neuer ist erforderlich", installer)
         self.assertIn(
             "sudo -H python3 -c 'import sys; "
-            "raise SystemExit(sys.version_info < (3, 11))'",
+            "raise SystemExit(sys.version_info < (3, 13))'",
             installer,
         )
         self.assertNotIn("Raspberry Pi OS/Debian", installer)
 
-    def test_latest_python_uses_system_gpio_compatibility(self) -> None:
+    def test_supported_python_uses_system_gpio_compatibility(self) -> None:
         project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
         installer = (ROOT / "install.sh").read_text(encoding="utf-8")
 
-        self.assertIn("python_version < '3.13'", project)
-        self.assertIn("python_version < '3.13'", requirements)
+        self.assertIn('requires-python = ">=3.13"', project)
+        self.assertNotIn("rpi-gpio==", requirements)
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('python-version: ["3.13", "3.15.2"]', workflow)
         self.assertIn("python3-rpi-lgpio", installer)
         self.assertIn("venv --system-site-packages", installer)
 

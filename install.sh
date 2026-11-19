@@ -157,15 +157,11 @@ command -v sudo >/dev/null 2>&1 || fail "sudo wurde nicht gefunden."
 command -v apt-get >/dev/null 2>&1 ||
   fail "Dieses Skript benötigt Raspberry Pi OS (Lite oder Desktop)."
 command -v raspi-config >/dev/null 2>&1 || fail "raspi-config wurde nicht gefunden."
-sudo -H python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' ||
-  fail "Python 3.11 oder neuer ist erforderlich."
+sudo -H python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 13))' ||
+  fail "Python 3.13 oder neuer ist erforderlich."
 
 echo "[1/10] Systempakete installieren"
 sudo apt-get update
-GPIO_PACKAGES=()
-if python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 13))'; then
-  GPIO_PACKAGES+=(python3-rpi-lgpio)
-fi
 sudo apt-get install -y \
   git \
   iproute2 \
@@ -176,7 +172,7 @@ sudo apt-get install -y \
   libjpeg-dev \
   zlib1g-dev \
   libfreetype6-dev \
-  "${GPIO_PACKAGES[@]}"
+  python3-rpi-lgpio
 
 echo "[2/10] SPI aktivieren"
 sudo raspi-config nonint do_spi 0
