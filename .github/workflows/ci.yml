@@ -89,8 +89,12 @@ jobs:
         run: python3 tests/container_smoke.py
 
   tests:
-    name: Python 3.15.2 tests and quality
+    name: Python ${{ matrix.python-version }} tests and quality
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.15.2"]
 
     steps:
       - name: Check out repository
@@ -99,7 +103,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.15.2"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install project and test tools
@@ -120,7 +124,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: python-coverage-3.15.2
+          name: python-coverage-${{ matrix.python-version }}
           path: coverage.json
           if-no-files-found: ignore
           retention-days: 7

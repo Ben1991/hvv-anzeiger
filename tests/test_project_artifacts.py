@@ -131,22 +131,22 @@ class ProjectArtifactTest(unittest.TestCase):
             "Raspberry Pi OS (Lite oder Desktop)",
             installer,
         )
-        self.assertIn("sys.version_info < (3, 11)", installer)
-        self.assertIn("Python 3.11 oder neuer ist erforderlich", installer)
+        self.assertIn("sys.version_info < (3, 13)", installer)
+        self.assertIn("Python 3.13 oder neuer ist erforderlich", installer)
         self.assertIn(
             "sudo -H python3 -c 'import sys; "
-            "raise SystemExit(sys.version_info < (3, 11))'",
+            "raise SystemExit(sys.version_info < (3, 13))'",
             installer,
         )
         self.assertNotIn("Raspberry Pi OS/Debian", installer)
 
-    def test_latest_python_uses_system_gpio_compatibility(self) -> None:
+    def test_supported_python_uses_system_gpio_compatibility(self) -> None:
         project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
         installer = (ROOT / "install.sh").read_text(encoding="utf-8")
 
-        self.assertIn("python_version < '3.13'", project)
-        self.assertIn("python_version < '3.13'", requirements)
+        self.assertIn('requires-python = ">=3.13"', project)
+        self.assertNotIn("rpi-gpio==", requirements)
         self.assertIn("python3-rpi-lgpio", installer)
         self.assertIn("venv --system-site-packages", installer)
 
