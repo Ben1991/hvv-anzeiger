@@ -22,13 +22,15 @@ class ProjectArtifactTest(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("display_model: ILI9341", profile)
-        self.assertIn("display_rotation: '90'", profile)
+        self.assertIn("display_model: ESP32-2432S028-9342", profile)
+        self.assertIn("display_rotation: '0'", profile)
         self.assertIn("display_color_order: rgb", profile)
         self.assertIn("transport: !include packages/https.yaml", profile)
         self.assertIn(
             "transport: !include packages/home-assistant.yaml", ha_profile
         )
+        self.assertIn("display_model: ESP32-2432S028-9342", ha_profile)
+        self.assertIn("display_rotation: '0'", ha_profile)
         self.assertIn("hardware: !include boards/cyd.yaml", ha_profile)
         self.assertIn("model: ${display_model}", hardware)
         self.assertNotIn("dimensions:", hardware)
@@ -36,8 +38,9 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("dc_pin: GPIO2", hardware)
         self.assertIn("ESP32-2432S028", guide)
         self.assertIn("Dual-USB", guide)
-        self.assertIn("ILI9341", guide)
+        self.assertIn("ILI9342", guide)
         self.assertIn("display_rotation: '0'", guide)
+        self.assertIn("display_rotation: '90'", guide)
         self.assertIn("Der resistive Touchscreen", guide)
 
     def test_container_departure_cache_uses_persistent_data_volume(self) -> None:
@@ -417,6 +420,8 @@ class ProjectArtifactTest(unittest.TestCase):
             "py -3.12 --version",
             "git clone https://github.com/Ben1991/hvv-anzeiger.git",
             "Schritt 4: ESPHome und das CYD-Profil einrichten",
+            "keinen automatischen Fallback zu Home Assistant",
+            "vom CYD aus per DNS auflösbar",
             "Wenn kein COM-Port angeboten wird",
             "Wenn keine Abfahrten erscheinen",
             "Wenn der Bildschirm leer bleibt oder Farben falsch sind",
@@ -433,6 +438,7 @@ class ProjectArtifactTest(unittest.TestCase):
         )
 
         self.assertIn("esphomeVersion = '2026.9.1'", script)
+        self.assertIn("[string]$BoardProfile = 'hvv-cyd'", script)
         self.assertIn(
             "print(str(sys.version_info[0])+chr(46)+str(sys.version_info[1]))",
             script,

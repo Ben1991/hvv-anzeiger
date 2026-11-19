@@ -295,7 +295,7 @@ auf diese Referenzprofile; nicht jedes Suchergebnis passt dazu.
 |---|---|---|
 | ESP32 DevKit | [ESP32-DevKit-Board suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32+DevKit+ESP32-WROOM-32+Entwicklungsboard&tag=bema19910e-21) | klassischer ESP32 für `hvv-display.yaml`; herausgeführte GPIOs müssen zur dokumentierten Pinbelegung passen |
 | ILI9341-SPI-Display | [ILI9341-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=ILI9341+SPI+Display+240x320+3%2C3V&tag=bema19910e-21) | externes Display zum ESP32 DevKit; 240 × 320 Pixel, SPI und 3,3-V-kompatible Logik |
-| CYD mit integriertem Display | [ESP32-2432S028 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-2432S028+ILI9341+2.8+Display&tag=bema19910e-21) | `hvv-cyd.yaml` ist standardmäßig auf 2,8 Zoll, 240×320 Pixel und den ILI9341 laut Produktangabe eingestellt; Dual-USB-Varianten können andere Displaycontroller haben |
+| CYD mit integriertem Display | [ESP32-2432S028 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-2432S028+ILI9342+2.8+Display&tag=bema19910e-21) | `hvv-cyd.yaml` zielt standardmäßig auf die getestete Dual-USB-Revision mit ILI9342, 2,8 Zoll, 320×240 Pixel im nativen Querformat; andere Revisionen brauchen ggf. einen anderen Controller |
 | ESP32-S3 DevKit | [ESP32-S3-DevKitC-1 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-S3+DevKitC-1+Entwicklungsboard&tag=bema19910e-21) | für `hvv-s3-ili9488.yaml`; GPIOs, USB-Anschluss und konkrete Boardvariante prüfen |
 | ILI9488-SPI-Display | [ILI9488-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=ILI9488+SPI+Display+320x480+3%2C3V&tag=bema19910e-21) | externes Display zum S3-Referenzaufbau; 320 × 480 Pixel und SPI, nicht die ähnlich angebotene parallele Schnittstelle |
 | USB-Netzteil | [5-V-USB-Netzteil mit 2 A suchen (Affiliate-Link)](https://www.amazon.de/s?k=USB+Netzteil+5V+2A&tag=bema19910e-21) | stabile Versorgung und Anschluss passend zum Kabel; Spannungs- und Stromvorgaben von Board und Display beachten |
@@ -317,9 +317,10 @@ auch mit einem ESP32-Display erforderlich.
 
 #### ESP32 Schritt für Schritt
 
-Für das CYD `ESP32-2432S028` mit 2,8-Zoll-Display und 240×320 Pixeln ist
-`hvv-cyd` das Standardprofil. Der ILI9341-Treiber folgt der Produktangabe;
-eine automatische Controller-Erkennung ist technisch nicht zuverlässig.
+Für das CYD `ESP32-2432S028` mit 2,8-Zoll-Display und 320×240 Pixeln im
+Querformat ist `hvv-cyd` das Standardprofil. Es verwendet die getestete
+Dual-USB-Revision mit ILI9342 und nativer 0°-Ausrichtung. Eine
+automatische Controller-Erkennung ist technisch nicht zuverlässig.
 Das CYD fragt den Python-Hintergrunddienst direkt per HTTPS ab. Home Assistant
 ist dafür nicht nötig. Der Hintergrunddienst muss bereits laufen; die
 [Backend-Anleitung](docs/home-assistant.md#1-hintergrunddienst-bereitstellen)
@@ -378,8 +379,9 @@ beschreibt die Einrichtung. Halte seine HTTPS-Adresse und das Webpasswort bereit
    folge der [Fehlerhilfe zum Flashen](docs/esp32-setup.md#schritt-5-board-verbinden-und-firmware-flashen).
 6. **Anzeige prüfen:** Kontrolliere WLAN, Abfahrtszeiten, Textausrichtung,
    Farben und Querformat. Bei leerem oder falschfarbigem Display prüfe zuerst
-   die konkrete Displayrevision. Das CYD-Profil nimmt ILI9341 als Standard an;
-   eine zuverlässige automatische Controller-Erkennung ist nicht möglich.
+   die konkrete Displayrevision. Das CYD-Profil nimmt die getestete
+   Dual-USB-Revision mit ILI9342 und nativer 0°-Querformat-Ausrichtung als
+   Standard an; eine automatische Controller-Erkennung ist nicht möglich.
 
 **Home Assistant optional:** Wenn du das CYD zusätzlich in HA einbinden
 möchtest, richte das HA-Paket nach der

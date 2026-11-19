@@ -3,7 +3,8 @@
 Diese Anleitung behandelt die Board-Auswahl, ESPHome-Konfiguration, Firmware,
 USB-Flashen und ESPHome-Updates für das CYD. Das Standardprofil fragt den
 Python-Hintergrunddienst direkt per HTTPS ab; **Home Assistant ist dafür nicht
-erforderlich**. Der Hintergrunddienst muss erreichbar sein. Seine Installation
+erforderlich**, und es gibt keinen automatischen Fallback zu Home Assistant.
+Der Hintergrunddienst muss erreichbar sein. Seine Installation
 steht in der Anleitung zum
 [Hintergrunddienst](home-assistant.md#1-hintergrunddienst-bereitstellen).
 Home Assistant ist eine separate optionale Funktion; dafür gibt es das Profil
@@ -16,11 +17,13 @@ lässt. Wenn das noch nicht funktioniert, richte zuerst den
 
 ## Schnellstart für Windows: CYD einrichten und flashen
 
-Dieser Ablauf ist für das **2,8-Zoll-CYD ESP32-2432S028 mit 240×320 Pixeln**,
-einschließlich der abgebildeten Dual-USB-Revision.
-Er verwendet das Profil `hvv-cyd` und setzt den Displaycontroller standardmäßig
-auf ILI9341. Eine automatische Erkennung des Controllers ist bei diesen Boards
-nicht zuverlässig. Für andere Boards siehe [weitere Profile](#weitere-profile).
+Dieser Ablauf ist für das **2,8-Zoll-CYD ESP32-2432S028 mit 320×240 Pixeln im
+Querformat**, einschließlich der abgebildeten Dual-USB-Revision.
+Es verwendet `hvv-cyd` mit dem ILI9342-Profil und nativer 0°-Ausrichtung im
+Querformat.
+Eine automatische Erkennung des Controllers ist bei diesen Boards nicht
+zuverlässig. Für andere Displayrevisionen siehe
+[Displayrevision und Pinbelegung](#hardware-displayrevision-und-pinbelegung).
 
 ### Schritt 1: Git und Python installieren
 
@@ -181,12 +184,16 @@ erneut. Die genaue Tastenfolge kann je nach Platinenrevision abweichen.
 Prüfe am eingeschalteten Board, ob Abfahrten, Textausrichtung, Farben und
 Querformat stimmen. Das CYD fragt den Hintergrunddienst alle 15 Sekunden ab.
 
-**Wenn keine Abfahrten erscheinen:** Prüfe, ob das WLAN 2,4 GHz nutzt und der
-Hintergrunddienst erreichbar ist. Öffne `esphome/secrets.yaml` und prüfe
-`wifi_ssid`, `wifi_password`, `backend_url` und `backend_authorization`. Ändere
-falsche WLAN-Werte dort. Bei einem falschen Backendpasswort setze die
-Authorization-Zeile wie oben zurück. Flash danach mit dem Befehl aus Schritt 5
-erneut.
+**Wenn keine Abfahrten erscheinen:** Das Standardprofil `hvv-cyd` liest nur
+vom HTTPS-Backend; es verwendet Home Assistant nicht als Datenquelle. Prüfe,
+ob das WLAN 2,4 GHz nutzt und der Hintergrunddienst läuft. Die Adresse aus
+`backend_url` muss vom CYD aus per DNS auflösbar und über HTTPS erreichbar sein
+und auf `/api/esphome` enden. Öffne `esphome/secrets.yaml` und prüfe außerdem
+`wifi_ssid`, `wifi_password` und `backend_authorization`. Ein lokal auf dem PC
+funktionierender Hostname oder `localhost` ist für das CYD nicht automatisch
+erreichbar. Bei falschen WLAN-Werten korrigiere sie dort; bei einem falschen
+Backendpasswort setze die Authorization-Zeile wie oben zurück. Flash danach
+mit dem Befehl aus Schritt 5 erneut.
 
 **Wenn der Bildschirm leer bleibt oder Farben falsch sind:** Trenne das Board
 vom USB, prüfe die tatsächliche Displayrevision und passe `display_model`,
@@ -228,7 +235,7 @@ Kontrolliere SSID und Passwort in `esphome/secrets.yaml` und flashe erneut.
 
 | Profil | Zielhardware und Display | Transport |
 |---|---|---|
-| `hvv-cyd` | CYD ESP32-2432S028; 2,8 Zoll, 240×320, ILI9341 als Standard, Querformat | Direkt per HTTPS zum Hintergrunddienst; kein HA nötig |
+| `hvv-cyd` | Dual-USB-CYD ESP32-2432S028; 2,8 Zoll, 320×240 nativ, ILI9342, Querformat | Direkt per HTTPS zum Hintergrunddienst; kein HA nötig |
 | `hvv-cyd-ha` | Dasselbe CYD-Board und Display | Home Assistant, optional |
 | `hvv-display` | ESP32 DevKit + externes ILI9341, 320×240 quer | Home Assistant |
 | `hvv-s3-ili9488` | ESP32-S3 DevKit + externes ILI9488, 480×320 quer | Home Assistant |
@@ -301,21 +308,21 @@ Geheimnisse zusammenführen statt überschreiben. Anschließend Profil prüfen u
 
 ## Hardware, Displayrevision und Pinbelegung
 
-Das CYD-Profil verwendet ILI9341 und 240×320 Pixel. Der resistive Touchscreen
-wird nicht verwendet; die Abfahrtsanzeige läuft als reine Anzeige. SPI-Pins und
-Hintergrundbeleuchtung sind im Hardwareprofil gesetzt.
+Das CYD-Profil verwendet ILI9342 und 320×240 Pixel im Querformat (0° Rotation).
+Der resistive Touchscreen wird nicht verwendet; die Abfahrtsanzeige läuft als
+reine Anzeige. SPI-Pins und Hintergrundbeleuchtung sind im Hardwareprofil gesetzt.
 
 Eine zuverlässige automatische Erkennung des Displaycontrollers ist nicht
 konfiguriert: ESPHome wählt die Controller-Initialisierung beim Firmware-Build,
 und Produktname sowie Platinenaufdruck unterscheiden die Displayrevisionen
-nicht eindeutig. Die Firmware ist auf die ILI9341-Angabe der Produktseite
-eingestellt. Falls das Display nach dem Flashen leer bleibt, zuerst anhand
-der Displayrevision den Controller prüfen und `display_model` in der eigenen
-Haupt-YAML passend auf `ESP32-2432S028-7789` (ST7789V) oder
-`ESP32-2432S028-9342` (ILI9342) setzen. Bei abweichenden Farben kann
-`display_color_order` auf `bgr` geändert werden. Änderungen nur in der eigenen
-`*.local.yaml` vornehmen. Für ILI9342 `display_rotation: '0'` setzen; für
-ILI9341 und ST7789V bleibt die Rotation `90`.
+nicht eindeutig. Das Standardprofil zielt auf die hier getestete Dual-USB-
+Revision mit ILI9342 und `display_rotation: '0'`. Beim ILI9342 ist das native
+320×240-Querformat bereits 0°; 90° würde Hochformat ergeben. Für die ILI9341-
+Revision oder die Dual-USB-Revision mit ST7789V muss `display_model` in der
+eigenen `*.local.yaml` auf `ILI9341` beziehungsweise `ESP32-2432S028-7789`
+gesetzt und `display_rotation: '90'` für Querformat ergänzt werden. Bei
+abweichenden Farben kann `display_color_order` auf `bgr` geändert werden.
+Änderungen nur in der eigenen `*.local.yaml` vornehmen.
 
 Für den generischen ESP32 gelten folgende GPIOs; die Pins stehen als
 Substitutionen im Hardwareprofil und können in der Hauptdatei überschrieben werden:
