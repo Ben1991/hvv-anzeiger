@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HVV-Anzeiger verbinden",
+        "description": "Gib die HTTPS-Adresse und das individuelle Webpasswort des Anzeigers ein. Der Benutzername ist hvv-anzeiger.",
+        "data": {
+          "url": "Adresse",
+          "password": "Webpasswort"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Das Webpasswort wurde abgelehnt.",
+      "insecure_transport": "Für Verbindungen im Netzwerk muss HTTPS verwendet werden. HTTP ist nur für localhost erlaubt.",
+      "cannot_connect": "Der Anzeiger ist nicht erreichbar oder liefert keine unterstützte API. Prüfe Adresse und TLS-Zertifikat."
+    },
+    "abort": {
+      "already_configured": "Dieser HVV-Anzeiger ist bereits eingerichtet."
+    }
+  }
+}

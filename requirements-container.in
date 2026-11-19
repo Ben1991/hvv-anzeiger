@@ -1,0 +1,4 @@
+# Runtime packages needed by the minimal backend image (no GPIO/SPI).
+pillow==13.0.0
+tzdata==2026.5
+zeroconf>=0.154,<0.155

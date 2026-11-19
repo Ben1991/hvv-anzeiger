@@ -20,6 +20,12 @@ struct Row {
 
 class Board {
  public:
+  const std::string &state() const { return state_; }
+  size_t departure_count() const { return count_; }
+  const Row *departure(size_t index) const {
+    return index < count_ ? &rows_[index] : nullptr;
+  }
+
   bool accept(JsonObject root, uint32_t received) {
     if (!root["schema_version"].is<int>() || root["schema_version"].as<int>() != 1 ||
         !root["generated_at"].is<int64_t>() || !root["state"].is<const char *>() ||
@@ -133,7 +139,7 @@ class Board {
       const char *text = !generated_ ? "Warte auf Abfahrtsdaten" :
           !clock_epoch_ ? "Warte auf Systemzeit" : "Letzter Stand zu alt";
       it.print(5, 40, font, muted, text);
-      it.print(5, h - 18, small, muted, "Home Assistant / WLAN prüfen");
+      it.print(5, h - 18, small, muted, "WLAN / Geofox prüfen");
       return;
     }
     const int shown = std::min<int>(count_, std::min(5, (h - 47) / 36));

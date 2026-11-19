@@ -13,6 +13,7 @@ requires-python = ">=3.13"
 dependencies = [
   "luma.lcd>=2.13,<3",
   "Pillow>=13.0,<14",
+  "zeroconf>=0.154,<0.155",
   "spidev>=3.7,<4; sys_platform == 'linux' and (platform_machine == 'armv7l' or platform_machine == 'aarch64')",
 ]
 

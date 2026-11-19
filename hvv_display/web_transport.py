@@ -593,6 +593,7 @@ def run(
     must_change_password: bool = False,
     tls_certfile: str | None = None,
     tls_keyfile: str | None = None,
+    discovery_hostname: str | None = None,
 ) -> None:
     local_host = host in {"127.0.0.1", "localhost", "::1"}
     if not local_host and not access_token:
@@ -641,6 +642,19 @@ def run(
     server = web.WebServer((host, port), make_handler(application), tls_context=context)
     server.application = application  # type: ignore[attr-defined]
     scheme = "https" if tls_certfile else "http"
+    advertiser = None
+    if not local_host:
+        try:
+            from .home_assistant_discovery import HomeAssistantAdvertiser
+
+            advertiser = HomeAssistantAdvertiser(
+                port,
+                scheme,
+                discovery_hostname or os.environ.get("HVV_WEB_DISCOVERY_HOSTNAME"),
+            )
+            LOG.info("Home-Assistant-Erkennung über mDNS aktiviert")
+        except Exception:
+            LOG.exception("mDNS-Ankündigung für Home Assistant fehlgeschlagen")
     LOG.info("Lokale Weboberfläche erreichbar unter %s://%s:%d", scheme, host, port)
     try:
         server.serve_forever()
@@ -648,3 +662,5 @@ def run(
         pass
     finally:
         server.server_close()
+        if advertiser is not None:
+            advertiser.close()

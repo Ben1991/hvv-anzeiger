@@ -21,7 +21,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("display_model: ESP32-2432S028-9342", profile)
         self.assertIn("display_rotation: '90'", profile)
         self.assertIn("display_color_order: rgb", profile)
-        self.assertIn("transport: !include packages/https.yaml", profile)
+        self.assertIn("transport: !include packages/geofox.yaml", profile)
         self.assertIn("transport: !include packages/home-assistant.yaml", ha_profile)
         self.assertIn("display_model: ESP32-2432S028-9342", ha_profile)
         self.assertIn("display_rotation: '90'", ha_profile)
@@ -211,6 +211,8 @@ class ProjectArtifactTest(unittest.TestCase):
         )
 
     def test_installer_is_executable_and_syntax_is_checked_by_ci(self) -> None:
+        if os.name == "nt":
+            self.skipTest("Windows checkout does not preserve POSIX executable bits")
         installer = ROOT / "install.sh"
         mode = installer.stat().st_mode
         self.assertTrue(mode & stat.S_IXUSR)
@@ -408,8 +410,8 @@ class ProjectArtifactTest(unittest.TestCase):
             "py -3.12 --version",
             "git clone https://github.com/Ben1991/hvv-anzeiger.git",
             "Schritt 4: ESPHome und das CYD-Profil einrichten",
-            "keinen automatischen Fallback zu Home Assistant",
-            "vom CYD aus per DNS auflösbar",
+            "Es braucht weder Pi noch Python-Webdienst.",
+            "Geofox-Zugangsdaten",
             "Wenn kein COM-Port angeboten wird",
             "Wenn keine Abfahrten erscheinen",
             "Wenn der Bildschirm leer bleibt oder Farben falsch sind",
@@ -435,18 +437,18 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("$previousErrorActionPreference = $ErrorActionPreference", script)
         self.assertIn("$ErrorActionPreference = 'Continue'", script)
         self.assertIn("hvv-cyd-ha", script)
-        self.assertIn(
-            "$directBackendProfile = $BoardProfile -in @('hvv-cyd', 'hvv-direct')",
-            script,
-        )
-        self.assertIn("CYD-API-Schlüssel aus der Backend-Weboberfläche", script)
+        self.assertIn("$directBackendProfile = $BoardProfile -eq 'hvv-direct'", script)
+        self.assertIn("$geofoxBackendProfile = $BoardProfile -eq 'hvv-cyd'", script)
+        self.assertIn("$stationSetting = [regex]::Match", script)
+        self.assertIn("hvv_stations_json:[^\\r\\n]*", script)
+        self.assertIn("$localProfileText, '(?m)^substitutions:", script)
         self.assertIn(
             "$secretText, '(?m)^backend_authorization:.*$', "
             '\"backend_authorization: $backendAuthorization\")',
             script,
         )
-        self.assertIn("packages/home-assistant\\.yaml", script)
-        self.assertIn(".pre-direct-backend.bak", script)
+        self.assertIn("packages/(?:home-assistant|https)\\.yaml", script)
+        self.assertIn(".pre-esp32-geofox-backend.bak", script)
         self.assertIn("$secretText -notmatch '(?m)^backend_url:'", script)
         self.assertIn("$secretText -notmatch '(?m)^backend_authorization:'", script)
         self.assertIn("backendUri.AbsolutePath.TrimEnd('/') -ne '/api/esphome'", script)
@@ -466,11 +468,11 @@ class ProjectArtifactTest(unittest.TestCase):
         )
         esp32 = (ROOT / "docs" / "esp32-setup.md").read_text(encoding="utf-8")
 
-        self.assertIn("HA-Paketintegration", home_assistant)
-        self.assertIn("ESP32-Einrichtungsanleitung", home_assistant)
+        self.assertIn("benutzerdefinierte HA-Integration", home_assistant)
+        self.assertIn("ESP32/CYD", home_assistant)
         self.assertIn("Windows: CYD einrichten und flashen", esp32)
         self.assertIn("Firmware aktualisieren", esp32)
-        self.assertIn("Home Assistant ist dafür nicht", esp32)
+        self.assertIn("noch Home Assistant", esp32)
         self.assertIn("hvv-cyd-ha", esp32)
 
 

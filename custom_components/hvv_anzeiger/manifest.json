@@ -1,0 +1,13 @@
+{
+  "domain": "hvv_anzeiger",
+  "name": "HVV-Anzeiger",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/Ben1991/hvv-anzeiger/blob/main/docs/home-assistant.md",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "version": "1.0.0",
+  "zeroconf": [
+    { "type": "_hvv-anzeiger._tcp.local." }
+  ]
+}

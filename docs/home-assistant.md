@@ -1,19 +1,17 @@
-# Hintergrunddienst und optionale Home-Assistant-Integration
+# Raspberry-Pi-Backend und optionale Home-Assistant-Integration
 
-Diese Anleitung deckt zwei getrennte Funktionen ab: Abschnitt 1 richtet den
-gemeinsamen Python-Hintergrunddienst ein; Abschnitt 2 bindet ihn optional als
-HA-Paketintegration in Home Assistant ein. Das CYD kann den Hintergrunddienst
-direkt per HTTPS abfragen und braucht dafür Home Assistant nicht. Das getrennte
-Profil `hvv-cyd-ha` verwendet dagegen die HA-Integration. ESP32-Hardware, Firmwarebau
-und USB-Flashen stehen in der separaten
-[ESP32-Einrichtungsanleitung](esp32-setup.md).
+Diese Anleitung beschreibt ausschließlich das eigenständige Raspberry-Pi-
+System mit Python-Backend und optionalem ILI-Display sowie dessen optionale
+Home-Assistant-Anbindung. Der Pi-Dienst kann auch als Linux-/NAS-Container
+ohne Display laufen. Die native Home-Assistant-Integration findet diesen
+Pi-Dienst per mDNS und liest seine HTTPS-API nach Anmeldung.
 
-Der Hintergrunddienst bleibt die Quelle für Geofox-Abfragen, Haltestellen-
-auflösung, Linien-/Richtungsfilter und Konfiguration. Er kann auf einem
-Raspberry Pi oder einem Linux-/NAS-Containerhost laufen. Home Assistant bindet
-seine HTTPS-API ein; ein physisches Pi-Display oder der Pi-Anzeigedienst ist
-für Home Assistant und ESP32 nicht erforderlich. Home Assistant ist für die
-direkte ESP32-Anbindung keine Voraussetzung.
+Das ESP32+CYD-System ist davon unabhängig: seine Firmware fragt Geofox selbst
+ab und kann direkt am CYD anzeigen. Home Assistant erkennt das CYD über die
+integrierte ESPHome-API. Für diesen Betrieb werden weder Pi-Dienst noch diese
+benutzerdefinierte HA-Integration benötigt. Setup, Haltestellenänderung und
+Flashen stehen unter [ESP32/CYD](esp32-setup.md) und
+[CYD-Haltestellen ändern](esp32-stations.md).
 
 ## 1. Hintergrunddienst bereitstellen
 
@@ -58,10 +56,8 @@ anschließend erneut deaktivieren.
 Docker Engine und Docker Compose v2 verwenden. Das Webpasswort wird direkt im
 Container aus `/data/web.env` gelesen. Compose benötigt keinen Lesezugriff auf
 die privaten Dateien und wertet die `$`-Zeichen im Passwort-Hash nicht aus.
-Für die automatische CYD-Adresse muss der Linux-Host zusätzlich `hvv-anzeiger`
-per Avahi unter `hvv-anzeiger.local` bekannt machen und das TLS-Zertifikat
-diesen DNS-Namen enthalten. Andernfalls `backend_url` in der ESPHome-Konfiguration
-auf den eigenen TLS-Host setzen.
+Für die automatische HA-Erkennung muss der Linux-Containerhost mDNS-Multicast
+im selben LAN zulassen. Das CYD nutzt diesen Pi-Dienst nicht.
 
 Repository auf dem Containerhost klonen und die Daten vorbereiten:
 
@@ -139,7 +135,59 @@ Auf Home Assistant OS den bestehenden Pi oder einen separaten Containerhost nutz
 Der Systemneustart-Knopf der Pi-Weboberfläche startet keinen Containerhost neu;
 Container werden mit Docker Compose verwaltet.
 
+Für die automatische Home-Assistant-Erkennung muss der Container auf einem
+Linux-Host im Host-Netzwerk laufen. Compose bindet HTTPS dann direkt an Port
+8080 des Hosts; die bisherige Portfreigabe entfällt. Der Container teilt damit
+den Netzwerk-Namensraum des Hosts. Firewall und Portbelegung auf dem Host
+beachten. Home Assistant und Anzeiger müssen mDNS-Multicast (UDP 5353) im selben
+LAN erreichen können.
+
+Wenn das TLS-Zertifikat einen DNS-Namen statt eines `.local`-Namens enthält,
+in einer `.env` neben `compose.yaml` den Zertifikatsnamen eintragen:
+
+```dotenv
+HVV_WEB_DISCOVERY_HOSTNAME=hvv.example.net
+```
+
+Home Assistant muss diesen Namen im lokalen DNS zur Adresse des Containerhosts
+auflösen können. Das Passwort wird nicht über mDNS übertragen.
+
 ## 2. Home Assistant einrichten
+
+### Als Gerät automatisch erkennen
+
+Die native Integration für das Raspberry-Pi-/Python-Backend liegt im Verzeichnis `custom_components/hvv_anzeiger`.
+Sie muss einmal in Home Assistant installiert werden, bevor die Oberfläche das
+Gerät erkennt. Das Verzeichnis `hvv_anzeiger` nach
+`/config/custom_components/hvv_anzeiger` kopieren und Home Assistant neu
+starten. Anschließend erscheint der Anzeiger unter **Einstellungen → Geräte &
+Dienste** als entdecktes Gerät. Auswählen, die HTTPS-URL prüfen oder an den
+Zertifikatsnamen anpassen und das individuelle Webpasswort eingeben. Der
+Benutzername ist `hvv-anzeiger`.
+
+Die Integration prüft beim Einrichten die API und das Zertifikat. TLS-Prüfung
+bleibt eingeschaltet. Ein `.local`-mDNS-Name passt meist nicht zu einem
+öffentlich ausgestellten Zertifikat; dafür den Zertifikats-DNS-Namen und eine
+lokale DNS-Auflösung verwenden. Alternativ kann die bisherige manuelle
+YAML-REST-Variante weiter verwendet werden. Nicht beide Varianten gleichzeitig
+einrichten, da sonst Abfahrtsentitäten doppelt erscheinen.
+
+Die Integration legt ein Pi-Backend-Gerät mit `sensor.hvv_anzeiger_abfahrtsanzeige` an.
+Der Zustand ist `ok`, `stale`, `expired`, `unavailable` oder `night`; Abfahrten
+und das begrenzte `display_payload` liegen als Attribute vor. Die Abfrage läuft
+alle 15 Sekunden.
+
+### ESP32/CYD erkennen
+
+Das CYD meldet sich separat über die ESPHome-Native-API und deren mDNS-Dienst.
+Home Assistant entdeckt das eingeschaltete Gerät über die integrierte
+**ESPHome**-Integration; dafür keine Pi-URL oder Webpasswort eingeben. Beim
+Einrichten wird der lokale Wert `api_encryption_key` aus
+`esphome/secrets.yaml` benötigt. Status und Abfahrten kommen direkt aus der
+ESP32-Firmware. Die Stationen dafür stehen in der
+[CYD-Haltestellenanleitung](esp32-stations.md).
+
+### Alternative: YAML-Paket und REST-Sensor
 
 In `configuration.yaml` Pakete aktivieren, bestehende `homeassistant:`-Einträge
 dabei zusammenführen:

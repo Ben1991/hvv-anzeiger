@@ -68,26 +68,44 @@ if (-not (Test-Path -LiteralPath $localProfile -PathType Leaf)) {
     Write-Host "Vorhandenes lokales Profil bleibt erhalten: $localProfile"
 }
 
-# Migrate only the two transport-specific lines from the previously shipped CYD
-# default. Keep local pin, display, and other user customizations intact.
+# Migrate only the transport-specific lines from previous CYD defaults. Keep
+# local pin, display, and other user customizations intact.
 if ($BoardProfile -eq 'hvv-cyd') {
     $localProfileText = [System.IO.File]::ReadAllText($localProfile)
-    if ($localProfileText -match 'transport:\s*!include\s+packages/home-assistant\.yaml') {
-        $backupProfile = "$localProfile.pre-direct-backend.bak"
-        if (-not (Test-Path -LiteralPath $backupProfile -PathType Leaf)) {
-            Copy-Item -LiteralPath $localProfile -Destination $backupProfile
-        }
+    $migrationNeeded = $false
+    if ($localProfileText -match 'transport:\s*!include\s+packages/(?:home-assistant|https)\.yaml') {
+        $migrationNeeded = $true
         $localProfileText = [regex]::Replace(
             $localProfileText,
             '(?m)^[ \t]*board_entity:[ \t]*sensor\.hvv_board\r?\n',
             '')
         $localProfileText = [regex]::Replace(
             $localProfileText,
-            '(?m)^[ \t]*transport:[ \t]*!include[ \t]+packages/home-assistant\.yaml[ \t]*\r?$',
-            '  transport: !include packages/https.yaml')
+            '(?m)^[ \t]*transport:[ \t]*!include[ \t]+packages/(?:home-assistant|https)\.yaml[ \t]*\r?$',
+            '  transport: !include packages/geofox.yaml')
+    }
+    if ($localProfileText -notmatch '(?m)^[ \t]*hvv_stations_json:') {
+        $sourceProfileText = [System.IO.File]::ReadAllText($profileFile)
+        $stationSetting = [regex]::Match(
+            $sourceProfileText, '(?m)^[ \t]*hvv_stations_json:[^\r\n]*')
+        $substitutionsHeader = [regex]::Match(
+            $localProfileText, '(?m)^substitutions:[ \t]*\r?\n')
+        if (-not $stationSetting.Success -or -not $substitutionsHeader.Success) {
+            throw "Das CYD-Profil '$localProfile' kann nicht auf die Geofox-Konfiguration migriert werden."
+        }
+        $localProfileText = $localProfileText.Insert(
+            $substitutionsHeader.Index + $substitutionsHeader.Length,
+            $stationSetting.Value + [Environment]::NewLine)
+        $migrationNeeded = $true
+    }
+    if ($migrationNeeded) {
+        $backupProfile = "$localProfile.pre-esp32-geofox-backend.bak"
+        if (-not (Test-Path -LiteralPath $backupProfile -PathType Leaf)) {
+            Copy-Item -LiteralPath $localProfile -Destination $backupProfile
+        }
         [System.IO.File]::WriteAllText(
             $localProfile, $localProfileText, [System.Text.UTF8Encoding]::new($false))
-        Write-Host "CYD-Profil auf direkten Backendzugriff umgestellt; Sicherung: $backupProfile"
+        Write-Host "CYD-Profil auf Geofox-Backend umgestellt; lokale Hardwareeinstellungen bleiben erhalten. Sicherung: $backupProfile"
     }
 }
 
@@ -128,7 +146,8 @@ if (-not (Test-Path -LiteralPath $secretFile -PathType Leaf)) {
     Write-Host "Vorhandene Geheimnisse bleiben erhalten: $secretFile (fehlende Platzhalterwerte werden danach ergänzt)"
 }
 
-$directBackendProfile = $BoardProfile -in @('hvv-cyd', 'hvv-direct')
+$directBackendProfile = $BoardProfile -eq 'hvv-direct'
+$geofoxBackendProfile = $BoardProfile -eq 'hvv-cyd'
 $secretText = [System.IO.File]::ReadAllText($secretFile)
 $backendUrlPlaceholder = 'https://hvv-anzeiger.local:8080/api/esphome'
 $backendAuthPlaceholder = 'Bearer REPLACE_WITH_CYD_API_KEY'
@@ -210,6 +229,50 @@ if ($directBackendProfile -and
     Write-Host "CYD-Schlüssel und lokales Zertifikat in ESPHome gespeichert."
 }
 
+if ($geofoxBackendProfile) {
+    foreach ($secretName in @('geofox_user_cpp', 'geofox_password_cpp')) {
+        if ($secretText -notmatch "(?m)^$secretName\s*:") {
+            $emptyYamlValue = $secretName + ': ' + '''""'''
+            $secretText = $secretText.TrimEnd() + "`r`n" + $emptyYamlValue + "`r`n"
+        }
+    }
+    foreach ($secretName in @('geofox_user_cpp', 'geofox_password_cpp')) {
+        $emptySecretPattern = '(?m)^' + [regex]::Escape($secretName) + ':\s*''""''\s*$'
+        if ($secretText -notmatch $emptySecretPattern) { continue }
+        if ($secretName -eq 'geofox_user_cpp') {
+            $secretValue = Read-Host 'Geofox-Benutzername'
+            if ([string]::IsNullOrWhiteSpace($secretValue)) { throw 'Der Geofox-Benutzername darf nicht leer sein.' }
+        } else {
+            $secureGeofoxPassword = Read-Host 'Geofox-Passwort (Eingabe bleibt verdeckt)' -AsSecureString
+            if ($secureGeofoxPassword.Length -eq 0) {
+                $secureGeofoxPassword.Dispose()
+                throw 'Das Geofox-Passwort darf nicht leer sein.'
+            }
+            $passwordPointer = [IntPtr]::Zero
+            try {
+                $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureGeofoxPassword)
+                $secretValue = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+            } finally {
+                if ($passwordPointer -ne [IntPtr]::Zero) {
+                    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
+                }
+                $secureGeofoxPassword.Dispose()
+            }
+        }
+        $cppLiteral = ConvertTo-Json -InputObject $secretValue -Compress
+        $yamlValue = "'" + $cppLiteral.Replace("'", "''") + "'"
+        $replacement = "${secretName}: $yamlValue"
+        $pattern = '(?m)^' + [regex]::Escape($secretName) + ':.*$'
+        $secretText = [regex]::Replace(
+            $secretText, $pattern,
+            [System.Text.RegularExpressions.MatchEvaluator]{ param($match) $replacement })
+        $secretValue = $null
+    }
+    [System.IO.File]::WriteAllText(
+        $secretFile, $secretText, [System.Text.UTF8Encoding]::new($false))
+    Write-Host 'Geofox-Zugangsdaten wurden geschützt in secrets.yaml gespeichert.'
+}
+
 $requiredPlaceholders = 'REPLACE_WITH_WIFI_SSID|REPLACE_WITH_WIFI_PASSWORD|REPLACE_WITH_YOUR_OWN_32_BYTE_BASE64_KEY'
 if ($secretText -match $requiredPlaceholders) {
     throw "Ersetze zuerst die Platzhalter in '$secretFile'. Die vorhandene Datei wurde nicht verändert."
@@ -217,6 +280,10 @@ if ($secretText -match $requiredPlaceholders) {
 if ($directBackendProfile -and
     $secretText -match 'REPLACE_WITH_CYD_API_KEY|REPLACE_WITH_BASE64_CREDENTIALS|hvv\.example\.com') {
     throw "Für $BoardProfile müssen backend_url und backend_authorization in '$secretFile' gesetzt werden."
+}
+if ($geofoxBackendProfile -and
+    $secretText -match '(?m)^geofox_(?:user|password)_cpp:\s*''""''\s*$') {
+    throw "Für $BoardProfile müssen Geofox-Benutzername und Passwort in '$secretFile' gesetzt sein."
 }
 $secretText = $null
 

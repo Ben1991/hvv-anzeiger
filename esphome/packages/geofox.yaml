@@ -1,0 +1,132 @@
+# Self-contained CYD backend: the ESP32 requests Geofox directly and shares
+# the versioned display snapshot through its encrypted ESPHome native API.
+time:
+  - platform: sntp
+    id: hvv_clock
+    timezone: Europe/Berlin
+
+globals:
+  - id: hvv_geofox_user
+    type: std::string
+    restore_value: false
+    initial_value: !secret geofox_user_cpp
+  - id: hvv_geofox_password
+    type: std::string
+    restore_value: false
+    initial_value: !secret geofox_password_cpp
+  - id: hvv_geofox_request_body
+    type: std::string
+    restore_value: false
+  - id: hvv_geofox_request_epoch
+    type: int64_t
+    restore_value: false
+    initial_value: '0'
+  - id: hvv_backend_state
+    type: std::string
+    restore_value: false
+    initial_value: '"unavailable"'
+
+http_request:
+  verify_ssl: true
+  follow_redirects: false
+  timeout: 12s
+  buffer_size_rx: 1024
+  buffer_size_tx: 1024
+
+text_sensor:
+  - platform: template
+    name: Backendstatus
+    id: hvv_backend_status_sensor
+    icon: mdi:cloud-check
+    update_interval: 5s
+    lambda: return id(hvv_backend_state);
+  - platform: template
+    name: Abfahrt 1
+    id: hvv_departure_1
+    icon: mdi:train
+    update_interval: 5s
+    lambda: return hvv::departure_text(0, millis());
+  - platform: template
+    name: Abfahrt 2
+    id: hvv_departure_2
+    icon: mdi:train
+    update_interval: 5s
+    lambda: return hvv::departure_text(1, millis());
+  - platform: template
+    name: Abfahrt 3
+    id: hvv_departure_3
+    icon: mdi:train
+    update_interval: 5s
+    lambda: return hvv::departure_text(2, millis());
+  - platform: template
+    name: Abfahrt 4
+    id: hvv_departure_4
+    icon: mdi:train
+    update_interval: 5s
+    lambda: return hvv::departure_text(3, millis());
+  - platform: template
+    name: Abfahrt 5
+    id: hvv_departure_5
+    icon: mdi:train
+    update_interval: 5s
+    lambda: return hvv::departure_text(4, millis());
+
+interval:
+  - interval: 15s
+    then:
+      - lambda: |-
+          const auto now = id(hvv_clock).now();
+          if (!now.is_valid()) return;
+          id(hvv_geofox_request_epoch) = now.timestamp - (now.timestamp % 60);
+          id(hvv_geofox_request_body) = hvv::geofox_request_body(
+              R"json(${hvv_stations_json})json", id(hvv_geofox_request_epoch));
+      - if:
+          condition:
+            lambda: return id(hvv_clock).now().is_valid() && !id(hvv_geofox_request_body).empty();
+          then:
+            - http_request.post:
+                url: https://gti.geofox.de/gti/public/departureList
+                request_headers:
+                  Accept: application/json
+                  Content-Type: application/json;charset=UTF-8
+                  geofox-auth-type: HmacSHA1
+                  geofox-auth-user: !lambda return id(hvv_geofox_user).c_str();
+                  geofox-auth-signature: !lambda |-
+                    const std::string signature = hvv::geofox_signature(
+                        id(hvv_geofox_request_body), id(hvv_geofox_password));
+                    return signature.c_str();
+                  X-Platform: mobile
+                  User-Agent: hvv-anzeiger-esp32/1.0
+                body: !lambda return id(hvv_geofox_request_body);
+                capture_response: true
+                max_response_buffer_size: 32768
+                on_response:
+                  then:
+                    - lambda: |-
+                        if (response->status_code != 200 || body.size() > 32768) {
+                          id(hvv_backend_state) = "unavailable";
+                          return;
+                        }
+                        std::string snapshot;
+                        const auto now = id(hvv_clock).now();
+                        if (!hvv::make_display_snapshot(
+                                body, R"json(${hvv_stations_json})json",
+                                id(hvv_geofox_request_epoch),
+                                now.timestamp, snapshot)) {
+                          id(hvv_backend_state) = "unavailable";
+                          return;
+                        }
+                        bool accepted = false;
+                        const bool parsed = json::parse_json(
+                            snapshot, [&accepted](JsonObject root) -> bool {
+                              accepted = hvv_board.accept(root, millis());
+                              return accepted;
+                            });
+                        if (parsed && accepted) {
+                          id(hvv_backend_state) = "ok";
+                        } else {
+                          id(hvv_backend_state) = "unavailable";
+                        }
+                on_error:
+                  then:
+                    - lambda: id(hvv_backend_state) = "unavailable";
