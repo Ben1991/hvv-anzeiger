@@ -115,6 +115,17 @@ class WebBoundariesTest(unittest.TestCase):
             stored["HVV_ESPHOME_API_TOKEN"], "synthetic-device-key-0123456789"
         )
 
+    def test_password_save_preserves_device_key_loaded_from_environment(self):
+        device_token = "environment-device-key-0123456789"
+        (self.root / "web.env").write_text(
+            f'HVV_ESPHOME_API_TOKEN="{device_token}"\n', encoding="utf-8"
+        )
+        self.app.device_token = None
+        self.app.save_web_password("another-unique-password")
+
+        stored = web.load_web_environment(self.root / "web.env")
+        self.assertEqual(stored["HVV_ESPHOME_API_TOKEN"], device_token)
+
     def test_cyd_feed_uses_independent_bearer_key(self):
         self.app.device_token = "synthetic-device-key-0123456789"
         self.start_server()
