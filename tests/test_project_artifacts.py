@@ -12,25 +12,19 @@ ROOT = Path(__file__).resolve().parents[1]
 class ProjectArtifactTest(unittest.TestCase):
     def test_cyd_profile_matches_supplied_2_8_inch_board(self) -> None:
         profile = (ROOT / "esphome" / "hvv-cyd.yaml").read_text(encoding="utf-8")
-        ha_profile = (ROOT / "esphome" / "hvv-cyd-ha.yaml").read_text(
-            encoding="utf-8"
-        )
+        ha_profile = (ROOT / "esphome" / "hvv-cyd-ha.yaml").read_text(encoding="utf-8")
         hardware = (ROOT / "esphome" / "boards" / "cyd.yaml").read_text(
             encoding="utf-8"
         )
-        guide = (ROOT / "docs" / "esp32-setup.md").read_text(
-            encoding="utf-8"
-        )
+        guide = (ROOT / "docs" / "esp32-setup.md").read_text(encoding="utf-8")
 
         self.assertIn("display_model: ESP32-2432S028-9342", profile)
-        self.assertIn("display_rotation: '0'", profile)
+        self.assertIn("display_rotation: '90'", profile)
         self.assertIn("display_color_order: rgb", profile)
         self.assertIn("transport: !include packages/https.yaml", profile)
-        self.assertIn(
-            "transport: !include packages/home-assistant.yaml", ha_profile
-        )
+        self.assertIn("transport: !include packages/home-assistant.yaml", ha_profile)
         self.assertIn("display_model: ESP32-2432S028-9342", ha_profile)
-        self.assertIn("display_rotation: '0'", ha_profile)
+        self.assertIn("display_rotation: '90'", ha_profile)
         self.assertIn("hardware: !include boards/cyd.yaml", ha_profile)
         self.assertIn("model: ${display_model}", hardware)
         self.assertNotIn("dimensions:", hardware)
@@ -39,7 +33,6 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("ESP32-2432S028", guide)
         self.assertIn("Dual-USB", guide)
         self.assertIn("ILI9342", guide)
-        self.assertIn("display_rotation: '0'", guide)
         self.assertIn("display_rotation: '90'", guide)
         self.assertIn("Der resistive Touchscreen", guide)
 
@@ -62,6 +55,7 @@ class ProjectArtifactTest(unittest.TestCase):
                 "## Inhalt",
                 "## Wieso gibt es dieses Projekt?",
                 "## Und wie funktioniert es?",
+                "## Plattformen und gemeinsame Funktionen",
                 "## Funktionen",
                 "## Praxisbeispiel",
                 "## Vorkonfigurierte Anzeige",
@@ -178,9 +172,7 @@ class ProjectArtifactTest(unittest.TestCase):
         security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
         contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
         license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
-        codeowners = (ROOT / ".github" / "CODEOWNERS").read_text(
-            encoding="utf-8"
-        )
+        codeowners = (ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
         self.assertIn("[SECURITY.md](SECURITY.md)", readme)
         self.assertIn("[CONTRIBUTING.md](CONTRIBUTING.md)", readme)
         self.assertIn("/security/advisories/new", security)
@@ -195,9 +187,9 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertEqual(codeowners.strip().splitlines()[-1], "* @Ben1991")
 
     def test_pull_request_template_covers_review_context(self) -> None:
-        template = (
-            ROOT / ".github" / "pull_request_template.md"
-        ).read_text(encoding="utf-8")
+        template = (ROOT / ".github" / "pull_request_template.md").read_text(
+            encoding="utf-8"
+        )
         expected_sections = (
             "## Ticket / Referenz",
             "## Kontext",
@@ -250,7 +242,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn('APP_USER="hvv-anzeiger"', installer_text)
         self.assertIn('systemctl enable "$SERVICE_NAME"', installer_text)
         self.assertIn("--require-hashes", installer_text)
-        self.assertNotIn("pip\" install --upgrade pip", installer_text)
+        self.assertNotIn('pip" install --upgrade pip', installer_text)
         self.assertIn('chown -R root:root "$STAGING_DIR"', installer_text)
         self.assertIn(
             'chown -R "$APP_USER:$APP_GROUP" "$STAGING_DIR/var"', installer_text
@@ -258,7 +250,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("BACKUP_DIR", installer_text)
         self.assertIn("restore_units", installer_text)
         self.assertIn("INSTALL_SUCCEEDED", installer_text)
-        self.assertIn('sudo install -m 0755 \\', installer_text)
+        self.assertIn("sudo install -m 0755 \\", installer_text)
         self.assertIn('"$SOURCE_DIR/configure-credentials.sh"', installer_text)
         self.assertIn('"$SOURCE_DIR/configure-web.sh"', installer_text)
         self.assertIn("openssl", installer_text)
@@ -268,7 +260,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("tests/install-smoke.sh", workflow)
         update_script = (ROOT / "update.sh").read_text(encoding="utf-8")
         self.assertIn('"$SCRIPT_DIR/configure-web.sh"', update_script)
-        self.assertIn('systemctl daemon-reload', update_script)
+        self.assertIn("systemctl daemon-reload", update_script)
         self.assertIn('systemctl restart "$WEB_SERVICE"', update_script)
         self.assertIn('systemctl is-active --quiet "$WEB_SERVICE"', update_script)
 
@@ -362,9 +354,9 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("--require-hashes --requirement requirements-dev.txt", workflow)
 
     def test_weekly_log_cleanup_has_retention_and_size_limits(self) -> None:
-        cleanup = (
-            ROOT / "systemd" / "hvv-anzeiger-log-cleanup.service"
-        ).read_text(encoding="utf-8")
+        cleanup = (ROOT / "systemd" / "hvv-anzeiger-log-cleanup.service").read_text(
+            encoding="utf-8"
+        )
         timer = (ROOT / "systemd" / "hvv-anzeiger-log-cleanup.timer").read_text(
             encoding="utf-8"
         )
@@ -383,9 +375,7 @@ class ProjectArtifactTest(unittest.TestCase):
 
     def test_readme_documents_every_example_configuration_field(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        config = json.loads(
-            (ROOT / "config.example.json").read_text(encoding="utf-8")
-        )
+        config = json.loads((ROOT / "config.example.json").read_text(encoding="utf-8"))
         fields = [
             *(f"api.{field}" for field in config["api"]),
             *(f"display.{field}" for field in config["display"]),
@@ -410,9 +400,7 @@ class ProjectArtifactTest(unittest.TestCase):
 
     def test_esp32_guides_give_beginner_steps_and_recovery_actions(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        guide = (ROOT / "docs" / "esp32-setup.md").read_text(
-            encoding="utf-8"
-        )
+        guide = (ROOT / "docs" / "esp32-setup.md").read_text(encoding="utf-8")
 
         for instruction in (
             "PowerShell öffnen",
@@ -430,12 +418,8 @@ class ProjectArtifactTest(unittest.TestCase):
                 self.assertIn(instruction, readme + guide)
 
     def test_esp32_setup_script_preserves_existing_local_configuration(self) -> None:
-        script = (ROOT / "scripts" / "setup-esphome.ps1").read_text(
-            encoding="utf-8"
-        )
-        guide = (ROOT / "docs" / "esp32-setup.md").read_text(
-            encoding="utf-8"
-        )
+        script = (ROOT / "scripts" / "setup-esphome.ps1").read_text(encoding="utf-8")
+        guide = (ROOT / "docs" / "esp32-setup.md").read_text(encoding="utf-8")
 
         self.assertIn("esphomeVersion = '2026.9.1'", script)
         self.assertIn("[string]$BoardProfile = 'hvv-cyd'", script)
@@ -455,19 +439,17 @@ class ProjectArtifactTest(unittest.TestCase):
             "$directBackendProfile = $BoardProfile -in @('hvv-cyd', 'hvv-direct')",
             script,
         )
-        self.assertIn("Webpasswort des Hintergrunddienstes", script)
+        self.assertIn("CYD-API-Schlüssel aus der Backend-Weboberfläche", script)
         self.assertIn(
-            '$backendAuthPlaceholder, "Basic $backendAuthorization")', script
+            "$secretText, '(?m)^backend_authorization:.*$', "
+            '\"backend_authorization: $backendAuthorization\")',
+            script,
         )
         self.assertIn("packages/home-assistant\\.yaml", script)
         self.assertIn(".pre-direct-backend.bak", script)
         self.assertIn("$secretText -notmatch '(?m)^backend_url:'", script)
-        self.assertIn(
-            "$secretText -notmatch '(?m)^backend_authorization:'", script
-        )
-        self.assertIn(
-            "backendUri.AbsolutePath.TrimEnd('/') -ne '/api/esphome'", script
-        )
+        self.assertIn("$secretText -notmatch '(?m)^backend_authorization:'", script)
+        self.assertIn("backendUri.AbsolutePath.TrimEnd('/') -ne '/api/esphome'", script)
         self.assertIn("-m esphome run", script)
         self.assertIn("cp esphome/hvv-cyd.yaml esphome/hvv-cyd.local.yaml", guide)
         self.assertIn("esphome config esphome/hvv-cyd.local.yaml", guide)

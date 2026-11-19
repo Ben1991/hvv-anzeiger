@@ -151,6 +151,7 @@ class SmartHomeTest(unittest.TestCase):
 
     def test_http_transports_require_authentication_and_return_same_snapshot(self):
         self.app.access_token = hash_web_password("integration-test-password")
+        self.app.device_token = "device-api-key-for-tests"  # noqa: S105
         server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.app))
         thread = Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -160,11 +161,14 @@ class SmartHomeTest(unittest.TestCase):
         encoded = base64.b64encode(b"hvv-anzeiger:integration-test-password")
         auth = "Basic " + encoded.decode()
         results = []
-        for route in ("/api/smart-home", "/api/esphome"):
+        for route, authorization in (
+            ("/api/smart-home", auth),
+            ("/api/esphome", "Bearer device-api-key-for-tests"),
+        ):
             with self.assertRaises(HTTPError) as denied:
                 urlopen(base + route)  # noqa: S310
             self.assertEqual(denied.exception.code, 401)
-            req = Request(base + route, headers={"Authorization": auth})  # noqa: S310
+            req = Request(base + route, headers={"Authorization": authorization})  # noqa: S310
             with urlopen(req) as response:  # noqa: S310
                 self.assertEqual(response.headers["Cache-Control"], "no-store")
                 results.append(json.load(response))

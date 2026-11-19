@@ -8,6 +8,7 @@ APP_DIR="$ROOT/opt/hvv-anzeiger"
 ENV_FILE="$ROOT/etc/hvv-anzeiger.env"
 SYSTEMD_DIR="$ROOT/systemd"
 SYSTEMCTL_STATE="$ROOT/systemctl-active"
+AVAHI_CONFIG="$ROOT/etc/avahi/avahi-daemon.conf"
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cleanup() {
@@ -15,7 +16,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$FAKE_BIN" "$(dirname "$ENV_FILE")" "$SYSTEMD_DIR"
+mkdir -p "$FAKE_BIN" "$(dirname "$ENV_FILE")" "$(dirname "$AVAHI_CONFIG")" "$SYSTEMD_DIR"
+printf '[server]\n' >"$AVAHI_CONFIG"
 
 for command_name in \
   apt-get raspi-config timedatectl groupadd useradd usermod getent id; do
@@ -110,6 +112,7 @@ export HVV_APP_DIR="$APP_DIR"
 export HVV_ENV_FILE="$ENV_FILE"
 export HVV_SYSTEMD_DIR="$SYSTEMD_DIR"
 export HVV_WEB_CERT_DIR="$ROOT/etc/hvv-anzeiger"
+export HVV_AVAHI_CONFIG="$AVAHI_CONFIG"
 export HVV_FAKE_SYSTEMCTL_STATE="$SYSTEMCTL_STATE"
 export HVV_FAKE_PROTECTED_FILE="$ROOT/protected-file"
 printf 'protected-original\n' >"$HVV_FAKE_PROTECTED_FILE"
@@ -139,8 +142,13 @@ grep -q -- '--tls-keyfile /etc/hvv-anzeiger/web.key' \
   "$SYSTEMD_DIR/hvv-anzeiger-web.service"
 test -f "$ENV_FILE"
 test "$(stat -c '%a' "$ENV_FILE")" = "600"
+grep -q '^HVV_WEB_PASSWORD_MUST_CHANGE="1"$' "$APP_DIR/var/web.env"
+grep -Eq '^HVV_ESPHOME_API_TOKEN="[A-Za-z0-9_-]{40,}"$' "$APP_DIR/var/web.env"
+grep -q '^host-name=hvv-anzeiger$' "$AVAHI_CONFIG"
 test -f "$HVV_WEB_CERT_DIR/web.crt"
 test -f "$HVV_WEB_CERT_DIR/web.key"
+openssl x509 -in "$HVV_WEB_CERT_DIR/web.crt" -noout -ext subjectAltName |
+  grep -q 'DNS:hvv-anzeiger.local'
 web_certificate_checksum="$(sha256sum "$HVV_WEB_CERT_DIR/web.crt")"
 web_key_checksum="$(sha256sum "$HVV_WEB_CERT_DIR/web.key")"
 "$SOURCE_DIR/configure-web.sh" --force-certificate

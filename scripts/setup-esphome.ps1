@@ -130,66 +130,84 @@ if (-not (Test-Path -LiteralPath $secretFile -PathType Leaf)) {
 
 $directBackendProfile = $BoardProfile -in @('hvv-cyd', 'hvv-direct')
 $secretText = [System.IO.File]::ReadAllText($secretFile)
-$backendUrlPlaceholder = 'https://hvv.example.com:8080/api/esphome'
-$backendAuthPlaceholder = 'Basic REPLACE_WITH_BASE64_CREDENTIALS'
+$backendUrlPlaceholder = 'https://hvv-anzeiger.local:8080/api/esphome'
+$backendAuthPlaceholder = 'Bearer REPLACE_WITH_CYD_API_KEY'
+$legacyBackendAuthPlaceholder = 'Basic REPLACE_WITH_BASE64_CREDENTIALS'
 if ($directBackendProfile) {
     if ($secretText -notmatch '(?m)^backend_url:') {
-        $secretText = $secretText.TrimEnd() + "`r`nbackend_url: $backendUrlPlaceholder`r`n"
+        $secretText = $secretText.TrimEnd() + "`r`nbackend_url: $(& $yamlQuote $backendUrlPlaceholder)`r`n"
     }
     if ($secretText -notmatch '(?m)^backend_authorization:') {
         $secretText = $secretText.TrimEnd() + "`r`nbackend_authorization: $backendAuthPlaceholder`r`n"
     }
 }
+$secretText = [regex]::Replace(
+    $secretText,
+    '(?m)^backend_url:\s*["'']?https://hvv\.example\.com:8080/api/esphome["'']?\s*$',
+    "backend_url: $(& $yamlQuote $backendUrlPlaceholder)")
+$secretText = $secretText.Replace($legacyBackendAuthPlaceholder, $backendAuthPlaceholder)
 if ($directBackendProfile -and
-    ($secretText -match 'hvv\.example\.com' -or
-     $secretText -match 'REPLACE_WITH_BASE64_CREDENTIALS')) {
-    $backendUrl = $null
+    ($secretText -notmatch '(?m)^backend_authorization:\s*Bearer [A-Za-z0-9_-]{32,}\s*$' -or
+     -not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $secretFile) 'backend-ca.pem')))) {
     $backendAuthorization = $null
-    if ($secretText -match 'hvv\.example\.com') {
-        $backendUrl = Read-Host 'HTTPS-Adresse des Hintergrunddienstes (endet mit /api/esphome)'
-        $backendUri = $null
-        if (-not [Uri]::TryCreate($backendUrl, [UriKind]::Absolute, [ref]$backendUri) -or
-            $backendUri.Scheme -ne 'https' -or
-            $backendUri.AbsolutePath.TrimEnd('/') -ne '/api/esphome') {
-            throw 'Die Backend-Adresse muss eine HTTPS-URL sein und mit /api/esphome enden.'
-        }
-    }
-    if ($secretText -match 'REPLACE_WITH_BASE64_CREDENTIALS') {
-        $secureWebPassword = Read-Host 'Webpasswort des Hintergrunddienstes für hvv-anzeiger (Eingabe bleibt verdeckt)' -AsSecureString
-        if ($secureWebPassword.Length -eq 0) {
-            $secureWebPassword.Dispose()
-            throw 'Das Webpasswort darf nicht leer sein.'
+    if ($secretText -notmatch '(?m)^backend_authorization:\s*Bearer [A-Za-z0-9_-]{32,}\s*$') {
+        $secureApiKey = Read-Host 'CYD-API-Schlüssel aus der Backend-Weboberfläche > Einstellungen (Eingabe bleibt verdeckt)' -AsSecureString
+        if ($secureApiKey.Length -lt 32) {
+            $secureApiKey.Dispose()
+            throw 'Der CYD-API-Schlüssel ist ungültig oder zu kurz.'
         }
         $passwordPointer = [IntPtr]::Zero
         try {
-            $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureWebPassword)
+            $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureApiKey)
             $backendPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
         } finally {
             if ($passwordPointer -ne [IntPtr]::Zero) {
                 [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
             }
-            $secureWebPassword.Dispose()
+            $secureApiKey.Dispose()
         }
-        $credentialBytes = [System.Text.Encoding]::UTF8.GetBytes("hvv-anzeiger:$backendPassword")
+        $backendAuthorization = "Bearer $backendPassword"
+        $backendPassword = $null
+        $secretText = [regex]::Replace(
+            $secretText, '(?m)^backend_authorization:.*$', "backend_authorization: $backendAuthorization")
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $secretFile) 'backend-ca.pem'))) {
+        $backendUrlMatch = [regex]::Match($secretText, '(?m)^backend_url:\s*["'']?([^"''\r\n]+)')
+        if (-not $backendUrlMatch.Success) { throw 'backend_url fehlt in secrets.yaml.' }
+        $backendUri = [Uri]$backendUrlMatch.Groups[1].Value.Trim()
+        if ($backendUri.Scheme -ne 'https' -or $backendUri.AbsolutePath.TrimEnd('/') -ne '/api/esphome') {
+            throw 'backend_url muss HTTPS verwenden und auf /api/esphome enden.'
+        }
+        $tcp = [System.Net.Sockets.TcpClient]::new()
+        $tls = $null
         try {
-            $backendAuthorization = [Convert]::ToBase64String($credentialBytes)
+            $tcp.Connect($backendUri.DnsSafeHost, $backendUri.Port)
+            $acceptCertificate = [System.Net.Security.RemoteCertificateValidationCallback]{
+                param($sender, $certificate, $chain, $errors)
+                return $true
+            }
+            $tls = [System.Net.Security.SslStream]::new($tcp.GetStream(), $false, $acceptCertificate)
+            $tls.AuthenticateAsClient($backendUri.DnsSafeHost)
+            $remoteCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($tls.RemoteCertificate)
+            $fingerprint = $remoteCertificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256)
+            Write-Host "TLS-Zertifikats-Fingerabdruck: $fingerprint"
+            $confirmation = Read-Host 'Stimmt er mit dem Fingerabdruck aus dem Backend-Installationsfenster überein? (ja/nein)'
+            if ($confirmation -notin @('ja', 'JA', 'j', 'J')) {
+                throw 'TLS-Zertifikat nicht bestätigt; Firmware-Setup abgebrochen.'
+            }
+            $base64 = [Convert]::ToBase64String($remoteCertificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+            $pemLines = [regex]::Matches($base64, '.{1,64}') | ForEach-Object { $_.Value }
+            $pem = "-----BEGIN CERTIFICATE-----`r`n" + ($pemLines -join "`r`n") + "`r`n-----END CERTIFICATE-----`r`n"
+            [System.IO.File]::WriteAllText((Join-Path (Split-Path -Parent $secretFile) 'backend-ca.pem'), $pem, [System.Text.Encoding]::ASCII)
         } finally {
-            [Array]::Clear($credentialBytes, 0, $credentialBytes.Length)
-            $backendPassword = $null
+            if ($tls) { $tls.Dispose() }
+            $tcp.Dispose()
         }
-    }
-    if ($backendUrl) {
-        $secretText = $secretText.Replace(
-            "backend_url: $backendUrlPlaceholder", "backend_url: $(& $yamlQuote $backendUrl)")
-    }
-    if ($backendAuthorization) {
-        $secretText = $secretText.Replace(
-            $backendAuthPlaceholder, "Basic $backendAuthorization")
     }
     [System.IO.File]::WriteAllText(
         $secretFile, $secretText, [System.Text.UTF8Encoding]::new($false))
     $backendAuthorization = $null
-    Write-Host "Backend-Zugangsdaten lokal gespeichert; das Passwort wurde nicht angezeigt."
+    Write-Host "CYD-Schlüssel und lokales Zertifikat in ESPHome gespeichert."
 }
 
 $requiredPlaceholders = 'REPLACE_WITH_WIFI_SSID|REPLACE_WITH_WIFI_PASSWORD|REPLACE_WITH_YOUR_OWN_32_BYTE_BASE64_KEY'
@@ -197,7 +215,7 @@ if ($secretText -match $requiredPlaceholders) {
     throw "Ersetze zuerst die Platzhalter in '$secretFile'. Die vorhandene Datei wurde nicht verändert."
 }
 if ($directBackendProfile -and
-    $secretText -match 'REPLACE_WITH_BASE64_CREDENTIALS|hvv\.example\.com') {
+    $secretText -match 'REPLACE_WITH_CYD_API_KEY|REPLACE_WITH_BASE64_CREDENTIALS|hvv\.example\.com') {
     throw "Für $BoardProfile müssen backend_url und backend_authorization in '$secretFile' gesetzt werden."
 }
 $secretText = $null

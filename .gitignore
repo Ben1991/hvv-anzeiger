@@ -18,6 +18,7 @@ browser/smoke.spec.mjs-snapshots/
 test-results/
 esphome/.esphome/
 esphome/secrets.yaml
+esphome/backend-ca.pem
 esphome/*.local.yaml
 esphome/*.local.yaml.pre-direct-backend.bak
 home-assistant/secrets.yaml

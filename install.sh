@@ -165,6 +165,8 @@ sudo apt-get update
 sudo apt-get install -y \
   git \
   iproute2 \
+  avahi-daemon \
+  libnss-mdns \
   openssl \
   python3-dev \
   python3-venv \

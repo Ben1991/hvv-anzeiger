@@ -10,17 +10,20 @@ steht in der Anleitung zum
 Home Assistant ist eine separate optionale Funktion; dafür gibt es das Profil
 `hvv-cyd-ha`.
 
-Vor dem Flashen muss der Python-Hintergrunddienst laufen und ein Webpasswort
-haben. Prüfe im Browser, ob sich seine HTTPS-Weboberfläche öffnen und anmelden
-lässt. Wenn das noch nicht funktioniert, richte zuerst den
+Vor dem Flashen muss der Python-Hintergrunddienst laufen und seine Geofox- und
+Haltestellenkonfiguration besitzen. Öffne zuerst die HTTPS-Weboberfläche und
+melde dich mit `hvv-anzeiger` / `hvv-anzeiger` an; beim ersten Login musst du
+ein eigenes Webpasswort setzen. Danach findest du in den Einstellungen den
+separaten zufälligen CYD-Schlüssel. Das Display verwendet diesen Schlüssel,
+nicht das Webpasswort. Wenn das Backend noch nicht funktioniert, richte zuerst den
 [Hintergrunddienst](home-assistant.md#1-hintergrunddienst-bereitstellen) ein.
 
 ## Schnellstart für Windows: CYD einrichten und flashen
 
 Dieser Ablauf ist für das **2,8-Zoll-CYD ESP32-2432S028 mit 320×240 Pixeln im
 Querformat**, einschließlich der abgebildeten Dual-USB-Revision.
-Es verwendet `hvv-cyd` mit dem ILI9342-Profil und nativer 0°-Ausrichtung im
-Querformat.
+Es verwendet `hvv-cyd` mit dem ILI9342-Profil und standardmäßiger 90°-Drehung
+im Querformat.
 Eine automatische Erkennung des Controllers ist bei diesen Boards nicht
 zuverlässig. Für andere Displayrevisionen siehe
 [Displayrevision und Pinbelegung](#hardware-displayrevision-und-pinbelegung).
@@ -79,20 +82,26 @@ Kopiere den Befehl in dasselbe PowerShell-Fenster und drücke die Eingabetaste:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
 ```
 
+Voraussetzung für `hvv-cyd`: Der Backenddienst läuft bereits im selben LAN auf
+dem Raspberry Pi. Der Installer macht ihn unter `hvv-anzeiger.local` auffindbar
+und zeigt den SHA-256-Fingerabdruck seines TLS-Zertifikats an. Das Setup-Skript
+verwendet diesen festen Backendnamen, fragt den zufälligen CYD-Schlüssel aus
+den Backend-Einstellungen verdeckt ab und übernimmt das Zertifikat erst nach
+Bestätigung des Fingerabdrucks. Webpasswort und CYD-Schlüssel sind getrennt.
+
 Wenn `esphome/secrets.yaml` noch nicht vorhanden ist, fragt das Skript beim
-ersten Lauf nach WLAN-Name und WLAN-Passwort. Für das direkte Profil fragt es
-danach zusätzlich nach der HTTPS-Adresse des Hintergrunddienstes und dem dort
-eingerichteten Webpasswort. Der Benutzername `hvv-anzeiger` wird automatisch
-verwendet; das Passwort bleibt bei der Eingabe verdeckt:
+ersten Lauf nach WLAN-Name und WLAN-Passwort:
 
 1. Gib den Namen deines WLANs ein und drücke die Eingabetaste.
 2. Gib das WLAN-Passwort ein. Während der Eingabe zeigt PowerShell keine Zeichen
    an. Drücke danach die Eingabetaste.
-3. Gib beim Profil `hvv-cyd` die HTTPS-Adresse deines Hintergrunddienstes ein.
-   Die Adresse muss auf `/api/esphome` enden.
-4. Gib das Webpasswort des Hintergrunddienstes ein. Auch hier zeigt PowerShell
-   keine Zeichen an.
-5. Warte, bis ESPHome die Konfiguration geprüft hat.
+3. Öffne auf dem Backend-Rechner `https://hvv-anzeiger.local:8080/` und melde
+   dich mit `hvv-anzeiger` an. Ändere beim ersten Login das Webpasswort.
+4. Öffne Einstellungen, kopiere den CYD-Schlüssel und füge ihn in PowerShell
+   ein. Die Eingabe bleibt verdeckt.
+5. Vergleiche den angezeigten Zertifikats-Fingerabdruck mit dem Wert aus dem
+   Backend-Installationsfenster und bestätige ihn.
+6. Warte, bis ESPHome die Konfiguration geprüft hat.
 
 Das Skript richtet Python 3.12, eine getrennte Python-Umgebung und ESPHome ein.
 Es erstellt `esphome/secrets.yaml` mit einem zufälligen ESPHome-API-Schlüssel
@@ -105,11 +114,10 @@ Sicherung mit der Endung `.pre-direct-backend.bak` an. Alte
 danach nur noch deren Werte ab. Die Dateien enthalten private Zugangsdaten und
 bleiben von Git ausgeschlossen.
 
-Die Backend-Adresse muss mit `https://` beginnen und auf `/api/esphome` enden,
-zum Beispiel `https://anzeige.example.net:8080/api/esphome`. Der Hostname muss
-vom ESP32 erreichbar sein und ein vom Gerät akzeptiertes TLS-Zertifikat
-verwenden. Bei einer eigenen Zertifizierungsstelle siehe den Abschnitt
-[Direktes HTTPS](#direkt-per-https).
+Das Setup verwendet standardmäßig `https://hvv-anzeiger.local:8080/api/esphome`.
+Der Raspberry Pi muss im selben LAN sein; mDNS muss im WLAN zugelassen sein.
+Das Setup hinterlegt das lokal bestätigte Zertifikat als private CA und lässt
+`verify_ssl: true` aktiv.
 
 **Erfolg:** Am Ende erscheint die Meldung „Konfiguration geprüft.“ ohne Fehlermeldung.
 
@@ -128,15 +136,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 
 Internetverbindung und einen möglichen Proxy. Starte danach denselben
 Setup-Befehl erneut; vorhandene lokale Profile und Geheimnisse bleiben erhalten.
 
-**Wenn die Backend-Adresse abgelehnt wird:** Gib eine vollständige HTTPS-Adresse
-ein, die mit `/api/esphome` endet. Prüfe außerdem, dass der Hintergrunddienst
-läuft und von deinem WLAN aus erreichbar ist.
+**Wenn `hvv-anzeiger.local` nicht erreichbar ist:** Prüfe, dass der
+Backenddienst läuft, der Rechner im selben Netz ist und der Router mDNS-/
+Multicast-Verkehr zwischen WLAN und LAN nicht blockiert.
 
-**Wenn die Anmeldung am Backend fehlschlägt:** Verwende das aktuelle Webpasswort
-des Hintergrunddienstes für den Benutzer `hvv-anzeiger`. Öffne bei einem
-Tippfehler `esphome/secrets.yaml` und setze die Zeile
-`backend_authorization` auf `Basic REPLACE_WITH_BASE64_CREDENTIALS` zurück.
-Starte danach Schritt 4 erneut; das Skript fragt das Webpasswort erneut ab.
+**Wenn der Displayzugriff am Backend fehlschlägt:** Kopiere den aktuellen
+CYD-Schlüssel aus Einstellungen erneut. Er ist unabhängig vom Webpasswort.
+Setze in `esphome/secrets.yaml` `backend_authorization` auf
+`Bearer REPLACE_WITH_CYD_API_KEY` zurück und führe das Setup erneut aus.
 Zugangsdaten nicht in Issues, Chats oder Screenshots teilen.
 
 **Wenn die Konfiguration wegen Platzhaltern fehlschlägt:** Öffne die Datei mit
@@ -192,8 +199,9 @@ und auf `/api/esphome` enden. Öffne `esphome/secrets.yaml` und prüfe außerdem
 `wifi_ssid`, `wifi_password` und `backend_authorization`. Ein lokal auf dem PC
 funktionierender Hostname oder `localhost` ist für das CYD nicht automatisch
 erreichbar. Bei falschen WLAN-Werten korrigiere sie dort; bei einem falschen
-Backendpasswort setze die Authorization-Zeile wie oben zurück. Flash danach
-mit dem Befehl aus Schritt 5 erneut.
+CYD-Schlüssel setze die Authorization-Zeile auf
+`Bearer REPLACE_WITH_CYD_API_KEY` zurück. Flash danach mit dem Befehl aus
+Schritt 5 erneut.
 
 **Wenn der Bildschirm leer bleibt oder Farben falsch sind:** Trenne das Board
 vom USB, prüfe die tatsächliche Displayrevision und passe `display_model`,
@@ -244,9 +252,10 @@ Kontrolliere SSID und Passwort in `esphome/secrets.yaml` und flashe erneut.
 Für ein anderes Board `-Profile` auf den Profilnamen setzen. Eigene Namen,
 `board_entity` und Pin-Änderungen gehören nur in die zugehörige `*.local.yaml`.
 Gemeinsame Dateien in `boards/` und `packages/` nicht editieren. Die direkten
-Profile `hvv-cyd` und `hvv-direct` benötigen `backend_url` und
-`backend_authorization`. Das Setup-Skript fragt die HTTPS-Adresse und das
-Webpasswort verdeckt ab und erzeugt den Authorization-Wert.
+Profile `hvv-cyd` und `hvv-direct` benötigen `backend_url`,
+`backend_authorization` und `backend-ca.pem`. Das Setup-Skript setzt den
+Backendnamen auf `hvv-anzeiger.local`, fragt den separaten CYD-Schlüssel
+verdeckt ab und übernimmt nach Fingerabdruckbestätigung das TLS-Zertifikat.
 
 ### Wenn der Setup-Befehl nicht startet
 
@@ -285,19 +294,13 @@ python -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)
 
 Die Ausgabe ist vertraulich; nicht in öffentliche Logs oder Issues kopieren.
 
-Für `hvv-cyd` zusätzlich `backend_url` auf die erreichbare
-`https://<Hostname>:8080/api/esphome`-Adresse setzen. `backend_authorization` ist
-`Basic` plus Base64 aus `hvv-anzeiger:<Webpasswort>`. Diese Werte sind für den
-direkten CYD-Betrieb nötig; das HA-Profil `hvv-cyd-ha` nutzt sie nicht.
-Den Authorization-Wert kannst du ohne das Passwort in der Shell-History so
-erzeugen:
-
-```sh
-python -c 'import base64,getpass; print("Basic " + base64.b64encode(("hvv-anzeiger:" + getpass.getpass("Backend-Webpasswort: ")).encode()).decode())'
-```
-
-Die Ausgabe kommt in die Zeile `backend_authorization` der lokalen
-`secrets.yaml`. Teile sie nicht in Chats oder Issues.
+Für `hvv-cyd` und `hvv-direct` `backend_url` auf
+`https://hvv-anzeiger.local:8080/api/esphome` setzen und den zufälligen
+CYD-Schlüssel aus der Backend-Weboberfläche als `Bearer <Schlüssel>` in
+`backend_authorization` eintragen. `backend-ca.pem` muss das lokale
+Backendzertifikat enthalten. Das HA-Profil `hvv-cyd-ha` benötigt diese Werte
+nicht. Der CYD-Schlüssel ist unabhängig vom Webpasswort und nur für den
+Abfahrtsfeed gültig.
 
 Im ESPHome Device Builder kopierst du den kompletten Ordner `esphome/` in den
 Konfigurationsordner, einschließlich `hvv_board.h`, `boards/` und `packages/`.
@@ -316,11 +319,10 @@ Eine zuverlässige automatische Erkennung des Displaycontrollers ist nicht
 konfiguriert: ESPHome wählt die Controller-Initialisierung beim Firmware-Build,
 und Produktname sowie Platinenaufdruck unterscheiden die Displayrevisionen
 nicht eindeutig. Das Standardprofil zielt auf die hier getestete Dual-USB-
-Revision mit ILI9342 und `display_rotation: '0'`. Beim ILI9342 ist das native
-320×240-Querformat bereits 0°; 90° würde Hochformat ergeben. Für die ILI9341-
-Revision oder die Dual-USB-Revision mit ST7789V muss `display_model` in der
-eigenen `*.local.yaml` auf `ILI9341` beziehungsweise `ESP32-2432S028-7789`
-gesetzt und `display_rotation: '90'` für Querformat ergänzt werden. Bei
+Revision mit ILI9342 und `display_rotation: '90'`. Für die ILI9341-Revision
+oder die Dual-USB-Revision mit ST7789V muss `display_model` in der eigenen
+`*.local.yaml` auf `ILI9341` beziehungsweise `ESP32-2432S028-7789` gesetzt
+werden; die Ausrichtung ist am konkreten Modul zu prüfen. Bei
 abweichenden Farben kann `display_color_order` auf `bgr` geändert werden.
 Änderungen nur in der eigenen `*.local.yaml` vornehmen.
 
@@ -428,15 +430,12 @@ Logausgabe mit Strg+C beenden; der ESP32 läuft weiter.
 
 Das Standardprofil `hvv-cyd.yaml` und das generische Profil `hvv-direct.yaml`
 benötigen kein laufendes HA für die Abfahrtsanzeige, aber weiterhin den
-Python-Hintergrunddienst. In `secrets.yaml` `backend_url` auf
-`https://<Hostname>:8080/api/esphome` und `backend_authorization` auf
-`Basic <Base64 von hvv-anzeiger:Webpasswort>` setzen. Base64 ist keine
-Verschlüsselung; diese Zugangsdaten nur über HTTPS übertragen. Das Windows-
-Setup-Skript fragt Adresse und Webpasswort ab und erzeugt den Authorization-Wert.
-Manuelle Installationen tragen diese Werte selbst ein.
-Bei eigener CA `ca_certificate_path: backend-ca.pem` in der `http_request:`-
-Konfiguration ergänzen und das CA-Zertifikat neben die Haupt-YAML kopieren.
-Weiterhin `verify_ssl: true` und `follow_redirects: false` verwenden.
+Python-Hintergrunddienst. `backend_url` auf
+`https://hvv-anzeiger.local:8080/api/esphome` und `backend_authorization` auf
+`Bearer <zufälliger CYD-Schlüssel>` setzen. Das lokale Backendzertifikat als
+`backend-ca.pem` neben die Haupt-YAML kopieren. Der Schlüssel ist vom
+Webpasswort getrennt und nur für den schreibgeschützten Abfahrtsfeed gültig.
+`verify_ssl: true` und `follow_redirects: false` bleiben aktiv.
 SNTP synchronisiert hier die Gerätezeit. Die ESPHome-API bleibt für
 Diagnose, Helligkeit und Updates verfügbar. Genau einen Transport einbinden.
 
