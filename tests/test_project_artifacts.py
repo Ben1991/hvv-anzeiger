@@ -131,7 +131,8 @@ class ProjectArtifactTest(unittest.TestCase):
             installer,
         )
         self.assertIn(
-            "| Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm | nicht unterstützt",
+            "| Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm | "
+            "nicht unterstützt",
             readme,
         )
         self.assertIn("sys.version_info < (3, 13)", installer)
