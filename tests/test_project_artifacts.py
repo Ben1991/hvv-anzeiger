@@ -147,7 +147,9 @@ class ProjectArtifactTest(unittest.TestCase):
 
         self.assertIn('requires-python = ">=3.13"', project)
         self.assertNotIn("rpi-gpio==", requirements)
-        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
         self.assertIn('python-version: ["3.13", "3.15.2"]', workflow)
         self.assertIn("python3-rpi-lgpio", installer)
         self.assertIn("venv --system-site-packages", installer)
