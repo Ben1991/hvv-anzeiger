@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from hvv_display.web import load_web_password_hash, main
+from hvv_display.web import load_web_environment, load_web_password_hash, main
 
 
 class WebEnvironmentTest(unittest.TestCase):
@@ -25,6 +25,21 @@ class WebEnvironmentTest(unittest.TestCase):
             self.path.write_text(f"HVV_WEB_PASSWORD_HASH={value}\n")
             self.assertEqual(load_web_password_hash(self.path), hashed)
 
+    def test_device_key_and_rotation_flag_are_loaded_for_container_startup(self):
+        self.path.write_text(
+            'HVV_WEB_PASSWORD_HASH="hash-value"\n'
+            'HVV_WEB_PASSWORD_MUST_CHANGE="1"\n'
+            'HVV_ESPHOME_API_TOKEN="random-device-token"\n'
+        )
+        self.assertEqual(
+            load_web_environment(self.path),
+            {
+                "HVV_WEB_PASSWORD_HASH": "hash-value",
+                "HVV_WEB_PASSWORD_MUST_CHANGE": "1",
+                "HVV_ESPHOME_API_TOKEN": "random-device-token",
+            },
+        )
+
     def test_ambiguous_or_oversized_files_fail_closed(self):
         for text in ("HVV_WEB_PASSWORD_HASH=a\nHVV_WEB_PASSWORD_HASH=b", "a" * 8193):
             self.path.write_text(text)
@@ -32,7 +47,11 @@ class WebEnvironmentTest(unittest.TestCase):
                 load_web_password_hash(self.path)
 
     def test_container_startup_reads_file_and_explicit_hash_takes_precedence(self):
-        self.path.write_text("HVV_WEB_PASSWORD_HASH=from-file\n")
+        self.path.write_text(
+            "HVV_WEB_PASSWORD_HASH=from-file\n"
+            "HVV_ESPHOME_API_TOKEN=random-device-token\n"
+            "HVV_WEB_PASSWORD_MUST_CHANGE=1\n"
+        )
         for extra, expected in (
             ({}, "from-file"),
             ({"HVV_WEB_PASSWORD_HASH": "explicit"}, "explicit"),
@@ -48,3 +67,7 @@ class WebEnvironmentTest(unittest.TestCase):
             ):
                 main()
                 self.assertEqual(run.call_args.kwargs["access_token"], expected)
+                self.assertEqual(
+                    run.call_args.kwargs["device_token"], "random-device-token"
+                )
+                self.assertTrue(run.call_args.kwargs["must_change_password"])

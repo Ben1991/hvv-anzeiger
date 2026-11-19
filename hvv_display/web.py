@@ -246,20 +246,28 @@ def _departure_rows(
                 or item.get("time_mode") == "departure_time"
                 or item.get("minutes") == 0
             )
-            else f'<br><small>in {html.escape(str(item.get("minutes", ""))) } min</small>'
+            else f"<br><small>in {html.escape(str(item.get('minutes', '')))} min</small>"
         )
-        status = '<span class="cancelled">Ausfall</span>' if item.get("cancelled") else (
-            f'<time datetime="{html.escape(str(item.get("departure_time", "")), quote=True)}">{display_time}</time>'
+        status = (
+            '<span class="cancelled">Ausfall</span>'
+            if item.get("cancelled")
+            else (
+                f'<time datetime="{html.escape(str(item.get("departure_time", "")), quote=True)}">{display_time}</time>'
+            )
         )
         rows.append(
             f'<li class="row"><div><div class="line line-badge line-badge-{style}">'
             f'<span class="sr-only">Linie </span>{html.escape(line)}</div><div class="station">'
-            f'{html.escape(str(item.get("station", "")))}</div></div>'
+            f"{html.escape(str(item.get('station', '')))}</div></div>"
             f'<div class="destination">{html.escape(str(item.get("destination", "")))}'
-            f"{delay}</div><div class=\"time {cancelled}\">{status}"
+            f'{delay}</div><div class="time {cancelled}">{status}'
             f"{countdown if not item.get('cancelled') else ''}</div></li>"
         )
-    return ('<ul class="departure-list">' + "".join(rows) + '</ul>') if rows else '<div class="empty">Keine passende Abfahrt verfügbar.</div>'
+    return (
+        ('<ul class="departure-list">' + "".join(rows) + "</ul>")
+        if rows
+        else '<div class="empty">Keine passende Abfahrt verfügbar.</div>'
+    )
 
 
 def _page(
@@ -287,6 +295,8 @@ class WebApplication:
         cache_path: Path,
         *,
         access_token: str | None = None,
+        device_token: str | None = None,
+        must_change_password: bool = False,
         web_env_path: Path | None = None,
         health_file: Path | None = None,
         departure_cache_path: Path | None = None,
@@ -306,6 +316,8 @@ class WebApplication:
         self.departure_cache = DepartureCache(self.departure_cache_path)
         self.health_file = health_file or health_path(cache_path)
         self.access_token = access_token
+        self.device_token = device_token
+        self.must_change_password = must_change_password
         self.web_env_path = web_env_path or Path(
             os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")
         )
@@ -338,7 +350,12 @@ class WebApplication:
 
     def diagnostics(self) -> bytes:
         data = self.health()
-        labels = {"healthy": "Gesund", "degraded": "Veraltet / eingeschränkt", "unavailable": "Nicht funktionsfähig"}
+        labels = {
+            "healthy": "Gesund",
+            "degraded": "Veraltet / eingeschränkt",
+            "unavailable": "Nicht funktionsfähig",
+        }
+
         def flag(value: Any) -> str:
             return "Unbekannt" if value is None else "Ja" if value else "Nein"
 
@@ -357,7 +374,11 @@ class WebApplication:
             return f"{seconds} Sekunden"
 
         last_fetch = data["last_successful_fetch"]
-        last_fetch_label = datetime.fromisoformat(last_fetch).strftime("%d.%m.%Y, %H:%M:%S") if last_fetch else "Noch kein Abruf bekannt"
+        last_fetch_label = (
+            datetime.fromisoformat(last_fetch).strftime("%d.%m.%Y, %H:%M:%S")
+            if last_fetch
+            else "Noch kein Abruf bekannt"
+        )
 
         fields = [
             ("Version", data["version"]),
@@ -372,31 +393,84 @@ class WebApplication:
             ("Datenalter", duration(data["data_age_seconds"])),
             ("Daten veraltet", flag(data["stale"])),
             ("Fehlgeschlagene Abrufe in Folge", str(data["consecutive_failures"])),
-            ("Letzter Abruffehler", {"none": "Keiner", "technical": "Technischer Fehler", "temporary": "Vorübergehend nicht erreichbar", "rate_limit": "Anfragelimit erreicht", "authentication": "Anmeldung abgelehnt"}[data["error_kind"]]),
-            ("Nächster Abruf / Wiederholungsversuch", duration(data["retry_in_seconds"])),
+            (
+                "Letzter Abruffehler",
+                {
+                    "none": "Keiner",
+                    "technical": "Technischer Fehler",
+                    "temporary": "Vorübergehend nicht erreichbar",
+                    "rate_limit": "Anfragelimit erreicht",
+                    "authentication": "Anmeldung abgelehnt",
+                }[data["error_kind"]],
+            ),
+            (
+                "Nächster Abruf / Wiederholungsversuch",
+                duration(data["retry_in_seconds"]),
+            ),
             ("Rate-Limit aktiv", flag(data["rate_limit_active"])),
-            ("Verbleibende Rate-Limit-Pause", duration(data["rate_limit_remaining_seconds"])),
-            ("Alter des letzten Lebenszeichens", duration(data["heartbeat_age_seconds"])),
+            (
+                "Verbleibende Rate-Limit-Pause",
+                duration(data["rate_limit_remaining_seconds"]),
+            ),
+            (
+                "Alter des letzten Lebenszeichens",
+                duration(data["heartbeat_age_seconds"]),
+            ),
         ]
         display_details = data["display_diagnostics"]
         if display_details is not None:
             display_errors = {
-                "none": "Keiner", "initialization": "Initialisierung fehlgeschlagen",
-                "reset": "Reset fehlgeschlagen", "transfer": "Bildübertragung fehlgeschlagen",
+                "none": "Keiner",
+                "initialization": "Initialisierung fehlgeschlagen",
+                "reset": "Reset fehlgeschlagen",
+                "transfer": "Bildübertragung fehlgeschlagen",
             }
-            fields.extend([
-                ("Erkannte Displayfehler seit Dienststart", str(display_details["error_count"])),
-                ("Displayfehler in Folge", str(display_details["consecutive_failures"])),
-                ("Letzter erkannter Displayfehler", display_errors[display_details["last_error_kind"]]),
-                ("Letzter Displayfehler (UTC)", display_details["last_error_at"] or "Noch keiner"),
-                ("Display-Wiederherstellungsversuche", str(display_details["recovery_attempts"])),
-                ("Erfolgreiche Display-Wiederherstellungen", str(display_details["recovery_successes"])),
-                ("Letzte Display-Wiederherstellung (UTC)", display_details["last_recovery_at"] or "Noch keine"),
-            ])
-        cards = "".join(f'<div>{html.escape(label)}<strong style="overflow-wrap:anywhere">{html.escape(value)}</strong></div>' for label, value in fields)
+            fields.extend(
+                [
+                    (
+                        "Erkannte Displayfehler seit Dienststart",
+                        str(display_details["error_count"]),
+                    ),
+                    (
+                        "Displayfehler in Folge",
+                        str(display_details["consecutive_failures"]),
+                    ),
+                    (
+                        "Letzter erkannter Displayfehler",
+                        display_errors[display_details["last_error_kind"]],
+                    ),
+                    (
+                        "Letzter Displayfehler (UTC)",
+                        display_details["last_error_at"] or "Noch keiner",
+                    ),
+                    (
+                        "Display-Wiederherstellungsversuche",
+                        str(display_details["recovery_attempts"]),
+                    ),
+                    (
+                        "Erfolgreiche Display-Wiederherstellungen",
+                        str(display_details["recovery_successes"]),
+                    ),
+                    (
+                        "Letzte Display-Wiederherstellung (UTC)",
+                        display_details["last_recovery_at"] or "Noch keine",
+                    ),
+                ]
+            )
+        cards = "".join(
+            f'<div>{html.escape(label)}<strong style="overflow-wrap:anywhere">{html.escape(value)}</strong></div>'
+            for label, value in fields
+        )
         status = labels[data["status"]]
-        notice = "" if data["snapshot_available"] else '<p class="notice">Kein gültiger Status des Anzeigedienstes verfügbar. Dienst starten und Schreibrechte im Laufzeitverzeichnis prüfen.</p>'
-        return _page("Gesundheit & Diagnose", f'''<div class="toolbar"><div><h1>Gesundheit &amp; Diagnose</h1><p class="subtle">Status des Anzeigedienstes · ohne neuen Geofox-Abruf</p></div><div><a href="/">← Abfahrten</a> · <a href="/diagnostics">Aktualisieren</a></div></div><section class="card" aria-label="Gesundheitsstatus"><h2>{status}</h2>{notice}<p>Unbekannt bedeutet: Die Information ist auf diesem System nicht verfügbar. Nachtruhe pausiert Abrufe planmäßig; alte Daten sind dann kein Dienstausfall.</p></section><section class="status" aria-label="Diagnosedaten">{cards}</section><section class="card"><h2>Support-Diagnose</h2><p>Diese JSON-Ausgabe enthält nur Statuswerte, keine Zugangsdaten, API-Antworten oder internen Pfade.</p><a href="/api/health">JSON öffnen</a><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{html.escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></section>''')
+        notice = (
+            ""
+            if data["snapshot_available"]
+            else '<p class="notice">Kein gültiger Status des Anzeigedienstes verfügbar. Dienst starten und Schreibrechte im Laufzeitverzeichnis prüfen.</p>'
+        )
+        return _page(
+            "Gesundheit & Diagnose",
+            f"""<div class="toolbar"><div><h1>Gesundheit &amp; Diagnose</h1><p class="subtle">Status des Anzeigedienstes · ohne neuen Geofox-Abruf</p></div><div><a href="/">← Abfahrten</a> · <a href="/diagnostics">Aktualisieren</a></div></div><section class="card" aria-label="Gesundheitsstatus"><h2>{status}</h2>{notice}<p>Unbekannt bedeutet: Die Information ist auf diesem System nicht verfügbar. Nachtruhe pausiert Abrufe planmäßig; alte Daten sind dann kein Dienstausfall.</p></section><section class="status" aria-label="Diagnosedaten">{cards}</section><section class="card"><h2>Support-Diagnose</h2><p>Diese JSON-Ausgabe enthält nur Statuswerte, keine Zugangsdaten, API-Antworten oder internen Pfade.</p><a href="/api/health">JSON öffnen</a><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{html.escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></section>""",
+        )
 
     def authorize(self, headers: Any) -> bool:
         if self.access_token is None:
@@ -415,13 +489,25 @@ class WebApplication:
             and verify_web_password(password, self.access_token)
         )
 
+    def authorize_device(self, headers: Any) -> bool:
+        """Authorize the read-only ESPHome feed with its independent key."""
+        authorization = headers.get("Authorization", "")
+        if not self.device_token or not authorization.startswith("Bearer "):
+            return False
+        supplied = authorization[7:]
+        return bool(supplied) and secrets.compare_digest(supplied, self.device_token)
+
     def validate_csrf(self, token: str) -> None:
         if not secrets.compare_digest(token, self.csrf_token):
             raise PermissionError("Ungültige Sitzungsbestätigung")
 
     def save_web_password(self, password: str) -> None:
-        if password == "hvv-anzeiger":  # noqa: S105 - reject the public legacy default
-            raise ValueError("Ein individuelles Webpasswort statt des früheren Erstpassworts wählen")
+        if password == "hvv-anzeiger":  # noqa: S105 - public bootstrap password
+            raise ValueError(
+                "Ein individuelles Webpasswort statt des früheren Erstpassworts wählen"
+            )
+        if len(password) < 12:
+            raise ValueError("Das Webpasswort muss mindestens 12 Zeichen enthalten")
         if not password or any(
             character in password for character in ("\r", "\n", "\x00", '"', "\\")
         ):
@@ -429,10 +515,24 @@ class WebApplication:
                 "Das Webpasswort darf nicht leer sein oder Sonderzeichen für die Env-Datei enthalten"
             )
         encoded = hash_web_password(password)
-        atomic_write(
-            self.web_env_path, f'HVV_WEB_PASSWORD_HASH="{encoded}"\n'.encode()
+        existing = {}
+        try:
+            existing_text = self.web_env_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            existing_text = ""
+        for line in existing_text.splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key in {"HVV_ESPHOME_API_TOKEN"}:
+                existing[key] = value.strip().strip("\"'")
+        device_token = self.device_token or existing.get("HVV_ESPHOME_API_TOKEN", "")
+        payload = (
+            f'HVV_WEB_PASSWORD_HASH="{encoded}"\nHVV_WEB_PASSWORD_MUST_CHANGE="0"\n'
         )
+        if device_token:
+            payload += f'HVV_ESPHOME_API_TOKEN="{device_token}"\n'
+        atomic_write(self.web_env_path, payload.encode())
         self.access_token = encoded
+        self.must_change_password = False
 
     def raw_config(self) -> dict[str, Any]:
         raw = json.loads(self.config_path.read_text(encoding="utf-8"))
@@ -496,6 +596,7 @@ class WebApplication:
                     return (info.st_mtime_ns, info.st_size)
                 except FileNotFoundError:
                     return None
+
             source = (config, stamp(self.credentials_path))
             if source != self._departure_source:
                 self._latest_departures = []
@@ -515,9 +616,13 @@ class WebApplication:
                 retry_after = None
                 try:
                     client = self._client()
-                    stations = resolve_stations(client, config.stations, self.cache_path)
+                    stations = resolve_stations(
+                        client, config.stations, self.cache_path
+                    )
                     self._latest_departures = client.departure_list(
-                        stations, now=datetime.now(HAMBURG_TZ), max_list=30,
+                        stations,
+                        now=datetime.now(HAMBURG_TZ),
+                        max_list=30,
                         max_time_offset=config.api.max_time_offset_minutes,
                     )[:30]
                     self._last_updated = datetime.now(HAMBURG_TZ)
@@ -538,31 +643,57 @@ class WebApplication:
                     self._departure_failures += 1
                     retry_after = getattr(exc, "retry_after_seconds", None)
                     self._departure_error = (
-                        "Geofox-Anmeldung fehlgeschlagen." if getattr(exc, "http_status", None) in (401, 403)
-                        else "Geofox begrenzt Anfragen; erneuter Versuch nach Wartezeit." if getattr(exc, "http_status", None) == 429
+                        "Geofox-Anmeldung fehlgeschlagen."
+                        if getattr(exc, "http_status", None) in (401, 403)
+                        else "Geofox begrenzt Anfragen; erneuter Versuch nach Wartezeit."
+                        if getattr(exc, "http_status", None) == 429
                         else "Geofox ist nicht erreichbar – letzter Stand wird verwendet."
                     )
                 self._next_fetch = time.monotonic() + refresh_delay(
                     config.api.refresh_seconds, self._departure_failures, retry_after
                 )
             now = datetime.now(HAMBURG_TZ)
-            age = max(0, int((now - self._last_updated).total_seconds())) if self._last_updated else None
-            stale = bool(self._departure_error) or (age is not None and age >= min(config.api.refresh_seconds * 2, config.api.max_stale_age_minutes * 60))
+            age = (
+                max(0, int((now - self._last_updated).total_seconds()))
+                if self._last_updated
+                else None
+            )
+            stale = bool(self._departure_error) or (
+                age is not None
+                and age
+                >= min(
+                    config.api.refresh_seconds * 2,
+                    config.api.max_stale_age_minutes * 60,
+                )
+            )
             visible = departures_for_display(
-                self._latest_departures, now=now, last_updated=self._last_updated,
-                stale=stale, max_stale_age_minutes=config.api.max_stale_age_minutes,
+                self._latest_departures,
+                now=now,
+                last_updated=self._last_updated,
+                stale=stale,
+                max_stale_age_minutes=config.api.max_stale_age_minutes,
             )
             expired = age is not None and age >= config.api.max_stale_age_minutes * 60
             self._departure_metadata = {
-                "last_updated": self._last_updated.isoformat() if self._last_updated else None,
-                "last_updated_label": self._last_updated.strftime("%d.%m.%Y %H:%M:%S") if self._last_updated else "Noch kein erfolgreicher Abruf",
-                "data_age_seconds": age, "stale": stale, "expired": expired,
+                "last_updated": self._last_updated.isoformat()
+                if self._last_updated
+                else None,
+                "last_updated_label": self._last_updated.strftime("%d.%m.%Y %H:%M:%S")
+                if self._last_updated
+                else "Noch kein erfolgreicher Abruf",
+                "data_age_seconds": age,
+                "stale": stale,
+                "expired": expired,
                 "max_age_seconds": config.api.max_stale_age_minutes * 60,
-                "retry_in_seconds": max(1, math.ceil(self._next_fetch - time.monotonic())),
+                "retry_in_seconds": max(
+                    1, math.ceil(self._next_fetch - time.monotonic())
+                ),
             }
             return _departure_payload(
-                visible[:config.api.max_departures], now.replace(second=0, microsecond=0),
-                time_mode=config.display.time_mode, minute_unit=config.display.minute_unit,
+                visible[: config.api.max_departures],
+                now.replace(second=0, microsecond=0),
+                time_mode=config.display.time_mode,
+                minute_unit=config.display.minute_unit,
                 show_station_label=config.display.show_station_label,
             ), self._departure_error
 
@@ -577,13 +708,25 @@ class WebApplication:
                 self._latest_departures = []
                 self._last_updated = None
             departures, error = [], "Konfiguration oder Datenquelle nicht verfügbar."
-            metadata = {"last_updated": None, "last_updated_label": "Kein gültiger Datenstand",
-                        "data_age_seconds": None, "stale": True, "expired": False,
-                        "max_age_seconds": 300, "retry_in_seconds": 60}
+            metadata = {
+                "last_updated": None,
+                "last_updated_label": "Kein gültiger Datenstand",
+                "data_age_seconds": None,
+                "stale": True,
+                "expired": False,
+                "max_age_seconds": 300,
+                "retry_in_seconds": 60,
+            }
         # Also works for callers supplying a custom/mock departure source.
-        metadata = {"data_age_seconds": None, "last_updated_label": "Noch kein erfolgreicher Abruf",
-                    "max_age_seconds": 300, "retry_in_seconds": 15, "expired": False,
-                    "stale": bool(error), **metadata}
+        metadata = {
+            "data_age_seconds": None,
+            "last_updated_label": "Noch kein erfolgreicher Abruf",
+            "max_age_seconds": 300,
+            "retry_in_seconds": 15,
+            "expired": False,
+            "stale": bool(error),
+            **metadata,
+        }
         service = self.health()
         state = (
             f"Daten veraltet. {error}"
@@ -604,12 +747,30 @@ class WebApplication:
                 state += " Gerätezeit nicht bestätigt."
         cancellations = sum(bool(item.get("cancelled")) for item in departures)
         delayed = sum(bool(item.get("delay_seconds")) for item in departures)
-        signal = json.dumps([(item.get("line"), item.get("destination"), item.get("time"),
-                              item.get("delay_seconds"), item.get("cancelled"))
-                             for item in departures if item.get("cancelled") or item.get("delay_seconds")])
-        return {"departures": departures, "error": error, **metadata, "state": state,
-                "board_html": _departure_rows(departures, absolute_time=True) if not metadata["expired"] else '<p class="empty">Letzter Stand zu alt; Abfahrten ausgeblendet.</p>',
-                "signal": signal, "change_summary": f"Abfahrtsstatus geändert: {cancellations} Ausfälle, {delayed} Verspätungen."}
+        signal = json.dumps(
+            [
+                (
+                    item.get("line"),
+                    item.get("destination"),
+                    item.get("time"),
+                    item.get("delay_seconds"),
+                    item.get("cancelled"),
+                )
+                for item in departures
+                if item.get("cancelled") or item.get("delay_seconds")
+            ]
+        )
+        return {
+            "departures": departures,
+            "error": error,
+            **metadata,
+            "state": state,
+            "board_html": _departure_rows(departures, absolute_time=True)
+            if not metadata["expired"]
+            else '<p class="empty">Letzter Stand zu alt; Abfahrten ausgeblendet.</p>',
+            "signal": signal,
+            "change_summary": f"Abfahrtsstatus geändert: {cancellations} Ausfälle, {delayed} Verspätungen.",
+        }
 
     def smart_home(self) -> dict[str, Any]:
         # Share the web cache and backoff across HA and any number of displays.
@@ -625,7 +786,9 @@ class WebApplication:
             if night:
                 # No Geofox call, including when there is no cached snapshot yet.
                 return smart_home_payload({}, config, now, night_shutdown=True)
-            return smart_home_payload(self.departure_view(), config, datetime.now(HAMBURG_TZ))
+            return smart_home_payload(
+                self.departure_view(), config, datetime.now(HAMBURG_TZ)
+            )
 
     def station_suggestions(self, query: str, city: str) -> list[dict[str, Any]]:
         query = query.strip()
@@ -846,16 +1009,26 @@ class WebApplication:
         status = hardware_status()
         message += f'<p class="subtle">{html.escape(data["state"])} Letzter erfolgreicher Abruf: {html.escape(data["last_updated_label"])} · Datenalter: {data["data_age_seconds"] if data["data_age_seconds"] is not None else "unbekannt"} Sekunden · Nächster Versuch in {data["retry_in_seconds"]} Sekunden.</p>'
         content = f'''<div class="toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lokale HVV-Anzeige · aktualisiert beim Öffnen</div></div><div><a href="/display">Displaymodus</a> · <a href="/settings">Einstellungen</a> · <a href="/diagnostics">Gesundheit &amp; Diagnose</a> · <a href="/">Aktualisieren</a></div></div>{message}<section class="board" aria-label="Abfahrtsanzeige">{rows}</section><section class="status" aria-label="Hardware-Status"><div>CPU<strong>{html.escape(status["cpu"])}</strong></div><div>RAM<strong>{html.escape(status["ram"])}</strong></div><div>SD-Speicher<strong>{html.escape(status["storage"])}</strong></div></section><form method="post" action="/system/restart" onsubmit="return confirm('Raspberry Pi wirklich neu starten?');"><input type="hidden" name="csrf_token" value="{html.escape(self.csrf_token, quote=True)}"><button class="danger" type="submit">System neu starten</button></form>'''
-        content += '<p><a href="/config-backup">Sicherung &amp; Wiederherstellung</a></p>'
+        content += (
+            '<p><a href="/config-backup">Sicherung &amp; Wiederherstellung</a></p>'
+        )
         return _page("Abfahrten", content)
 
     def display(self) -> bytes:
         data = self.departure_view()
-        attrs = ' '.join(f'data-{key}="{html.escape(str(value), quote=True)}"' for key, value in {
-            "retry": data["retry_in_seconds"], "age": data["data_age_seconds"] if data["data_age_seconds"] is not None else "",
-            "max-age": data["max_age_seconds"], "expired": str(data["expired"]).lower(), "signal": data["signal"],
-        }.items())
-        content = f'''<div class="display-shell" data-display-mode {attrs}>
+        attrs = " ".join(
+            f'data-{key}="{html.escape(str(value), quote=True)}"'
+            for key, value in {
+                "retry": data["retry_in_seconds"],
+                "age": data["data_age_seconds"]
+                if data["data_age_seconds"] is not None
+                else "",
+                "max-age": data["max_age_seconds"],
+                "expired": str(data["expired"]).lower(),
+                "signal": data["signal"],
+            }.items()
+        )
+        content = f"""<div class="display-shell" data-display-mode {attrs}>
 <div class="toolbar display-toolbar"><div><h1>Abfahrten</h1><div class="subtle">Lesende Anzeige · automatische Aktualisierung</div></div>
 <nav class="display-controls" aria-label="Anzeigesteuerung"><a class="display-exit" href="/">Standardansicht</a>
 <button id="display-fullscreen" type="button" aria-pressed="false" hidden>Vollbild</button>
@@ -870,18 +1043,21 @@ Datenalter: <span id="display-age">{str(data["data_age_seconds"]) + " Sekunden" 
 <p id="display-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
 <p class="display-refresh subtle">Vollbild verlassen: Esc oder F11. Rückkehr über „Standardansicht“.</p>
 <noscript><p class="notice">Automatische Aktualisierung benötigt JavaScript. Diese Ansicht bleibt statisch; zum Aktualisieren die Seite neu laden.</p></noscript>
-</div><script>{DISPLAY_SCRIPT}</script>'''
+</div><script>{DISPLAY_SCRIPT}</script>"""
         return _page("Displaymodus", content, body_class="display-page")
 
     def config_backup_page(self, message: str = "") -> bytes:
         token = html.escape(self.csrf_token, quote=True)
-        backups = "".join(
-            f'<li><strong>{datetime.strptime(name[7:29], "%Y%m%dT%H%M%S%fZ").strftime("%d.%m.%Y, %H:%M:%S")} UTC</strong> '
-            f'<a href="/config/export?backup_id={name}">Redigiert exportieren</a>'
-            f'<form method="post" action="/config/preview"><input type="hidden" name="csrf_token" value="{token}">'
-            f'<input type="hidden" name="backup_id" value="{name}"><button type="submit">Wiederherstellung prüfen</button></form></li>'
-            for name in self.config_store.list_backups()
-        ) or "<li>Noch keine Sicherungen vorhanden.</li>"
+        backups = (
+            "".join(
+                f"<li><strong>{datetime.strptime(name[7:29], '%Y%m%dT%H%M%S%fZ').strftime('%d.%m.%Y, %H:%M:%S')} UTC</strong> "
+                f'<a href="/config/export?backup_id={name}">Redigiert exportieren</a>'
+                f'<form method="post" action="/config/preview"><input type="hidden" name="csrf_token" value="{token}">'
+                f'<input type="hidden" name="backup_id" value="{name}"><button type="submit">Wiederherstellung prüfen</button></form></li>'
+                for name in self.config_store.list_backups()
+            )
+            or "<li>Noch keine Sicherungen vorhanden.</li>"
+        )
         notice = f'<p class="notice">{html.escape(message)}</p>' if message else ""
         content = f'''<div class="toolbar"><div><h1>Sicherung &amp; Wiederherstellung</h1><p class="subtle">Lokale Konfiguration sichern · Änderungen vor dem Anwenden prüfen</p></div><a href="/settings">← Einstellungen</a></div>{notice}
 <section class="card"><h2>Konfiguration exportieren</h2><p>Der Export enthält Anzeige, API-Einstellungen und Haltestellen. Geofox-Zugangsdaten und Webpasswort werden nicht exportiert. Haltestellen können persönliche Orte erkennen lassen; den Export vor dem Teilen prüfen.</p><a href="/config/export" download>Redigierte Konfiguration herunterladen</a><form method="post" action="/config/backup"><input type="hidden" name="csrf_token" value="{token}"><p><button type="submit">Jetzt Sicherung anlegen</button></p></form></section>
@@ -895,28 +1071,90 @@ Datenalter: <span id="display-age">{str(data["data_age_seconds"]) + " Sekunden" 
         preview = self.config_store.preview(candidate)
         with self._config_plan_lock:
             now = time.monotonic()
-            self._config_plans = {key: value for key, value in self._config_plans.items() if value[0] > now}
+            self._config_plans = {
+                key: value
+                for key, value in self._config_plans.items()
+                if value[0] > now
+            }
             if len(self._config_plans) >= 20:
-                raise ConfigError("Zu viele offene Vorschauen; eine Vorschau abbrechen oder zehn Minuten warten")
+                raise ConfigError(
+                    "Zu viele offene Vorschauen; eine Vorschau abbrechen oder zehn Minuten warten"
+                )
             token = secrets.token_hex(32)
             self._config_plans[token] = (now + 600, candidate, preview)
         return token, preview
 
     def config_preview_page(self, token: str, preview: dict) -> bytes:
-        labels = {"api": "API", "display": "Anzeige", "night_shutdown": "Nachtruhe", "stations": "Haltestellen", "base_url": "API-Adresse", "version": "API-Version", "refresh_seconds": "Abfrageabstand (Sekunden)", "request_timeout_seconds": "Anfrage-Timeout (Sekunden)", "max_departures": "Anzahl Abfahrten", "max_time_offset_minutes": "Vorschauzeit (Minuten)", "max_stale_age_minutes": "Maximales Datenalter (Minuten)", "spi_port": "SPI-Port", "spi_device": "SPI-Gerät", "gpio_dc": "GPIO DC", "gpio_reset": "GPIO Reset", "rotate": "Bilddrehung", "bus_speed_hz": "SPI-Takt (Hz)", "bgr": "BGR-Farben", "show_station_label": "Haltestellen-Label anzeigen", "time_mode": "Zeitdarstellung", "minute_unit": "Minuteneinheit", "enabled": "Aktiv", "start": "Beginn", "end": "Ende", "name": "Name", "city": "Stadt", "id": "Haltestellen-ID", "label": "Label", "routes": "Linien", "line": "Linie", "destination": "Ziel", "line_id": "Linien-ID", "product": "Verkehrsmittel", "filter_mode": "Filterart", "filter_station_ids": "Filter-Haltestellen", "serviceTypes": "Verkehrsmittel"}
+        labels = {
+            "api": "API",
+            "display": "Anzeige",
+            "night_shutdown": "Nachtruhe",
+            "stations": "Haltestellen",
+            "base_url": "API-Adresse",
+            "version": "API-Version",
+            "refresh_seconds": "Abfrageabstand (Sekunden)",
+            "request_timeout_seconds": "Anfrage-Timeout (Sekunden)",
+            "max_departures": "Anzahl Abfahrten",
+            "max_time_offset_minutes": "Vorschauzeit (Minuten)",
+            "max_stale_age_minutes": "Maximales Datenalter (Minuten)",
+            "spi_port": "SPI-Port",
+            "spi_device": "SPI-Gerät",
+            "gpio_dc": "GPIO DC",
+            "gpio_reset": "GPIO Reset",
+            "rotate": "Bilddrehung",
+            "bus_speed_hz": "SPI-Takt (Hz)",
+            "bgr": "BGR-Farben",
+            "show_station_label": "Haltestellen-Label anzeigen",
+            "time_mode": "Zeitdarstellung",
+            "minute_unit": "Minuteneinheit",
+            "enabled": "Aktiv",
+            "start": "Beginn",
+            "end": "Ende",
+            "name": "Name",
+            "city": "Stadt",
+            "id": "Haltestellen-ID",
+            "label": "Label",
+            "routes": "Linien",
+            "line": "Linie",
+            "destination": "Ziel",
+            "line_id": "Linien-ID",
+            "product": "Verkehrsmittel",
+            "filter_mode": "Filterart",
+            "filter_station_ids": "Filter-Haltestellen",
+            "serviceTypes": "Verkehrsmittel",
+        }
+
         def label(field):
             pieces = re.findall(r"([^.\[\]]+)|\[(\d+)\]", field)
-            return " → ".join(labels.get(name, name) if name else str(int(index) + 1) for name, index in pieces)
+            return " → ".join(
+                labels.get(name, name) if name else str(int(index) + 1)
+                for name, index in pieces
+            )
+
         def value(raw):
             if raw is None:
                 return "Nicht gesetzt"
             if isinstance(raw, bool):
                 return "Ja" if raw else "Nein"
-            return {"countdown": "Minuten bis Abfahrt", "departure_time": "Abfahrtszeit", "none": "Keine Einheit", "direction": "Richtung", "destination": "Zielstation"}.get(str(raw), str(raw))
-        rows = "".join(f'<tr><th scope="row">{html.escape(label(item["field"]))}</th><td>{html.escape(value(item["before"]))}</td><td>{html.escape(value(item["after"]))}</td></tr>' for item in preview["changes"])
+            return {
+                "countdown": "Minuten bis Abfahrt",
+                "departure_time": "Abfahrtszeit",
+                "none": "Keine Einheit",
+                "direction": "Richtung",
+                "destination": "Zielstation",
+            }.get(str(raw), str(raw))
+
+        rows = "".join(
+            f'<tr><th scope="row">{html.escape(label(item["field"]))}</th><td>{html.escape(value(item["before"]))}</td><td>{html.escape(value(item["after"]))}</td></tr>'
+            for item in preview["changes"]
+        )
         csrf = html.escape(self.csrf_token, quote=True)
         token = html.escape(token, quote=True)
-        damaged = '<p class="notice">Die aktive Konfiguration ist beschädigt. Ihr Original wird vor der Wiederherstellung nur lokal gesichert; ein beschädigtes Backup kann nicht exportiert oder automatisch zurückgespielt werden.</p>' if preview["current_invalid"] else ""
+        damaged = (
+            '<p class="notice">Die aktive Konfiguration ist beschädigt. Ihr Original wird vor der Wiederherstellung nur lokal gesichert; ein beschädigtes Backup kann nicht exportiert oder automatisch zurückgespielt werden.</p>'
+            if preview["current_invalid"]
+            else ""
+        )
         content = f'''<h1>Änderungen prüfen</h1><p>{len(preview["changes"])} geänderte Werte. Die vollständige Konfiguration wurde mit den Startregeln geprüft; es erfolgt kein Geofox-Abruf.</p>{damaged}<section class="card" style="overflow-x:auto"><table style="width:100%;border-spacing:12px;overflow-wrap:anywhere"><caption>Konfigurationsänderungen</caption><thead><tr><th>Bereich / Einstellung</th><th>Bisher</th><th>Neu</th></tr></thead><tbody>{rows or '<tr><td colspan="3">Keine geänderten Konfigurationswerte.</td></tr>'}</tbody></table></section><section class="card"><p>Beim Anwenden wird die aktive Konfiguration ersetzt und vorher gesichert. Zugangsdaten bleiben erhalten. Hat sich der aktive Stand inzwischen geändert, muss die Vorschau erneut geprüft werden. Diese Vorschau gilt zehn Minuten.</p><form method="post" action="/config/apply"><input type="hidden" name="csrf_token" value="{csrf}"><input type="hidden" name="token" value="{token}"><label><input type="checkbox" name="confirmed" value="yes" required> Ich habe die Änderungen geprüft und möchte sie anwenden.</label><button type="submit">Änderungen anwenden</button></form><form method="post" action="/config/cancel"><input type="hidden" name="csrf_token" value="{csrf}"><input type="hidden" name="token" value="{token}"><p><button type="submit" class="reset">Abbrechen</button></p></form></section>'''
         return _page("Änderungen prüfen", content)
 
@@ -926,12 +1164,33 @@ Datenalter: <span id="display-age">{str(data["data_age_seconds"]) + " Sekunden" 
         with self._config_plan_lock:
             plan = self._config_plans.pop(token, None)
         if plan is None or plan[0] <= time.monotonic():
-            raise ConfigConflict("Vorschau ist abgelaufen oder wurde bereits verwendet; erneut prüfen")
+            raise ConfigConflict(
+                "Vorschau ist abgelaufen oder wurde bereits verwendet; erneut prüfen"
+            )
         self.config_store.apply(plan[1], expected_revision=plan[2]["base_revision"])
 
     def cancel_config_plan(self, token: str) -> None:
         with self._config_plan_lock:
             self._config_plans.pop(token, None)
+
+    def password_change_page(self, message: str = "") -> bytes:
+        notice = f'<p class="notice">{html.escape(message)}</p>' if message else ""
+        csrf = html.escape(self.csrf_token, quote=True)
+        content = (
+            '<section class="card"><h1>Erstpasswort ändern</h1>'
+            "<p>Vor der ersten Nutzung muss das Startpasswort durch ein eigenes "
+            "Webpasswort mit mindestens 12 Zeichen ersetzt werden.</p>"
+            f'{notice}<form method="post" action="/change-password">'
+            f'<input type="hidden" name="csrf_token" value="{csrf}">'
+            '<label for="new_password">Neues Webpasswort</label>'
+            '<input id="new_password" name="new_password" type="password" '
+            'autocomplete="new-password" minlength="12" required>'
+            '<label for="confirmation">Webpasswort wiederholen</label>'
+            '<input id="confirmation" name="confirmation" type="password" '
+            'autocomplete="new-password" minlength="12" required>'
+            '<button type="submit">Webpasswort ändern</button></form></section>'
+        )
+        return _page("Erstpasswort ändern", content)
 
     def settings(
         self,
@@ -1062,7 +1321,7 @@ Datenalter: <span id="display-age">{str(data["data_age_seconds"]) + " Sekunden" 
 <div class="grid"><div><label>Name</label><input data-station-field="name" maxlength="{MAX_QUERY_LENGTH}" value="{html.escape(str(station.get("name", "")), quote=True)}" required autocomplete="off"><div class="subtle">Mindestens 2 Zeichen. Vorschläge erscheinen automatisch.</div><div class="station-search" data-station-search hidden><select data-station-results aria-label="Geofox-Vorschläge"></select><span class="subtle" data-search-message></span></div></div><div><label>Stadt</label><input data-station-field="city" maxlength="{MAX_CITY_LENGTH}" value="{html.escape(str(station.get("city", "Hamburg")), quote=True)}" required><div class="subtle">Wird nach Auswahl aus Geofox übernommen.</div></div><div><label>Geofox-ID</label><input data-station-field="id" maxlength="{MAX_STATION_ID_LENGTH}" value="{html.escape(str(station.get("id") or ""), quote=True)}" readonly tabindex="-1"><div class="subtle">Technisches Metadatum; wird automatisch gesetzt.</div></div><div><label>Kürzel</label><input data-station-field="label" maxlength="3" value="{html.escape(str(station.get("label", "")), quote=True)}" required><div class="subtle">Wird bei der Auswahl automatisch mit einem freien Kürzel aus dem Stationsnamen vorausgefüllt.</div></div></div>
 <input type="hidden" data-station-field="serviceTypes" value="{html.escape(service_types, quote=True)}">
 <details class="help-box"><summary>Richtung oder Zielstation?</summary><p><strong>Richtung</strong> wählt später den Linienast; auch Fahrten, die vorher enden, können angezeigt werden. <strong>Zu Zielstation</strong> zeigt nur Fahrten, die diese Station tatsächlich erreichen. Beispiel: U2 Richtung Niendorf Nord kann einen Kurzläufer nach Niendorf Markt enthalten; „Zu Zielstation Niendorf Nord“ nicht.</p></details>
-<div class="line-picker" data-line-picker data-selected-lines="{selected_lines_json}"><div class="line-picker-header"><div><h4>Linien und Ziele</h4><p class="subtle line-picker-help">Linien laden, auswählen und danach optional eine Richtung oder Zielstation festlegen.</p></div><span class="step-pill" data-line-status>{'2 · Linien laden' if valid else '1 · Haltestelle auswählen'}</span></div><div class="control-row line-picker-actions"><button type="button" data-load-lines onclick="loadLines(this)" {"disabled" if not valid else ""}>Verfügbare Linien laden</button><span class="subtle" data-lines-message>{'Schritt 2: Verfügbare Linien laden.' if valid else 'Schritt 1: Erst einen Geofox-Treffer auswählen.'}</span></div><div class="line-filter-row" data-line-filter-row hidden><input type="search" data-line-search placeholder="Linie suchen, z. B. 124 oder U2 …" autocomplete="off" aria-label="Linien filtern"><span class="line-count" data-line-count></span></div><div class="line-options" data-line-options role="group" aria-label="Verfügbare Linien"></div><div data-route-configs></div></div>{routes_error_markup}<div data-routes>{routes}</div><details><summary>Legacy-Konfiguration manuell bearbeiten</summary><p class="subtle">Bestehende Bus-Konfigurationen bleiben kompatibel. Für neue Haltestellen bitte die Geofox-Linienauswahl verwenden.</p><button type="button" onclick="addRoute(this)">Route hinzufügen</button></details></article>'''
+<div class="line-picker" data-line-picker data-selected-lines="{selected_lines_json}"><div class="line-picker-header"><div><h4>Linien und Ziele</h4><p class="subtle line-picker-help">Linien laden, auswählen und danach optional eine Richtung oder Zielstation festlegen.</p></div><span class="step-pill" data-line-status>{"2 · Linien laden" if valid else "1 · Haltestelle auswählen"}</span></div><div class="control-row line-picker-actions"><button type="button" data-load-lines onclick="loadLines(this)" {"disabled" if not valid else ""}>Verfügbare Linien laden</button><span class="subtle" data-lines-message>{"Schritt 2: Verfügbare Linien laden." if valid else "Schritt 1: Erst einen Geofox-Treffer auswählen."}</span></div><div class="line-filter-row" data-line-filter-row hidden><input type="search" data-line-search placeholder="Linie suchen, z. B. 124 oder U2 …" autocomplete="off" aria-label="Linien filtern"><span class="line-count" data-line-count></span></div><div class="line-options" data-line-options role="group" aria-label="Verfügbare Linien"></div><div data-route-configs></div></div>{routes_error_markup}<div data-routes>{routes}</div><details><summary>Legacy-Konfiguration manuell bearbeiten</summary><p class="subtle">Bestehende Bus-Konfigurationen bleiben kompatibel. Für neue Haltestellen bitte die Geofox-Linienauswahl verwenden.</p><button type="button" onclick="addRoute(this)">Route hinzufügen</button></details></article>'''
 
         stations = "".join(
             station_card(station, index)
@@ -1167,6 +1426,16 @@ function selectedRoutes(card){{const manual=[...card.querySelectorAll('[data-rou
 function prepareConfig(){{const invalid=[...document.querySelectorAll('[data-station]')].find(card=>card.dataset.valid!=='true');if(invalid){{invalid.querySelector('[data-search-message]').innerHTML='<span class="error">Bitte zuerst einen gültigen Geofox-Vorschlag auswählen.</span>';invalid.scrollIntoView({{behavior:'smooth',block:'center'}});return false}}const config=JSON.parse(document.getElementById('config_json').value);document.querySelectorAll('[data-path]').forEach(control=>{{const [section,key]=control.dataset.path.split('.');config[section][key]=control.dataset.type==='bool'?(control.type==='checkbox'?control.checked:control.value==='true'):(control.type==='number'?Number(control.value):control.value)}});config.stations=[...document.querySelectorAll('[data-station]')].map(card=>({{name:card.querySelector('[data-station-field="name"]').value,city:card.querySelector('[data-station-field="city"]').value,id:card.querySelector('[data-station-field="id"]').value,label:card.querySelector('[data-station-field="label"]').value,serviceTypes:JSON.parse(card.querySelector('[data-station-field="serviceTypes"]').value||'[]'),routes:selectedRoutes(card)}}));document.getElementById('config_json').value=JSON.stringify(config);document.getElementById('save-settings').disabled=true;document.getElementById('save-settings').textContent='Geofox prüft …';return true}}
 document.querySelectorAll('[data-station]').forEach(bindStation);document.getElementById('display.time_mode')?.addEventListener('change',syncTimeDisplayControls);syncTimeDisplayControls();
 </script>'''
+        if self.device_token:
+            token = html.escape(self.device_token)
+            content = content.replace(
+                '<section class="card"><h2>Weboberfläche</h2>',
+                '<section class="card"><h2>CYD-Verbindung</h2>'
+                "<p>Dieser zufällige Schlüssel gilt nur für den schreibgeschützten "
+                "ESPHome-Abfahrtsfeed. Er ist unabhängig vom Webpasswort.</p>"
+                f"<code>{token}</code></section>"
+                '<section class="card"><h2>Weboberfläche</h2>',
+            )
         return _page("Einstellungen", content)
 
 
@@ -1200,6 +1469,8 @@ def run(
     access_token: str | None = None,
     tls_certfile: str | None = None,
     tls_keyfile: str | None = None,
+    device_token: str | None = None,
+    must_change_password: bool = False,
 ) -> None:
     """Preserve the public entrypoint while keeping transport in its own module."""
     from .web_transport import run as transport_run
@@ -1212,30 +1483,47 @@ def run(
         cache=cache,
         departure_cache=departure_cache,
         access_token=access_token,
+        device_token=device_token or os.environ.get("HVV_ESPHOME_API_TOKEN"),
+        must_change_password=(
+            must_change_password
+            or os.environ.get("HVV_WEB_PASSWORD_MUST_CHANGE") == "1"
+        ),
         tls_certfile=tls_certfile,
         tls_keyfile=tls_keyfile,
     )
 
+
 def load_web_password_hash(path: Path) -> str | None:
-    """Read the container's private environment file without shell evaluation."""
+    """Read a password hash from the private web environment file."""
+    return load_web_environment(path).get("HVV_WEB_PASSWORD_HASH") or None
+
+
+def load_web_environment(path: Path) -> dict[str, str]:
+    """Read the small private web environment file without shell evaluation."""
     try:
         with path.open(encoding="utf-8") as source:
             content = source.read(8193)
     except FileNotFoundError:
-        return None
+        return {}
     if len(content) > 8192:
         raise ValueError("Web-EnvironmentFile ist zu groß")
-    values = []
+    values: dict[str, str] = {}
+    allowed = {
+        "HVV_WEB_PASSWORD_HASH",
+        "HVV_WEB_PASSWORD_MUST_CHANGE",
+        "HVV_ESPHOME_API_TOKEN",
+    }
     for line in content.splitlines():
         key, separator, value = line.partition("=")
-        if separator and key.strip() == "HVV_WEB_PASSWORD_HASH":
+        key = key.strip()
+        if separator and key in allowed:
             value = value.strip()
             if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
                 value = value[1:-1]
-            values.append(value)
-    if len(values) > 1:
-        raise ValueError("Web-EnvironmentFile enthält mehrere Passwort-Hashes")
-    return values[0] or None if values else None
+            if key in values:
+                raise ValueError(f"Web-EnvironmentFile enthält {key} mehrfach")
+            values[key] = value
+    return values
 
 
 def main() -> None:
@@ -1275,8 +1563,11 @@ def main() -> None:
         help="Privater TLS-Schlüssel für nicht-lokale Zugriffe",
     )
     args = parser.parse_args()
-    if args.access_token is None and (web_env_file := os.environ.get("HVV_WEB_ENV_FILE")):
-        args.access_token = load_web_password_hash(Path(web_env_file))
+    web_settings = {}
+    if web_env_file := os.environ.get("HVV_WEB_ENV_FILE"):
+        web_settings = load_web_environment(Path(web_env_file))
+    if args.access_token is None:
+        args.access_token = web_settings.get("HVV_WEB_PASSWORD_HASH")
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
     run(
         args.host,
@@ -1286,6 +1577,8 @@ def main() -> None:
         cache=args.cache,
         departure_cache=args.departure_cache,
         access_token=args.access_token,
+        device_token=web_settings.get("HVV_ESPHOME_API_TOKEN"),
+        must_change_password=web_settings.get("HVV_WEB_PASSWORD_MUST_CHANGE") == "1",
         tls_certfile=args.tls_certfile,
         tls_keyfile=args.tls_keyfile,
     )

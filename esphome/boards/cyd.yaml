@@ -6,6 +6,8 @@ esp32:
   board: esp32dev
   framework:
     type: esp-idf
+    sdkconfig_options:
+      CONFIG_LWIP_DNS_SUPPORT_MDNS_QUERIES: y
 
 spi:
   clk_pin: GPIO14

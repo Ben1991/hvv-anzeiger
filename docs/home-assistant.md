@@ -30,8 +30,10 @@ cd ~/hvv-anzeiger
 
 Danach den vorhandenen HTTPS-Webdienst nutzen. Die Details zu Prüfung,
 Datenerhalt und Rollback stehen unter [Pi-Updates](../README.md#anwendung-aktualisieren).
-Die Anleitung im README zu `configure-web.sh`, individuellem Webpasswort und
-TLS gilt weiter. Keine zusätzliche Geofox-Anmeldung oder Datenkopie erforderlich.
+Die Backend-Ersteinrichtung erzeugt einen separaten zufälligen CYD-Schlüssel
+und startet mit `hvv-anzeiger` als vorläufigem Webpasswort. Beim ersten Login
+muss ein eigenes Webpasswort gesetzt werden. Das CYD nutzt ausschließlich den
+Geräteschlüssel. Keine zusätzliche Geofox-Anmeldung oder Datenkopie erforderlich.
 Home Assistant muss den Zertifikatsnamen auflösen und der ausstellenden CA vertrauen.
 Das gilt auch für eine selbst betriebene Zertifizierungsstelle.
 Für HA OS ist ein Zertifikat einer bereits vertrauten CA für eine eigene Domain
@@ -56,6 +58,10 @@ anschließend erneut deaktivieren.
 Docker Engine und Docker Compose v2 verwenden. Das Webpasswort wird direkt im
 Container aus `/data/web.env` gelesen. Compose benötigt keinen Lesezugriff auf
 die privaten Dateien und wertet die `$`-Zeichen im Passwort-Hash nicht aus.
+Für die automatische CYD-Adresse muss der Linux-Host zusätzlich `hvv-anzeiger`
+per Avahi unter `hvv-anzeiger.local` bekannt machen und das TLS-Zertifikat
+diesen DNS-Namen enthalten. Andernfalls `backend_url` in der ESPHome-Konfiguration
+auf den eigenen TLS-Host setzen.
 
 Repository auf dem Containerhost klonen und die Daten vorbereiten:
 
@@ -72,29 +78,32 @@ Im Repository `data/` anlegen und dort ablegen:
 
 - `config.json`: Kopie von `config.example.json`, eigene Haltestellen eintragen.
 - `credentials.env`: `GEOFOX_USER=...` und `GEOFOX_PASSWORD=...`, jeweils eigene Zeile.
-- `web.env`: `HVV_WEB_PASSWORD_HASH=...` (kein Klartext-Webpasswort).
+- `web.env`: initial gehashter Webzugang, Passwortwechsel-Flag und zufälliger
+  CYD-Schlüssel (keine Klartext-Webpasswörter).
 - `tls.crt` und `tls.key`: Zertifikatskette und privater Schlüssel für den Hostnamen.
 
 Zertifikat, Schlüssel und `credentials.env` vor dem Start ablegen und die
-Haltestellen in `data/config.json` anpassen. Der folgende Befehl erzeugt den
-Passwort-Hash im gebauten Image, fragt das individuelle Passwort zweimal ab und
-speichert es geschützt in `data/web.env`. Python-Abhängigkeiten auf dem Host
-sind dafür nicht nötig. Den Befehl bei der Ersteinrichtung vor dem unten
-beschriebenen Eigentümerwechsel ausführen:
+Haltestellen in `data/config.json` anpassen. Der folgende Befehl erzeugt im
+gebauten Image den Hash für das Erstpasswort `hvv-anzeiger`, markiert die
+erzwungene Änderung beim ersten Login und generiert einen separaten zufälligen
+CYD-Schlüssel. Python-Abhängigkeiten auf dem Host sind dafür nicht nötig. Den
+Befehl bei der Ersteinrichtung vor dem unten beschriebenen Eigentümerwechsel
+ausführen:
 
 ```sh
 docker compose run --rm --no-deps --user "$(id -u):$(id -g)" hvv python -c '
-from getpass import getpass
 from pathlib import Path
-from hvv_display.web import WebApplication
-password = getpass("Webpasswort (mindestens 12 Zeichen): ")
-if len(password) < 12:
-    raise SystemExit("Mindestens 12 Zeichen erforderlich")
-if password != getpass("Webpasswort wiederholen: "):
-    raise SystemExit("Passwörter stimmen nicht überein")
-app = WebApplication(Path("/data/config.json"), Path("/data/credentials.env"),
-                     Path("/data/stations.json"))
-app.save_web_password(password)
+from secrets import token_urlsafe
+from hvv_display.web import hash_web_password
+path = Path("/data/web.env")
+if path.exists():
+    raise SystemExit("web.env existiert bereits; bestehende Zugangsdaten bleiben erhalten")
+content = (
+    "HVV_WEB_PASSWORD_HASH=\"" + hash_web_password("hvv-anzeiger") + "\"\n"
+    + "HVV_WEB_PASSWORD_MUST_CHANGE=\"1\"\n"
+    + "HVV_ESPHOME_API_TOKEN=\"" + token_urlsafe(32) + "\"\n"
+)
+path.write_text(content, encoding="utf-8")
 '
 ```
 
@@ -121,7 +130,8 @@ docker compose up -d --build
 docker compose logs --tail=50
 ```
 
-Der Dienst verweigert einen LAN-Start ohne individuellen Passwort-Hash und TLS.
+Der Dienst verweigert einen LAN-Start ohne Passwort-Hash, TLS und separaten
+CYD-Schlüssel.
 Kein privilegierter Container, GPIO oder SPI erforderlich. HTTPS-Weboberfläche
 unter `https://<Zertifikats-Hostname>:8080/` prüfen.
 Dies ist ein eigenständiger Backend-Container, kein Supervisor-Add-on.

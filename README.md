@@ -9,9 +9,10 @@
 
 | Dein nächster Schritt | Abschnitt |
 |---|---|
-| Raspberry Pi erstmals einrichten | [Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Display anschließen](#display-anschließen) → [Installieren](#installieren) |
+| Raspberry Pi als Display und Backend installieren | [Pi-Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Pi-Display anschließen](#display-anschließen) → [Pi installieren](#installieren) |
+| CYD/ESP32 am bestehenden Backend einrichten | [ESP32-Schrittfolge und Setup-Skript](#esp32-schritt-für-schritt) |
+| ESP32-Backend und Weboberfläche verstehen | [Plattformen und gemeinsame Funktionen](#plattformen-und-gemeinsame-funktionen) |
 | Home Assistant einrichten | [HA-Anleitung](docs/home-assistant.md) |
-| ESP32 einrichten oder per USB flashen | [ESP32-Schrittfolge und Setup-Skript](#esp32-schritt-für-schritt) |
 | Haltestellen, Linien oder Darstellung ändern | [Konfigurieren](#konfigurieren) |
 | Version aktualisieren oder Dienst steuern | [Betrieb und Updates](#betrieb-und-updates) |
 | Einen Fehler untersuchen | [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose) |
@@ -59,9 +60,9 @@ Oberfläche. Zusätzlich sind Home Assistant und ESP32-Displays mit ESPHome mög
 
 | Du möchtest … | Aufbau | Hier geht es weiter |
 |---|---|---|
-| eine Anzeige direkt am Raspberry Pi | Raspberry Pi mit angeschlossenem SPI-Display | [Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Verdrahtung](#display-anschließen) → [Installation](#installieren) |
+| eine Anzeige direkt am Raspberry Pi | Raspberry Pi mit angeschlossenem SPI-Display; Backend und Browseroberfläche laufen dort | [Pi-Installation](#installieren) |
 | Abfahrten in Home Assistant | Python-Hintergrunddienst + HA-Paket | [Home-Assistant-Anleitung](docs/home-assistant.md) |
-| Abfahrten auf einem ESP32-Display | Python-Hintergrunddienst + ESPHome, direkt per HTTPS; kein Home Assistant nötig | [ESP32-Einrichtungsanleitung](docs/esp32-setup.md) |
+| Abfahrten auf einem ESP32-Display | CYD-Firmware + Python-Backend auf Pi/Container, direkt per HTTPS; kein Home Assistant nötig | [ESP32-Einrichtungsanleitung](docs/esp32-setup.md) |
 | einen Browser als Kiosk- oder Zweitbildschirm | geschützter Displaymodus des Webdienstes | [Weboberfläche und Displaymodus](#lokale-weboberfläche) |
 
 Ein Geofox-Zugang ist bei allen Varianten erforderlich. Der Python-
@@ -69,9 +70,32 @@ Hintergrunddienst bleibt auch beim ESP32 nötig; das CYD fragt ihn direkt über
 HTTPS ab und zeigt die Abfahrten ohne Home Assistant an. HA ist eine optionale,
 separate Integration. Der Hintergrunddienst kann auf dem vorhandenen Pi oder
 als Container laufen.
-Die folgenden Hardware-, Installations- und systemd-Anleitungen beschreiben
-das Raspberry-Pi-Setup. Für ESPHome gelten die separate Anleitung und deren
-[Prüfgrenzen](docs/home-assistant-esphome-validation.md).
+Die Abschnitte **Voraussetzungen**, **Geofox-Zugang**, **Display anschließen**,
+**Installieren**, **Betrieb und Updates** und **Fehlerverhalten** beschreiben
+die Installation auf dem Raspberry Pi. Die CYD-Firmware und ihr USB-Setup sind
+in [ESP32 mit ESPHome](docs/esp32-setup.md) getrennt dokumentiert.
+
+## Plattformen und gemeinsame Funktionen
+
+Pi und ESP32 sind getrennte Installationen mit gemeinsamem Datenvertrag. Der
+Python-Backenddienst lädt Geofox-Daten und stellt dieselbe gefilterte,
+chronologisch sortierte Abfahrtsstruktur bereit. Das Pi-Display nutzt die
+Python-Anwendung direkt; das CYD ruft denselben Backend-Datensatz alle 15
+Sekunden über HTTPS ab. Die Browser-Weboberfläche läuft auf dem Backend-Rechner
+(Raspberry Pi oder Container), nicht auf dem CYD.
+
+| Funktion | Pi-Display | CYD/ESP32 | Backend-Weboberfläche |
+|---|---:|---:|---:|
+| Haltestellen, Linien und Ziele aus der gemeinsamen Konfiguration | ✓ | ✓ | Konfigurieren |
+| Sortierung, Countdown oder Uhrzeit, Nachtmodus und Datenalter | ✓ | ✓ | Anzeigen/konfigurieren |
+| Geofox-Abrufe, Offline-Cache und Fehlerstatus | ✓ | ✓ | ✓ |
+| Helligkeit und Neustart | Pi-Hardware/systemd | ESPHome-Steuerung/OTA | Dienststeuerung |
+| HTTPS-Login und Konfigurationsverwaltung | — | — | ✓ |
+
+Gemeinsame Abfahrtsregeln werden im Backend gepflegt. Eine Änderung am
+Abfahrtsformat muss den Python-Test und den nativen Firmware-Protokolltest
+bestehen. Pi-Installer/Update und ESP32-Setup werden in getrennten CI-Jobs
+geprüft; ihre persistenten Dateien und Profile bleiben voneinander getrennt.
 
 ![Beispielhafte Abfahrten ab Jungfernstieg Richtung Hauptbahnhof mit Bus, U-Bahn und S-Bahn](docs/hvv-anzeiger-preview.png)
 
@@ -319,12 +343,15 @@ auch mit einem ESP32-Display erforderlich.
 
 Für das CYD `ESP32-2432S028` mit 2,8-Zoll-Display und 320×240 Pixeln im
 Querformat ist `hvv-cyd` das Standardprofil. Es verwendet die getestete
-Dual-USB-Revision mit ILI9342 und nativer 0°-Ausrichtung. Eine
+Dual-USB-Revision mit ILI9342 und 90°-Drehung im Querformat. Eine
 automatische Controller-Erkennung ist technisch nicht zuverlässig.
 Das CYD fragt den Python-Hintergrunddienst direkt per HTTPS ab. Home Assistant
 ist dafür nicht nötig. Der Hintergrunddienst muss bereits laufen; die
 [Backend-Anleitung](docs/home-assistant.md#1-hintergrunddienst-bereitstellen)
-beschreibt die Einrichtung. Halte seine HTTPS-Adresse und das Webpasswort bereit.
+beschreibt die Einrichtung. Starte mit dem Backend: Beim ersten Login ist das
+Webpasswort `hvv-anzeiger` und muss direkt geändert werden. Der CYD-Schlüssel
+ist ein eigener zufälliger Schlüssel in den Backend-Einstellungen; er ist nicht
+das Webpasswort. Das Setup-Skript übernimmt Schlüssel und TLS-Zertifikat.
 
 1. **Git und Python installieren:** Installiere Git für Windows und Python
    3.12 samt Python Launcher (`py`). Nimm ein USB-Datenkabel; schließe das Board
@@ -360,11 +387,11 @@ beschreibt die Einrichtung. Halte seine HTTPS-Adresse und das Webpasswort bereit
    ```
 
    Gib bei der Abfrage WLAN-Name und WLAN-Passwort ein. Danach fragt das Skript
-   die HTTPS-Adresse des Hintergrunddienstes und das Webpasswort ab; bei beiden
-   Passwörtern werden keine Zeichen angezeigt. Warte auf die Meldung
-   „Konfiguration geprüft.“. Das Skript installiert ESPHome, erzeugt einen
-   API-Schlüssel und legt lokale Dateien an, ohne vorhandene Geheimnisse zu
-   überschreiben.
+   den CYD-Schlüssel aus den Backend-Einstellungen ab; die Eingabe bleibt
+   verdeckt. Vergleiche den TLS-Fingerabdruck mit dem Wert aus der
+   Backendinstallation. Warte auf „Konfiguration geprüft.“. WLAN-Daten,
+   Schlüssel und bestätigtes Zertifikat werden lokal abgelegt und nicht
+   überschrieben.
    Bei einem Fehler hilft die
    [Schritt-für-Schritt-Anleitung](docs/esp32-setup.md#schritt-4-esphome-und-das-cyd-profil-einrichten).
 5. **Board flashen:** Verbinde das CYD mit einem USB-Datenkabel. Bei zwei USB-
@@ -612,15 +639,19 @@ chmod +x install.sh
 Der Installer fragt bei der ersten Installation die Geofox Application-ID und
 das Passwort ab. Das Passwort bleibt während der Eingabe unsichtbar.
 
-Am Ende erkennt der Installer die aktuell verwendete lokale IPv4-Adresse und
-gibt die fertige HTTPS-Adresse der Weboberfläche aus. Öffne diese Adresse auf
-einem Rechner im selben Netzwerk. Das Zertifikat ist selbst signiert; die
-Browserwarnung muss beim ersten Aufruf bestätigt werden.
+Der Installer vergibt den mDNS-Namen `hvv-anzeiger.local`, erzeugt ein lokales
+TLS-Zertifikat und gibt dessen SHA-256-Fingerabdruck aus. Die Weboberfläche ist
+unter `https://hvv-anzeiger.local:8080/` erreichbar. Beim ersten Login ist das
+Passwort `hvv-anzeiger`; die Oberfläche erzwingt sofort einen Wechsel auf ein
+eigenes Passwort mit mindestens 12 Zeichen. Die beim Setup abgefragten
+Geofox-Zugangsdaten und Beispiel-Haltestellen ermöglichen den ersten Abruf
+direkt nach dem Start. Passe die Haltestellen danach unter Einstellungen an.
 
 `install.sh` richtet ein:
 
 - erforderliche Betriebssystem- und Python-Pakete
-- OpenSSL sowie ein selbst signiertes Zertifikat für den LAN-Webzugriff
+- Avahi/mDNS für den festen Namen `hvv-anzeiger.local`
+- OpenSSL sowie ein lokales CA-Zertifikat für HTTPS und den ESP32
 - SPI und Netzwerk-Zeitsynchronisierung
 - Anwendung unter `/opt/hvv-anzeiger`
 - nicht interaktiven Dienstbenutzer `hvv-anzeiger`
@@ -629,6 +660,9 @@ Browserwarnung muss beim ersten Aufruf bestätigt werden.
 
 Der Installer startet den Backend-Dienst und die Weboberfläche automatisch und
 aktiviert beide für den Start nach jedem Neustart des Raspberry Pi.
+Er erzeugt zusätzlich einen zufälligen CYD-Schlüssel. Nach dem ersten Weblogin
+und Passwortwechsel findest du ihn unter Einstellungen. Das CYD verwendet
+diesen schreibgeschränkten Schlüssel; das Webpasswort bleibt davon unabhängig.
 
 Falls die Weboberfläche nicht automatisch laufen soll:
 
@@ -838,13 +872,13 @@ Anmeldung geschützt. Der Benutzername lautet:
 Benutzername: hvv-anzeiger
 ```
 
-Der Installer verlangt vor der LAN-Freigabe ein individuelles Webpasswort mit
-mindestens 12 Zeichen und eine Bestätigung; die Eingabe bleibt unsichtbar.
-Vorhandene individuelle Passwörter bleiben bei Updates erhalten. Das frühere
-gemeinsame Erstpasswort muss bei einem Update ersetzt werden. Bei abgebrochener
-Eingabe bleibt die vorhandene Datei unverändert. Beim ersten Aufruf fragt der
-Browser nach diesen Zugangsdaten. Weitere Passwortänderungen sind auf der
-Einstellungsseite unter „Weboberfläche“ möglich.
+Bei einer Neuinstallation wird die Weboberfläche zunächst mit
+`hvv-anzeiger` / `hvv-anzeiger` eingerichtet und verlangt beim ersten Login ein
+neues Passwort mit mindestens 12 Zeichen. Bis dahin bleibt die Weboberfläche
+auf der Passwortänderung; die ESP32-API ist mit ihrem separaten zufälligen
+Schlüssel geschützt. Individuelle Passwörter bleiben bei Updates erhalten.
+Weitere Passwortänderungen sind auf der Einstellungsseite unter „Weboberfläche“
+möglich.
 Gespeichert wird nur ein gesalzener Passwort-Hash mit restriktiven Dateirechten.
 
 Der Webserver verarbeitet den TLS-Verbindungsaufbau in separaten, auf höchstens
@@ -871,12 +905,14 @@ werden:
   --tls-keyfile /etc/hvv-anzeiger/web.key
 ```
 
-Zusätzlich muss ein Passwort-Hash über `HVV_WEB_PASSWORD_HASH` in
-`/opt/hvv-anzeiger/var/web.env` gesetzt werden. Der Installer erzeugt ihn
-automatisch:
+Zusätzlich müssen `HVV_WEB_PASSWORD_HASH`, `HVV_WEB_PASSWORD_MUST_CHANGE` und
+`HVV_ESPHOME_API_TOKEN` in `/opt/hvv-anzeiger/var/web.env` gesetzt werden. Der
+Installer erzeugt sie automatisch:
 
 ```text
 HVV_WEB_PASSWORD_HASH=...
+HVV_WEB_PASSWORD_MUST_CHANGE=1
+HVV_ESPHOME_API_TOKEN=...
 ```
 
 Die Oberfläche akzeptiert das Passwort als Browser-Anmeldung. Ohne
@@ -885,11 +921,11 @@ Bind-Adresse nicht. Unverschlüsseltes Basic Auth über HTTP ist damit für den
 Remote-Betrieb ausgeschlossen. Auch lokal sind alle schreibenden Formulare
 gegen Cross-Site-Requests geschützt.
 
-Das frühere gemeinsame Standardpasswort wird nicht mehr akzeptiert. Ein
-Webzugang erlaubt Änderungen an Konfiguration und Geofox-Zugangsdaten sowie
-das Auslösen des Systemneustarts. Deshalb verlangt der Installer ein
-individuelles Passwort und richtet TLS ein. Unverschlüsseltes Basic Auth über
-HTTP wird für den LAN-Zugriff nicht unterstützt.
+Das Standardpasswort `hvv-anzeiger` ist nur für den ersten Login gedacht; die
+Oberfläche blockiert alle anderen Seiten, bis ein individuelles Passwort
+gesetzt ist. Der separate zufällige CYD-Schlüssel erlaubt ausschließlich den
+schreibgeschützten ESPHome-Abfahrtsfeed. Unverschlüsseltes Basic Auth über HTTP
+wird für den LAN-Zugriff nicht unterstützt.
 
 </details>
 
@@ -2078,7 +2114,8 @@ zusätzlichen End-to-End- und Responsive-Testlauf:
 - lokal gebundene Weboberfläche unter `http://127.0.0.1:8080`; Zugriff von
   anderen Rechnern per SSH-Tunnel oder mit eigener TLS-Konfiguration
 - automatischer Start der Weboberfläche bei Installation und nach jedem Reboot
-- Standard-Anmeldung `hvv-anzeiger` / `hvv-anzeiger` für die Ersteinrichtung
+- Standard-Anmeldung `hvv-anzeiger` / `hvv-anzeiger`; beim ersten Login ist ein
+  eigenes Passwort erforderlich
 - Webpasswort in der Einstellungsseite änderbar; gespeichert wird nur ein
   gesalzener Hash
 - README mit Hinweisen zum Deaktivieren und späteren Reaktivieren des

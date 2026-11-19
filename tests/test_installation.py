@@ -173,7 +173,11 @@ exec "$@"
         (fake_bin / "ip").write_text(
             "#!/bin/sh\necho '1.1.1.1 dev wlan0 src 192.0.2.10'\n"
         )
-        (fake_bin / "openssl").write_text("#!/bin/sh\necho 'IP Address:192.0.2.10'\n")
+        (fake_bin / "openssl").write_text(
+            "#!/bin/sh\necho 'IP Address:192.0.2.10, DNS:hvv-anzeiger.local'\n"
+        )
+        (fake_bin / "hostnamectl").write_text("#!/bin/sh\nexit 0\n")
+        (fake_bin / "systemctl").write_text("#!/bin/sh\nexit 0\n")
         for executable in fake_bin.iterdir():
             executable.chmod(0o755)
         app = self.directory / "app"
@@ -182,12 +186,15 @@ exec "$@"
         cert_dir = self.directory / "certificates"
         cert_dir.mkdir()
         (cert_dir / "web.crt").write_text("test certificate")
+        avahi_config = self.directory / "avahi-daemon.conf"
+        avahi_config.write_text("[server]\n#host-name=old-name\n")
         self.environment = {
             **os.environ,
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
             "HVV_APP_DIR": str(app),
             "HVV_WEB_ENV_FILE": str(self.env_file),
             "HVV_WEB_CERT_DIR": str(cert_dir),
+            "HVV_AVAHI_CONFIG": str(avahi_config),
         }
 
     def run_configure(self, user_input, *arguments):
@@ -201,14 +208,26 @@ exec "$@"
         )
 
     def encoded_password(self):
-        return self.env_file.read_text().strip().split("=", 1)[1].strip('"')
+        for line in self.env_file.read_text().splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key == "HVV_WEB_PASSWORD_HASH":
+                return value.strip().strip('"')
+        self.fail("Webpasswort-Hash fehlt in web.env")
 
-    def test_first_run_prompts_and_stores_credentials_securely(self):
-        password = 'individual-"web\\password$42'  # noqa: S105
-        result = self.run_configure(f"{password}\n{password}\n")
+    def test_first_run_sets_bootstrap_password_and_random_device_key(self):
+        result = self.run_configure("")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(verify_web_password(password, self.encoded_password()))
-        self.assertNotIn(password, result.stdout + result.stderr)
+        self.assertTrue(verify_web_password("hvv-anzeiger", self.encoded_password()))
+        values = dict(
+            line.split("=", 1)
+            for line in self.env_file.read_text().splitlines()
+            if "=" in line
+        )
+        self.assertEqual(values["HVV_WEB_PASSWORD_MUST_CHANGE"], '"1"')
+        self.assertGreaterEqual(len(values["HVV_ESPHOME_API_TOKEN"].strip('"')), 40)
+        self.assertNotIn(values["HVV_ESPHOME_API_TOKEN"], result.stdout + result.stderr)
+        avahi_config = self.directory / "avahi-daemon.conf"
+        self.assertIn("host-name=hvv-anzeiger", avahi_config.read_text())
         self.assertEqual(stat.S_IMODE(self.env_file.stat().st_mode), 0o600)
 
     def test_existing_complete_credentials_are_kept_without_prompt(self):
@@ -217,47 +236,30 @@ exec "$@"
         self.env_file.write_text(original)
         result = self.run_configure("")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.env_file.read_text(), original)
+        self.assertIn(original.strip(), self.env_file.read_text())
+        self.assertIn("HVV_ESPHOME_API_TOKEN", self.env_file.read_text())
 
-    def test_force_replaces_credentials_and_empty_values_are_reprompted(self):
+    def test_old_shared_default_is_marked_for_forced_rotation(self):
         encoded = hash_web_password("hvv-anzeiger")
         self.env_file.write_text(f'HVV_WEB_PASSWORD_HASH="{encoded}"\n')
-        result = self.run_configure(
-            "\nshort\nhvv-anzeiger\nnew-individual-password\nmismatch\n"
-            "new-individual-password\nnew-individual-password\n"
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(
-            verify_web_password("new-individual-password", self.encoded_password())
-        )
-        self.assertFalse(verify_web_password("hvv-anzeiger", self.encoded_password()))
-        self.assertIn("stimmen nicht", result.stderr)
-
-    def test_incomplete_credentials_require_new_input(self):
-        self.env_file.write_text('HVV_WEB_PASSWORD_HASH=""\n')
-        result = self.run_configure(
-            "new-individual-password\nnew-individual-password\n"
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(
-            verify_web_password("new-individual-password", self.encoded_password())
-        )
-
-    def test_aborted_input_and_unknown_option_fail_safely(self):
         result = self.run_configure("")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertFalse(self.env_file.exists())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(verify_web_password("hvv-anzeiger", self.encoded_password()))
+        self.assertIn('HVV_WEB_PASSWORD_MUST_CHANGE="1"', self.env_file.read_text())
+
+    def test_incomplete_credentials_are_replaced_by_bootstrap_credentials(self):
+        self.env_file.write_text('HVV_WEB_PASSWORD_HASH=""\n')
+        result = self.run_configure("")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(verify_web_password("hvv-anzeiger", self.encoded_password()))
+
+    def test_first_run_needs_no_input_and_unknown_option_fails(self):
+        result = self.run_configure("")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(verify_web_password("hvv-anzeiger", self.encoded_password()))
+        self.assertIn('HVV_WEB_PASSWORD_MUST_CHANGE="1"', self.env_file.read_text())
         result = self.run_configure("", "--unknown")
         self.assertNotEqual(result.returncode, 0)
-
-    def test_aborted_reconfiguration_keeps_existing_file(self):
-        encoded = hash_web_password("hvv-anzeiger")
-        original = f'HVV_WEB_PASSWORD_HASH="{encoded}"\n'
-        self.env_file.write_text(original)
-        result = self.run_configure("new-individual-password\n")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(self.env_file.read_text(), original)
-        self.assertEqual(list(self.directory.glob("web.env.tmp.*")), [])
 
 
 if __name__ == "__main__":

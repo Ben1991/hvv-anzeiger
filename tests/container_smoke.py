@@ -51,7 +51,11 @@ def main():
             capture_output=True,
             text=True,
         ).stdout.strip()
-        (data / "web.env").write_text(f"HVV_WEB_PASSWORD_HASH={hashed}\n")
+        device_token = "container-smoke-device-key-1"  # noqa: S105
+        (data / "web.env").write_text(
+            f"HVV_WEB_PASSWORD_HASH={hashed}\n"
+            f"HVV_ESPHOME_API_TOKEN={device_token}\n"
+        )
         command(
             [
                 "openssl",
@@ -121,9 +125,10 @@ def main():
             )
 
         auth = "Basic " + base64.b64encode(f"hvv-anzeiger:{password}".encode()).decode()
+        device_auth = "Bearer container-smoke-device-key-1"
 
-        def request(route, authenticated=True):
-            headers = {"Authorization": auth} if authenticated else {}
+        def request(route, authenticated=True, authorization=None):
+            headers = {"Authorization": authorization or auth} if authenticated else {}
             req = Request("https://127.0.0.1:8080" + route, headers=headers)  # noqa: S310
             return urlopen(req, context=context, timeout=3)  # noqa: S310
 
@@ -190,7 +195,7 @@ def main():
                 raise RuntimeError(
                     "Display endpoint accepted an unauthenticated request"
                 )
-            with request("/api/esphome") as response:
+            with request("/api/esphome", authorization=device_auth) as response:
                 if json.load(response)["schema_version"] != 1:
                     raise RuntimeError("ESPHome protocol mismatch")
             # Recreating from the built image exercises the documented update

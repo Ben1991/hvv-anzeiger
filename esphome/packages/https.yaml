@@ -7,7 +7,7 @@ http_request:
   verify_ssl: true
   follow_redirects: false
   timeout: 20s
-  # For a private CA, add ca_certificate_path: backend-ca.pem (copy its PEM).
+  ca_certificate_path: backend-ca.pem
 
 interval:
   - interval: 15s

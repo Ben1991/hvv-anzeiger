@@ -35,7 +35,7 @@ jobs:
           }
 
   esphome:
-    name: ESPHome ${{ matrix.firmware }}
+    name: ESP32 firmware ${{ matrix.firmware }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -89,7 +89,7 @@ jobs:
         run: python3 tests/container_smoke.py
 
   tests:
-    name: Python ${{ matrix.python-version }} tests and quality
+    name: Pi and backend Python ${{ matrix.python-version }} tests and quality
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

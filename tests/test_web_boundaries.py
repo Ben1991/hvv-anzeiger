@@ -83,7 +83,12 @@ class WebBoundariesTest(unittest.TestCase):
         self.app.access_token = "unused"
         for value in ("!", base64.b64encode(b"\xff").decode(), "bm9jb2xvbg=="):
             self.assertFalse(self.app.authorize({"Authorization": "Basic " + value}))
-        for password in ("", "a\nb", 'a"b'):
+        for password in (
+            "",
+            "a" * 12 + "\nb",
+            'a' * 12 + '"',
+            "a" * 12 + "\\",
+        ):
             with self.assertRaises(ValueError):
                 self.app.save_web_password(password)
         for user, password in (("", "x"), ("x", "")):
@@ -95,6 +100,129 @@ class WebBoundariesTest(unittest.TestCase):
             with self.assertRaises(OSError):
                 web.save_credentials(self.app.credentials_path, "user", "password")
         self.assertEqual(list(self.root.glob(".credentials.env.*")), [])
+
+    def test_password_save_creates_missing_web_environment(self):
+        self.app.device_token = "synthetic-device-key-0123456789"
+        password = "new-unique-password"
+        self.app.save_web_password(password)
+
+        stored = web.load_web_environment(self.root / "web.env")
+        self.assertTrue(
+            web.verify_web_password(password, stored["HVV_WEB_PASSWORD_HASH"])
+        )
+        self.assertEqual(stored["HVV_WEB_PASSWORD_MUST_CHANGE"], "0")
+        self.assertEqual(
+            stored["HVV_ESPHOME_API_TOKEN"], "synthetic-device-key-0123456789"
+        )
+
+    def test_password_save_preserves_device_key_loaded_from_environment(self):
+        device_token = "environment-device-key-0123456789"
+        (self.root / "web.env").write_text(
+            f'HVV_ESPHOME_API_TOKEN="{device_token}"\n', encoding="utf-8"
+        )
+        self.app.device_token = None
+        self.app.save_web_password("another-unique-password")
+
+        stored = web.load_web_environment(self.root / "web.env")
+        self.assertEqual(stored["HVV_ESPHOME_API_TOKEN"], device_token)
+
+    def test_cyd_feed_uses_independent_bearer_key(self):
+        self.app.device_token = "synthetic-device-key-0123456789"
+        self.start_server()
+        with patch.object(
+            self.app, "smart_home", return_value={"display_payload": "{}"}
+        ):
+            status, body, headers = self.request(
+                "/api/esphome",
+                headers={"Authorization": "Bearer synthetic-device-key-0123456789"},
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(body, b"{}")
+            self.assertEqual(headers["Cache-Control"], "no-store")
+            denied, _, challenge = self.request(
+                "/api/esphome",
+                headers={"Authorization": "Bearer wrong-device-key"},
+            )
+            self.assertEqual(denied, 401)
+            self.assertIn("Bearer", challenge["WWW-Authenticate"])
+
+    def test_first_login_requires_password_rotation(self):
+        self.app.access_token = web.hash_web_password("hvv-anzeiger")
+        self.app.must_change_password = True
+        self.app.device_token = "synthetic-device-key-0123456789"
+        self.start_server()
+        auth = "Basic " + base64.b64encode(b"hvv-anzeiger:hvv-anzeiger").decode()
+        status, _, headers = self.request("/settings", headers={"Authorization": auth})
+        self.assertEqual(status, 303)
+        self.assertEqual(headers["Location"], "/change-password")
+        status, page, _ = self.request(
+            "/change-password", headers={"Authorization": auth}
+        )
+        self.assertEqual(status, 200)
+        self.assertIn(b"Erstpasswort", page)
+        new_password = "my-long-unique-password"
+        status, _, _ = self.request(
+            "/settings",
+            body="",
+            headers={"Authorization": auth},
+        )
+        self.assertEqual(status, 403)
+        status, _, headers = self.request(
+            "/change-password",
+            values={
+                "csrf_token": self.app.csrf_token,
+                "new_password": "my-long-unique-password",
+                "confirmation": "different-password",
+            },
+            headers={"Authorization": auth},
+        )
+        self.assertEqual(status, 400)
+        status, _, headers = self.request(
+            "/change-password",
+            values={
+                "csrf_token": self.app.csrf_token,
+                "new_password": "short",
+                "confirmation": "short",
+            },
+            headers={"Authorization": auth},
+        )
+        self.assertEqual(status, 400)
+        with patch.object(
+            self.app, "save_web_password", side_effect=OSError("disk full")
+        ):
+            status, _, _ = self.request(
+                "/change-password",
+                values={
+                    "csrf_token": self.app.csrf_token,
+                    "new_password": "another-unique-password",
+                    "confirmation": "another-unique-password",
+                },
+                headers={"Authorization": auth},
+            )
+        self.assertEqual(status, 400)
+        status, _, headers = self.request(
+            "/change-password",
+            values={
+                "csrf_token": self.app.csrf_token,
+                "new_password": new_password,
+                "confirmation": new_password,
+            },
+            headers={"Authorization": auth},
+        )
+        self.assertEqual(status, 303)
+        self.assertEqual(headers["Location"], "/")
+        self.assertFalse(self.app.must_change_password)
+        self.assertTrue(web.verify_web_password(new_password, self.app.access_token))
+        self.assertIn("HVV_ESPHOME_API_TOKEN", (self.root / "web.env").read_text())
+        changed_auth = "Basic " + base64.b64encode(
+            f"hvv-anzeiger:{new_password}".encode()
+        ).decode()
+        status, settings, _ = self.request(
+            "/settings", headers={"Authorization": changed_auth}
+        )
+        self.assertEqual(status, 200)
+        self.assertIn(b"CYD-Verbindung", settings)
+        self.assertIn(self.app.device_token.encode(), settings)
 
     def test_raw_config_and_reboot_failures(self):
         self.assertEqual(self.app.raw_config(), self.raw)
@@ -419,9 +547,11 @@ class WebBoundariesTest(unittest.TestCase):
             # Reject from headers before sending a body. Sending megabytes
             # after the server already replied races its connection close.
             self.request(
-                "/settings", body="",
+                "/settings",
+                body="",
                 headers={"Content-Length": str(web.MAX_FORM_BYTES + 1)},
-            )[0], 413
+            )[0],
+            413,
         )
 
     def test_run_closes_server_for_normal_and_interrupted_shutdown(self):
@@ -448,9 +578,7 @@ class WebBoundariesTest(unittest.TestCase):
     def test_cli_passes_arguments_to_server(self):
         with (
             patch.object(sys, "argv", ["hvv-web", "--port", "1234"]),
-            patch.dict(
-                "os.environ", {"HVV_DEPARTURE_CACHE": "/data/departures.json"}
-            ),
+            patch.dict("os.environ", {"HVV_DEPARTURE_CACHE": "/data/departures.json"}),
             patch.object(web, "run") as run,
         ):
             web.main()

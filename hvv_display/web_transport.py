@@ -42,9 +42,13 @@ class WebServer(ThreadingHTTPServer):
     """Accept TCP first; bound TLS/HTTP work inside independent request threads."""
 
     def __init__(
-        self, *args: Any, tls_context: ssl.SSLContext | None = None,
-        connection_timeout: float = 5.0, max_workers: int = 32,
-        max_connections_per_client: int = 8, **kwargs: Any,
+        self,
+        *args: Any,
+        tls_context: ssl.SSLContext | None = None,
+        connection_timeout: float = 5.0,
+        max_workers: int = 32,
+        max_connections_per_client: int = 8,
+        **kwargs: Any,
     ) -> None:
         self.tls_context = tls_context
         self.connection_timeout = connection_timeout
@@ -100,7 +104,6 @@ class WebServer(ThreadingHTTPServer):
         finally:
             self._release_client(str(client_address[0]))
             self._workers.release()
-
 
 
 def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
@@ -159,9 +162,14 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(payload)
 
-        def _unauthorized(self) -> None:
+        def _unauthorized(self, *, device: bool = False) -> None:
             self.send_response(HTTPStatus.UNAUTHORIZED)
-            self.send_header("WWW-Authenticate", 'Basic realm="hvv-anzeiger"')
+            challenge = (
+                'Bearer realm="hvv-anzeiger-cyd"'
+                if device
+                else 'Basic realm="hvv-anzeiger"'
+            )
+            self.send_header("WWW-Authenticate", challenge)
             self._security_headers()
             self.end_headers()
 
@@ -176,18 +184,45 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                         return
                 except ValueError:
                     pass
-            if not application.authorize(self.headers):
-                self._unauthorized()
+            device_endpoint = path == "/api/esphome"
+            authenticated = (
+                application.authorize_device(self.headers)
+                if device_endpoint
+                else application.authorize(self.headers)
+            )
+            if not authenticated:
+                self._unauthorized(device=device_endpoint)
+                return
+            if (
+                application.must_change_password
+                and not device_endpoint
+                and path != "/change-password"
+            ):
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", "/change-password")
+                self._security_headers()
+                self.end_headers()
+                return
+            if path == "/change-password":
+                self._send(application.password_change_page())
                 return
             if path in {"/api/health", "/api/diagnostics", "/diagnostics"}:
                 self.connection.settimeout(2)
                 if not application.allow_health_request():
-                    self._send_json({"error": "Zu viele Statusabfragen"}, HTTPStatus.TOO_MANY_REQUESTS, retry_after=1)
+                    self._send_json(
+                        {"error": "Zu viele Statusabfragen"},
+                        HTTPStatus.TOO_MANY_REQUESTS,
+                        retry_after=1,
+                    )
                 elif path == "/diagnostics":
                     self._send(application.diagnostics())
                 else:
                     data = application.health()
-                    status = HTTPStatus.OK if path == "/api/diagnostics" else HTTPStatus(STATUS_CODES[data["status"]][0])
+                    status = (
+                        HTTPStatus.OK
+                        if path == "/api/diagnostics"
+                        else HTTPStatus(STATUS_CODES[data["status"]][0])
+                    )
                     self._send_json(data, status)
                 return
             if path == "/":
@@ -208,27 +243,49 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/config-backup":
                 query = parse_qs(urlsplit(self.path).query)
-                self._send(application.config_backup_page("Gespeichert. Der Anzeigedienst übernimmt die Konfiguration bei der nächsten Aktualisierung." if query.get("saved") == ["1"] else ""))
+                self._send(
+                    application.config_backup_page(
+                        "Gespeichert. Der Anzeigedienst übernimmt die Konfiguration bei der nächsten Aktualisierung."
+                        if query.get("saved") == ["1"]
+                        else ""
+                    )
+                )
                 return
             if path == "/config/export":
                 try:
                     query = parse_qs(urlsplit(self.path).query)
                     name = query.get("backup_id", [""])[0]
-                    raw = application.config_store.backup_candidate(name) if name else application.config_store.current()[0]
+                    raw = (
+                        application.config_store.backup_candidate(name)
+                        if name
+                        else application.config_store.current()[0]
+                    )
                     payload = export_config(raw)
                     self.send_response(HTTPStatus.OK)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.send_header("Content-Disposition", 'attachment; filename="hvv-konfiguration.json"')
+                    self.send_header(
+                        "Content-Disposition",
+                        'attachment; filename="hvv-konfiguration.json"',
+                    )
                     self.send_header("Content-Length", str(len(payload)))
                     self._security_headers()
                     self.end_headers()
                     self.wfile.write(payload)
                 except (ConfigError, OSError):
-                    self._send(application.config_backup_page("Export nicht möglich: Konfiguration oder Sicherung ist ungültig oder nicht lesbar."), HTTPStatus.BAD_REQUEST)
+                    self._send(
+                        application.config_backup_page(
+                            "Export nicht möglich: Konfiguration oder Sicherung ist ungültig oder nicht lesbar."
+                        ),
+                        HTTPStatus.BAD_REQUEST,
+                    )
                 return
             if path in {"/api/smart-home", "/api/esphome"}:
                 data = application.smart_home()
-                self._send_json(json.loads(data["display_payload"]) if path == "/api/esphome" else data)
+                self._send_json(
+                    json.loads(data["display_payload"])
+                    if path == "/api/esphome"
+                    else data
+                )
                 return
             if path == "/api/departures":
                 data = application.departure_view()
@@ -320,7 +377,38 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 self._unauthorized()
                 return
             path = urlsplit(self.path).path
-            if path in {"/config/preview", "/config/apply", "/config/cancel", "/config/backup"}:
+            if application.must_change_password:
+                if path != "/change-password":
+                    self.send_error(HTTPStatus.FORBIDDEN)
+                    return
+                try:
+                    values = self._form_values(4096)
+                    application.validate_csrf(values.get("csrf_token", [""])[0])
+                    new_password = values.get("new_password", [""])[0]
+                    confirmation = values.get("confirmation", [""])[0]
+                    if new_password != confirmation:
+                        raise ValueError("Die beiden Passwörter stimmen nicht überein.")
+                    application.save_web_password(new_password)
+                    self.send_response(HTTPStatus.SEE_OTHER)
+                    self.send_header("Location", "/")
+                    self.end_headers()
+                except (ValueError, PermissionError) as exc:
+                    self._send(
+                        application.password_change_page(str(exc)),
+                        HTTPStatus.BAD_REQUEST,
+                    )
+                except OSError:
+                    self._send(
+                        application.password_change_page("Speichern fehlgeschlagen."),
+                        HTTPStatus.BAD_REQUEST,
+                    )
+                return
+            if path in {
+                "/config/preview",
+                "/config/apply",
+                "/config/cancel",
+                "/config/backup",
+            }:
                 try:
                     values = self._form_values(MAX_CONFIG_BYTES * 3 + 4096)
                     application.validate_csrf(values.get("csrf_token", [""])[0])
@@ -328,31 +416,64 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                         name = values.get("backup_id", [""])[0]
                         payload = values.get("config_data", [""])[0]
                         if bool(name) == bool(payload):
-                            raise ConfigError("Genau eine Sicherungsdatei oder gespeicherte Sicherung auswählen")
-                        candidate = application.config_store.backup_candidate(name) if name else import_config(payload.encode("utf-8"))
+                            raise ConfigError(
+                                "Genau eine Sicherungsdatei oder gespeicherte Sicherung auswählen"
+                            )
+                        candidate = (
+                            application.config_store.backup_candidate(name)
+                            if name
+                            else import_config(payload.encode("utf-8"))
+                        )
                         token, preview = application.prepare_config(candidate)
                         self._send(application.config_preview_page(token, preview))
                         return
                     if path == "/config/apply":
-                        application.apply_config_plan(values.get("token", [""])[0], values.get("confirmed", [""])[0] == "yes")
+                        application.apply_config_plan(
+                            values.get("token", [""])[0],
+                            values.get("confirmed", [""])[0] == "yes",
+                        )
                     elif path == "/config/cancel":
                         application.cancel_config_plan(values.get("token", [""])[0])
                     else:
                         application.config_store.backup()
                     self.send_response(HTTPStatus.SEE_OTHER)
-                    self.send_header("Location", "/config-backup?saved=1" if path == "/config/apply" else "/config-backup")
+                    self.send_header(
+                        "Location",
+                        "/config-backup?saved=1"
+                        if path == "/config/apply"
+                        else "/config-backup",
+                    )
                     self._security_headers()
                     self.end_headers()
                 except ConfigConflict as exc:
-                    self._send(application.config_backup_page(str(exc)), HTTPStatus.CONFLICT)
+                    self._send(
+                        application.config_backup_page(str(exc)), HTTPStatus.CONFLICT
+                    )
                 except PermissionError:
-                    self._send(application.config_backup_page("Anfrage nicht autorisiert oder Dateizugriff verweigert; nicht angewendet."), HTTPStatus.FORBIDDEN)
+                    self._send(
+                        application.config_backup_page(
+                            "Anfrage nicht autorisiert oder Dateizugriff verweigert; nicht angewendet."
+                        ),
+                        HTTPStatus.FORBIDDEN,
+                    )
                 except OverflowError:
-                    self._send(application.config_backup_page("Import ist zu groß; nicht angewendet."), HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+                    self._send(
+                        application.config_backup_page(
+                            "Import ist zu groß; nicht angewendet."
+                        ),
+                        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    )
                 except (ConfigError, ValueError) as exc:
-                    self._send(application.config_backup_page(str(exc)), HTTPStatus.BAD_REQUEST)
+                    self._send(
+                        application.config_backup_page(str(exc)), HTTPStatus.BAD_REQUEST
+                    )
                 except OSError:
-                    self._send(application.config_backup_page("Dateizugriff fehlgeschlagen; bestehende Konfiguration bleibt erhalten."), HTTPStatus.BAD_REQUEST)
+                    self._send(
+                        application.config_backup_page(
+                            "Dateizugriff fehlgeschlagen; bestehende Konfiguration bleibt erhalten."
+                        ),
+                        HTTPStatus.BAD_REQUEST,
+                    )
                 return
             if path == "/system/restart":
                 try:
@@ -382,7 +503,9 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
             try:
                 values = self._form_values(MAX_FORM_BYTES)
                 application.validate_csrf(values.get("csrf_token", [""])[0])
-                expected_revision = values.get("config_revision", [application.config_store.base_revision()])[0]
+                expected_revision = values.get(
+                    "config_revision", [application.config_store.base_revision()]
+                )[0]
                 raw_config = json.loads(values.get("config_json", [""])[0])
                 if not isinstance(raw_config, dict):
                     raise ValueError("Konfiguration muss ein JSON-Objekt sein")
@@ -405,7 +528,9 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 web_password = values.get("web_password", [""])[0]
                 if web_password:
                     application.save_web_password(web_password)
-                application.config_store.apply(raw_config, expected_revision=expected_revision)
+                application.config_store.apply(
+                    raw_config, expected_revision=expected_revision
+                )
                 if supplied_password:
                     save_credentials(
                         application.credentials_path, user, supplied_password
@@ -444,7 +569,11 @@ def make_handler(application: WebApplication) -> type[BaseHTTPRequestHandler]:
                 )
 
         def log_message(self, format: str, *args: object) -> None:
-            if urlsplit(getattr(self, "path", "")).path in {"/api/health", "/api/diagnostics", "/diagnostics"}:
+            if urlsplit(getattr(self, "path", "")).path in {
+                "/api/health",
+                "/api/diagnostics",
+                "/diagnostics",
+            }:
                 return
             LOG.info("web %s", format % args)
 
@@ -460,6 +589,8 @@ def run(
     cache: str = "var/stations.json",
     departure_cache: str = "var/departures.json",
     access_token: str | None = None,
+    device_token: str | None = None,
+    must_change_password: bool = False,
     tls_certfile: str | None = None,
     tls_keyfile: str | None = None,
 ) -> None:
@@ -468,10 +599,17 @@ def run(
         raise ValueError(
             "Für einen nicht-lokalen Webhost muss HVV_WEB_PASSWORD_HASH gesetzt sein"
         )
-    if not local_host and access_token and verify_web_password("hvv-anzeiger", access_token):
+    if (
+        not local_host
+        and access_token
+        and verify_web_password("hvv-anzeiger", access_token)
+        and not must_change_password
+    ):
         raise ValueError("Vor dem LAN-Start ein individuelles Webpasswort einrichten")
     if (tls_certfile is None) != (tls_keyfile is None):
-        raise ValueError("TLS-Zertifikat und TLS-Schlüssel müssen gemeinsam gesetzt sein")
+        raise ValueError(
+            "TLS-Zertifikat und TLS-Schlüssel müssen gemeinsam gesetzt sein"
+        )
     if not local_host and not tls_certfile:
         raise ValueError(
             "Für einen nicht-lokalen Webhost muss TLS mit Zertifikat und Schlüssel aktiviert sein"
@@ -483,6 +621,11 @@ def run(
         ),
         Path(cache),
         access_token=access_token,
+        device_token=device_token or os.environ.get("HVV_ESPHOME_API_TOKEN"),
+        must_change_password=(
+            must_change_password
+            or os.environ.get("HVV_WEB_PASSWORD_MUST_CHANGE") == "1"
+        ),
         web_env_path=Path(os.environ.get("HVV_WEB_ENV_FILE", "var/web.env")),
         departure_cache_path=Path(departure_cache),
     )
@@ -505,5 +648,3 @@ def run(
         pass
     finally:
         server.server_close()
-
-

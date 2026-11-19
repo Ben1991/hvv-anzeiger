@@ -5,7 +5,7 @@ substitutions:
   friendly_name: HVV CYD Home Assistant
   board_entity: sensor.hvv_board
   display_model: ESP32-2432S028-9342
-  display_rotation: '0'
+  display_rotation: '90'
   display_color_order: rgb
 
 packages:
