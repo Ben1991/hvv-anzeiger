@@ -83,7 +83,12 @@ class WebBoundariesTest(unittest.TestCase):
         self.app.access_token = "unused"
         for value in ("!", base64.b64encode(b"\xff").decode(), "bm9jb2xvbg=="):
             self.assertFalse(self.app.authorize({"Authorization": "Basic " + value}))
-        for password in ("", "a\nb", 'a"b', "a\\b"):
+        for password in (
+            "",
+            "a" * 12 + "\nb",
+            'a' * 12 + '"',
+            "a" * 12 + "\\",
+        ):
             with self.assertRaises(ValueError):
                 self.app.save_web_password(password)
         for user, password in (("", "x"), ("x", "")):
@@ -95,6 +100,20 @@ class WebBoundariesTest(unittest.TestCase):
             with self.assertRaises(OSError):
                 web.save_credentials(self.app.credentials_path, "user", "password")
         self.assertEqual(list(self.root.glob(".credentials.env.*")), [])
+
+    def test_password_save_creates_missing_web_environment(self):
+        self.app.device_token = "synthetic-device-key-0123456789"
+        password = "new-unique-password"
+        self.app.save_web_password(password)
+
+        stored = web.load_web_environment(self.root / "web.env")
+        self.assertTrue(
+            web.verify_web_password(password, stored["HVV_WEB_PASSWORD_HASH"])
+        )
+        self.assertEqual(stored["HVV_WEB_PASSWORD_MUST_CHANGE"], "0")
+        self.assertEqual(
+            stored["HVV_ESPHOME_API_TOKEN"], "synthetic-device-key-0123456789"
+        )
 
     def test_cyd_feed_uses_independent_bearer_key(self):
         self.app.device_token = "synthetic-device-key-0123456789"
