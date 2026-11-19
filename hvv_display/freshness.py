@@ -1,6 +1,6 @@
 """Shared retry and expiry rules for hardware and browser displays."""
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 from .models import Departure
 

@@ -5,7 +5,7 @@ import os
 import stat
 import tempfile
 import unittest
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread

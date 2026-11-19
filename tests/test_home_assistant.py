@@ -1,7 +1,7 @@
 """Render the shipped YAML/Jinja; no running HA installation is claimed."""
 
 import unittest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
