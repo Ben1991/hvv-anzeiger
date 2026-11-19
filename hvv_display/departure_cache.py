@@ -13,7 +13,7 @@ import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Any
 
@@ -311,9 +311,9 @@ class DepartureCache:
             fetched_at = datetime.fromisoformat(fetched_at_raw)
             if fetched_at.tzinfo is None:
                 raise ValueError("fetch timestamp needs timezone")
-            reference = now or datetime.now(timezone.utc)
-            age = reference.astimezone(timezone.utc) - fetched_at.astimezone(
-                timezone.utc
+            reference = now or datetime.now(UTC)
+            age = reference.astimezone(UTC) - fetched_at.astimezone(
+                UTC
             )
             if age < timedelta(seconds=-5):
                 raise ValueError("cache timestamp is in the future")

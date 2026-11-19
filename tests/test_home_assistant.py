@@ -1,7 +1,7 @@
 """Render the shipped YAML/Jinja; no running HA installation is claimed."""
 
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 import yaml
@@ -78,7 +78,7 @@ class HomeAssistantDisplayTest(unittest.TestCase):
         )
 
     def test_detected_faults_clear_but_history_survives_successful_recovery(self):
-        now = datetime(2026, 11, 14, tzinfo=timezone.utc)
+        now = datetime(2026, 11, 14, tzinfo=UTC)
         self.details.recovery_started()  # Preventive reset is not an error.
         self.details.frame_succeeded(now)
         self.assertEqual(self.error_state(), "none")

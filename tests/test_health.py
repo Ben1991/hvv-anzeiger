@@ -1,7 +1,7 @@
 import io
 import json
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -23,7 +23,7 @@ class HealthTest(unittest.TestCase):
         self.directory = TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name) / "var" / "health.json"
-        self.now = datetime(2026, 10, 12, 12, 0, tzinfo=timezone.utc)
+        self.now = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
         self.values = {
             "configuration_valid": True,
             "network_connected": True,
