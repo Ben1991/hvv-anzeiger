@@ -14,6 +14,9 @@ globals:
     type: std::string
     restore_value: false
     initial_value: !secret geofox_password_cpp
+  - id: hvv_geofox_signature
+    type: std::string
+    restore_value: false
   - id: hvv_geofox_request_body
     type: std::string
     restore_value: false
@@ -92,9 +95,9 @@ interval:
                   geofox-auth-type: HmacSHA1
                   geofox-auth-user: !lambda return id(hvv_geofox_user).c_str();
                   geofox-auth-signature: !lambda |-
-                    const std::string signature = hvv::geofox_signature(
+                    id(hvv_geofox_signature) = hvv::geofox_signature(
                         id(hvv_geofox_request_body), id(hvv_geofox_password));
-                    return signature.c_str();
+                    return id(hvv_geofox_signature).c_str();
                   X-Platform: mobile
                   User-Agent: hvv-anzeiger-esp32/1.0
                 body: !lambda return id(hvv_geofox_request_body);
