@@ -3,7 +3,8 @@
 Diese Anleitung behandelt die Board-Auswahl, ESPHome-Konfiguration, Firmware,
 USB-Flashen und ESPHome-Updates für das CYD. Das Standardprofil fragt den
 Python-Hintergrunddienst direkt per HTTPS ab; **Home Assistant ist dafür nicht
-erforderlich**. Der Hintergrunddienst muss erreichbar sein. Seine Installation
+erforderlich**, und es gibt keinen automatischen Fallback zu Home Assistant.
+Der Hintergrunddienst muss erreichbar sein. Seine Installation
 steht in der Anleitung zum
 [Hintergrunddienst](home-assistant.md#1-hintergrunddienst-bereitstellen).
 Home Assistant ist eine separate optionale Funktion; dafür gibt es das Profil
@@ -183,12 +184,16 @@ erneut. Die genaue Tastenfolge kann je nach Platinenrevision abweichen.
 Prüfe am eingeschalteten Board, ob Abfahrten, Textausrichtung, Farben und
 Querformat stimmen. Das CYD fragt den Hintergrunddienst alle 15 Sekunden ab.
 
-**Wenn keine Abfahrten erscheinen:** Prüfe, ob das WLAN 2,4 GHz nutzt und der
-Hintergrunddienst erreichbar ist. Öffne `esphome/secrets.yaml` und prüfe
-`wifi_ssid`, `wifi_password`, `backend_url` und `backend_authorization`. Ändere
-falsche WLAN-Werte dort. Bei einem falschen Backendpasswort setze die
-Authorization-Zeile wie oben zurück. Flash danach mit dem Befehl aus Schritt 5
-erneut.
+**Wenn keine Abfahrten erscheinen:** Das Standardprofil `hvv-cyd` liest nur
+vom HTTPS-Backend; es verwendet Home Assistant nicht als Datenquelle. Prüfe,
+ob das WLAN 2,4 GHz nutzt und der Hintergrunddienst läuft. Die Adresse aus
+`backend_url` muss vom CYD aus per DNS auflösbar und über HTTPS erreichbar sein
+und auf `/api/esphome` enden. Öffne `esphome/secrets.yaml` und prüfe außerdem
+`wifi_ssid`, `wifi_password` und `backend_authorization`. Ein lokal auf dem PC
+funktionierender Hostname oder `localhost` ist für das CYD nicht automatisch
+erreichbar. Bei falschen WLAN-Werten korrigiere sie dort; bei einem falschen
+Backendpasswort setze die Authorization-Zeile wie oben zurück. Flash danach
+mit dem Befehl aus Schritt 5 erneut.
 
 **Wenn der Bildschirm leer bleibt oder Farben falsch sind:** Trenne das Board
 vom USB, prüfe die tatsächliche Displayrevision und passe `display_model`,

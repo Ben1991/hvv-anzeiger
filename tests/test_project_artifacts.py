@@ -419,6 +419,8 @@ class ProjectArtifactTest(unittest.TestCase):
             "py -3.12 --version",
             "git clone https://github.com/Ben1991/hvv-anzeiger.git",
             "Schritt 4: ESPHome und das CYD-Profil einrichten",
+            "keinen automatischen Fallback zu Home Assistant",
+            "vom CYD aus per DNS auflösbar",
             "Wenn kein COM-Port angeboten wird",
             "Wenn keine Abfahrten erscheinen",
             "Wenn der Bildschirm leer bleibt oder Farben falsch sind",
@@ -435,6 +437,7 @@ class ProjectArtifactTest(unittest.TestCase):
         )
 
         self.assertIn("esphomeVersion = '2026.9.1'", script)
+        self.assertIn("[string]$BoardProfile = 'hvv-cyd'", script)
         self.assertIn(
             "print(str(sys.version_info[0])+chr(46)+str(sys.version_info[1]))",
             script,
