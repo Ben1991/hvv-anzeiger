@@ -414,8 +414,8 @@ nicht auf ein Lite-Image beschränkt.
 |---|---|---|
 | Raspberry Pi OS Lite, 64 Bit, Trixie | empfohlen | aktuelles schlankes Zielsystem für Raspberry Pi Zero 2 W und die unten aufgeführten 64-Bit-Modelle |
 | Raspberry Pi OS Lite, 32 Bit, Trixie | unterstützt | sinnvoll, wenn ein kleinerer Speicherbedarf wichtiger ist; auf den unten aufgeführten Modellen muss `uname -m` den Wert `armv7l` liefern |
-| Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm | unterstützt | weiterhin geeignet, solange Raspberry Pi die jeweilige Ausgabe mit Sicherheitsupdates versorgt |
-| Raspberry Pi OS mit Desktop oder Full, Trixie beziehungsweise Bookworm | unterstützt | technisch derselbe Installationsweg; Desktop und Zusatzprogramme werden für die Anzeige nicht benötigt |
+| Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm | nicht unterstützt | die mitgelieferte Python-Version ist älter als 3.13; der Installer richtet keinen zusätzlichen Interpreter ein |
+| Raspberry Pi OS mit Desktop oder Full, Trixie | unterstützt | technisch derselbe Installationsweg; Desktop und Zusatzprogramme werden für die Anzeige nicht benötigt |
 | Raspberry Pi OS Bullseye oder älter | nicht unterstützt | die mitgelieferte Python-Version erfüllt die Mindestanforderung Python 3.13 nicht |
 | Ubuntu, allgemeines Debian und andere Distributionen | nicht unterstützt | der Installer setzt die Raspberry-Pi-spezifischen Werkzeuge, Gruppen und SPI-Konfiguration voraus |
 
@@ -460,7 +460,7 @@ Installationen sind als
 Pinbelegung, Spannungsversorgung, Hintergrundbeleuchtung und Farbreihenfolge
 müssen zum konkreten Display-Modul passen.
 
-Die Installation wurde dabei auf Raspberry Pi OS Bookworm 64 Bit geprüft.
+Die ursprüngliche Installation wurde auf Raspberry Pi OS Bookworm 64 Bit geprüft. Die aktuelle Version benötigt Python 3.13 oder neuer und unterstützt daher nur Trixie.
 
 ## Geofox-Zugang beantragen
 

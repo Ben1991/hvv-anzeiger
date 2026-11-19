@@ -116,7 +116,6 @@ class ProjectArtifactTest(unittest.TestCase):
         for expected in (
             "Raspberry Pi OS Lite, 64 Bit, Trixie",
             "Raspberry Pi OS Lite, 32 Bit, Trixie",
-            "Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm",
             "Raspberry Pi Zero 2 W",
             "Raspberry Pi 3A+, 3B und 3B+",
             "Raspberry Pi 4B und Raspberry Pi 400",
@@ -130,6 +129,10 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn(
             "Raspberry Pi OS (Lite oder Desktop)",
             installer,
+        )
+        self.assertIn(
+            "| Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm | nicht unterstützt",
+            readme,
         )
         self.assertIn("sys.version_info < (3, 13)", installer)
         self.assertIn("Python 3.13 oder neuer ist erforderlich", installer)
