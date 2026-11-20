@@ -653,6 +653,8 @@ Abfahrt gleichzusetzen.
 
 ## Praxisbeispiel
 
+### Raspberry Pi
+
 Die fertige Anzeige im Einsatz auf einem Raspberry Pi mit 2,2-Zoll-Display:
 
 ![Praxisbeispiel der fertigen HVV-Abfahrtsanzeige](docs/practice-example.png)
@@ -660,6 +662,13 @@ Die fertige Anzeige im Einsatz auf einem Raspberry Pi mit 2,2-Zoll-Display:
 Die Hülle für den Raspberry Pi und das Display ist 3D-gedruckt und kann bei
 [3DprintsByBen auf Etsy](https://3dprintsbybenstudio.etsy.com) bestellt werden.
 Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
+
+### ESP32 im 3D-gedruckten Gehäuse
+
+Die HVV-Abfahrtsanzeige läuft hier auf einem ESP32-Display im 3D-gedruckten Gehäuse.
+Die Einrichtung ist in der [ESP32-Anleitung](docs/esp32-setup.md) beschrieben.
+
+![HVV-Abfahrtsanzeige auf einem ESP32-Display im schwarzen 3D-gedruckten Gehäuse](docs/esp32-practice-example.jpg)
 
 > Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
 > offizielles Produkt von hvv, HOCHBAHN oder Geofox.
@@ -1649,8 +1658,7 @@ Es werden keine Diagnoseberichte automatisch übertragen.
 
 ## Ressourcen- und Stromverbrauch
 
-Die folgenden Werte gelten für das Raspberry-Pi-Referenzsetup. Sie lassen
-sich nicht auf ESP32 oder Containerhosts übertragen.
+Die Angaben zum Ressourcenbedarf beziehen sich auf das Raspberry-Pi-Referenzsetup.
 
 ### Erwarteter Ressourcenbedarf
 
@@ -1667,6 +1675,8 @@ ist normalerweise keine aktive Kühlung erforderlich. In einem engen Gehäuse
 sollte die Temperatur nach einigen Stunden geprüft werden.
 
 ### Erwarteter Stromverbrauch
+
+#### Raspberry Pi Zero 2 W mit Display
 
 | Messpunkt | Erwarteter Verbrauch |
 |---|---:|
@@ -1692,6 +1702,18 @@ und
 Ein USB-Leistungsmessgerät zwischen Netzteil und Raspberry Pi liefert den
 verlässlichen Wert für das eigene Gerät. Ein Steckdosenmessgerät erfasst
 zusätzlich die Verluste des Netzteils.
+
+#### ESP32 mit integriertem 2,8-Zoll-Display (CYD)
+
+Für das CYD-Board (ESP32-2432S028) mit aktivem WLAN und eingeschalteter
+Hintergrundbeleuchtung sind **etwa 0,5–1,0 W am USB-Eingang** ein grober
+Planungswert. Die Schätzung setzt bei 5 V eine durchschnittliche Stromaufnahme
+von 100–200 mA voraus. Displayhelligkeit, Boardvariante und WLAN-Aktivität
+beeinflussen den tatsächlichen Verbrauch.
+
+Im Dauerbetrieb entspricht das etwa **0,36–0,72 kWh pro Monat** (30 Tage)
+oder **4,4–8,8 kWh pro Jahr**. Netzteilverluste und der Verbrauch des Hosts,
+auf dem der Python-Hintergrunddienst läuft, kommen hinzu.
 
 ### Spart der Nachtmodus Strom?
 
