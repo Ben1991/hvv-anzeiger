@@ -71,6 +71,14 @@ jobs:
           /tmp/test-board /tmp/hvv-snapshot.json
           g++ -std=c++17 -Wall -Wextra -Werror -I tests/firmware -I /tmp/arduinojson/src tests/firmware/test_geofox.cpp -o /tmp/test-geofox
           /tmp/test-geofox
+          python tests/firmware/visual_board.py /tmp/arduinojson/src --output /tmp/hvv-visual --check-esphome-fonts
+      - name: Upload ESP32 visual comparison
+        if: always() && matrix.firmware == 'hvv-display.yaml'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: esp32-pi-visual-comparison
+          path: /tmp/hvv-visual/*.png
+          if-no-files-found: ignore
 
   backend-container:
     name: Backend container

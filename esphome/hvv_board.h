@@ -18,6 +18,17 @@ struct Row {
   uint32_t background = 0, foreground = 0xffffff;
 };
 
+// Fonts live in flash; the registry contains only pointers, never a framebuffer.
+struct Fonts {
+  std::array<esphome::font::Font *, 26> regular{}, bold{};
+  esphome::font::Font *get(int size, bool strong,
+                           esphome::font::Font *fallback) const {
+    auto *font = (strong ? bold : regular)[size];
+    return font ? font : fallback;
+  }
+};
+inline Fonts board_fonts;
+
 class Board {
  public:
   const std::string &state() const { return state_; }
@@ -81,10 +92,11 @@ class Board {
     return true;
   }
 
-  void tick(uint32_t now, int64_t clock_epoch) {
+  void tick(uint32_t now, int64_t clock_epoch, const char *local_clock = nullptr) {
     if (clock_epoch > 0) {
       clock_epoch_ = clock_epoch;
       clock_tick_ = now;
+      if (local_clock) clock_label_ = local_clock;
     }
   }
 
@@ -130,76 +142,127 @@ class Board {
             esphome::font::Font *small, uint32_t now, bool enabled) const {
     using namespace esphome;
     const Color white(255, 255, 255), muted(185, 192, 199), red(213, 43, 47);
-    it.fill(Color::BLACK);
-    if (!enabled || night(now)) return;
+    it.fill(Color(9, 11, 13));
+    if (!enabled || night(now)) { it.fill(Color::BLACK); return; }
     const int w = it.get_width(), h = it.get_height();
-    it.filled_rectangle(0, 0, w, 25, Color(0, 60, 120));
-    it.print(5, 3, font, white, "HVV Abfahrten");
+    auto face = [&](int size, bool bold = false) {
+      return board_fonts.get(size, bold, size <= 12 ? small : font);
+    };
+    auto width = [](font::Font *f, const std::string &text) {
+      int w, x, baseline, height;
+      f->measure(text.c_str(), &w, &x, &baseline, &height);
+      return w;
+    };
+    auto fit = [&](const std::string &text, int maximum, int size, int minimum,
+                   bool bold = false) {
+      while (size > minimum && width(face(size, bold), text) > maximum) --size;
+      return size;
+    };
+    auto shorten = [&](std::string text, int maximum, font::Font *f) {
+      if (width(f, text) <= maximum) return text;
+      while (!text.empty()) {
+        size_t end = text.size() - 1;
+        while (end && (static_cast<unsigned char>(text[end]) & 0xc0) == 0x80) --end;
+        text.resize(end);  // Remove an entire UTF-8 codepoint, never half an umlaut.
+        if (width(f, text + "…") <= maximum) return text + "…";
+      }
+      return std::string("…");
+    };
+    it.filled_rectangle(0, 0, w, 42, Color(0, 60, 120));
+    it.filled_rectangle(0, 38, std::min(w, 211), 5, Color(29, 117, 184));
+    const int title_space = std::max(1, w - 30 - width(face(25, true), clock_label_));
+    it.print(10, 8, face(fit("HVV  ABFAHRT", title_space, 19, 10, true), true),
+             white, "HVV  ABFAHRT");
+    it.print(w - 9, 5, face(25, true), white, display::TextAlign::TOP_RIGHT,
+             clock_label_.c_str());
     if (!generated_ || !clock_epoch_ || expired(now)) {
       const char *text = !generated_ ? "Warte auf Abfahrtsdaten" :
           !clock_epoch_ ? "Warte auf Systemzeit" : "Letzter Stand zu alt";
-      it.print(5, 40, font, muted, text);
-      it.print(5, h - 18, small, muted, "WLAN / Geofox prüfen");
+      auto *f = face(fit(text, w - 16, 22, 16, true), true);
+      it.print(w / 2, std::min(102, h - 30), f, muted,
+               display::TextAlign::TOP_CENTER, text);
       return;
     }
-    const int shown = std::min<int>(count_, std::min(5, (h - 47) / 36));
-    const int row_height = shown > 0 ? (h - 47) / shown : 36;
+    const int shown = std::min<int>(count_, std::min(5, (h - 42) / 39));
     for (int i = 0; i < shown; ++i) {
       const Row &r = rows_[i];
-      const int y = 28 + i * row_height;
+      const int y = 42 + i * 39;
       const Color bg((r.background >> 16) & 255, (r.background >> 8) & 255, r.background & 255);
       const Color fg((r.foreground >> 16) & 255, (r.foreground >> 8) & 255, r.foreground & 255);
-      if (r.shape == "circle" || r.shape == "rounded") {
-        it.filled_rectangle(16, y + 1, 28, 26, bg);
-        it.filled_circle(16, y + 14, 13, bg);
-        it.filled_circle(44, y + 14, 13, bg);
-      } else if (r.shape == "pointed") {
-        it.filled_rectangle(10, y + 1, 40, 26, bg);
-        it.filled_triangle(3, y + 27, 10, y + 1, 10, y + 27, bg);
-        it.filled_triangle(50, y + 1, 57, y + 1, 50, y + 27, bg);
-      } else {
-        it.filled_rectangle(3, y + 1, 54, 26, bg);
-      }
-      it.start_clipping(3, y, 57, y + 29);
-      it.print(30, y + 4, font, fg, display::TextAlign::TOP_CENTER, r.line.c_str());
-      it.end_clipping();
-      it.start_clipping(62, y, w - 83, y + 20);
-      it.print(62, y, font, white, r.destination.c_str());
-      it.end_clipping();
-      char detail[96];
-      if (r.station.empty()) {
-        std::snprintf(detail, sizeof(detail), "%s", r.time.c_str());
-      } else {
-        std::snprintf(detail, sizeof(detail), "%s  %s", r.station.c_str(), r.time.c_str());
-      }
-      if (r.delay) {
-        const size_t used = std::strlen(detail);
-        if (used < sizeof(detail)) {
-          const int delay_minutes = static_cast<int>(std::ceil(r.delay / 60.0));
-          std::snprintf(detail + used, sizeof(detail) - used, "  %s%d min",
-                        r.delay > 0 ? "+" : "", delay_minutes);
+      if (r.shape == "circle") {
+        // True ellipse, including on drivers without a native ellipse primitive.
+        for (int dy = 0; dy <= 27; ++dy) {
+          const double v = (dy - 13.5) / 13.5;
+          const int radius = static_cast<int>(29 * std::sqrt(std::max(0.0, 1 - v * v)));
+          it.horizontal_line(38 - radius, y + 6 + dy, 2 * radius + 1, bg);
         }
+      } else if (r.shape == "pointed") {
+        it.filled_triangle(17, y + 6, 67, y + 6, 59, y + 33, bg);
+        it.filled_triangle(17, y + 6, 59, y + 33, 9, y + 33, bg);
+      } else if (r.shape == "rounded") {
+        it.filled_rectangle(14, y + 6, 49, 28, bg);
+        it.filled_rectangle(9, y + 11, 59, 18, bg);
+        for (int x : {14, 62}) for (int yy : {y + 11, y + 28})
+          it.filled_circle(x, yy, 5, bg);
+      } else {
+        it.filled_rectangle(9, y + 6, 59, 28, bg);
       }
-      it.start_clipping(62, y + 19, w - 83, y + 35);
-      it.print(62, y + 19, small, muted, detail);
+      const int logo_size = fit(r.line, 48, r.line.size() <= 3 ? 18 : 15, 10, true);
+      auto *logo = face(logo_size, true);
+      const auto logo_text = shorten(r.line, 48, logo);
+      // Font coordinates use the ascender as origin, just like Pillow's default.
+      it.start_clipping(9, y + 6, 68, y + 34);
+      it.print(38, y + 6 + (27 - logo_size * 3 / 4) / 2 - 2,
+               logo, fg, display::TextAlign::TOP_CENTER, logo_text.c_str());
       it.end_clipping();
+      const bool station = !r.station.empty();
+      if (station) {
+        const Color station_blue(0, 60, 120);
+        it.filled_rectangle(78, y + 10, 13, 18, station_blue);
+        it.filled_rectangle(75, y + 13, 19, 12, station_blue);
+        for (int xx : {78, 90}) for (int yy : {y + 13, y + 24})
+          it.filled_circle(xx, yy, 3, station_blue);
+        auto *sf = face(10, true);
+        const auto label = shorten(r.station, 16, sf);
+        it.print(84, y + 14, sf, white, display::TextAlign::TOP_CENTER, label.c_str());
+      }
       char time[16];
       format_time(r, now, time, sizeof(time));
-      it.print(w - 3, y + 3, font, r.cancelled ? red : white,
+      auto *tf = face(r.cancelled ? 18 : 17, true);
+      const int x = station ? 99 : 76;
+      const int available = std::max(1, std::min(station ? 143 : 164,
+                                               w - 12 - width(tf, time) - x));
+      auto *df = face(fit(r.destination, available, 18, 13));
+      const auto destination = shorten(r.destination, available, df);
+      it.start_clipping(x, y, std::max(x + 1, w - 8 - width(tf, time)), y + 37);
+      it.print(x, y + 7, df, white, destination.c_str());
+      it.end_clipping();
+      it.print(w - 8, y + 5, tf, r.cancelled ? red : white,
                display::TextAlign::TOP_RIGHT, time);
-      it.horizontal_line(3, y + row_height - 2, w - 6, Color(48, 55, 62));
+      // departure_epoch/time already include the forecast; never add delay twice.
+      if (mode_ == "countdown")
+        it.print(w - 8, y + 25, face(10), muted,
+                 display::TextAlign::TOP_RIGHT, r.time.c_str());
+      it.horizontal_line(8, y + 38, w - 16, Color(72, 81, 90));
     }
-    if (!shown) it.print(5, 40, font, muted, "Keine passenden Abfahrten");
-    const char *status = static_cast<uint32_t>(now - received_) > 45000 ?
-        "Verbindung fehlt – letzter Stand" : state_ == "stale" ?
-        "Veraltete Daten – letzter Stand" : "Echtzeitprognose";
-    it.print(5, h - 17, small, has_problem(now) ? red : muted, status);
+    if (!shown) {
+      const char *message = "Keine passenden Abfahrten";
+      it.print(w / 2, std::min(102, h - 30), face(fit(message, w - 24, 22, 16, true), true),
+               white, display::TextAlign::TOP_CENTER, message);
+      if (h >= 160) it.print(42, 136, face(14), muted, "Nächster Versuch automatisch");
+    }
+    if (has_problem(now)) {
+      it.filled_rectangle(0, h - 14, w, 14, red);
+      const char *status = static_cast<uint32_t>(now - received_) > 45000 ?
+          "Verbindung fehlt – letzter Stand" : "Veraltete Daten – letzter Stand";
+      it.print(7, h - 14, face(fit(status, w - 14, 10, 8, true), true), white, status);
+    }
   }
 
  private:
   std::array<Row, 5> rows_{};
   size_t count_ = 0;
-  std::string state_, mode_, unit_;
+  std::string state_, mode_, unit_, clock_label_ = "--:--";
   int64_t generated_ = 0, clock_epoch_ = 0;
   uint32_t received_ = 0, clock_tick_ = 0;
   int ttl_ = 0;

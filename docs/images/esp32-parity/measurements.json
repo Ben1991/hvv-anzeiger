@@ -1,0 +1,17 @@
+{
+  "mockup": {
+    "mean_absolute_rgb_error": 9.517
+  },
+  "checked-in-mockup": {
+    "mean_absolute_rgb_error": 0.219
+  },
+  "delay-cancel": {
+    "mean_absolute_rgb_error": 3.324
+  },
+  "empty": {
+    "mean_absolute_rgb_error": 4.494
+  },
+  "absolute": {
+    "mean_absolute_rgb_error": 8.353
+  }
+}
