@@ -14,16 +14,32 @@
 | `V2.5.0` (veröffentlicht am 14. November 2026) | Ja |
 | `V2.6.0` (veröffentlicht am 14. November 2026) | Ja |
 | `V2.7.0` (veröffentlicht am 17. November 2026) | Ja |
+| `V3.0.0` | Ja |
 | `main` (Entwicklungsstand) | Ja, sofern nicht anders angegeben |
 
-V2.7.0 ist die aktuell veröffentlichte Version und entspricht dem unveränderlichen
-Git-Tag [`V2.7.0`](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V2.7.0).
+Die aktuelle Veröffentlichung ist
+[`V3.0.0`](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V3.0.0).
 V1 bleibt als nicht mehr unterstützte Veröffentlichung dokumentiert.
 Sicherheitskorrekturen werden für die in der Tabelle unterstützten Versionen und
 den aktuellen Stand von `main` bereitgestellt, soweit die jeweilige Korrektur auf
 diese Versionen anwendbar ist.
 Ältere Commits, Forks und lokal veränderte Installationen werden nicht separat
 unterstützt.
+
+## Abgedeckte Systeme
+
+Die Richtlinie umfasst den Python-Dienst auf Raspberry Pi und Linux-/NAS-Hosts,
+die ESPHome-Firmware für CYD und externe Displays sowie die mitgelieferte
+HVV-Integration und das REST-Paket für Home Assistant.
+
+- Der Pi-/Container-Webdienst schützt lokale Konfiguration und Verwaltungszugriffe
+  mit Authentifizierung und TLS. Home Assistant prüft das Zertifikat des Backends.
+- Das eigenständige CYD ruft Geofox per HTTPS mit Zertifikatsprüfung ab. Die
+  lokale ESPHome-API und OTA-Updates verwenden die konfigurierte Verschlüsselung.
+- Geofox- und WLAN-Zugangsdaten, API-Schlüssel und TLS-Privatschlüssel gehören
+  ausschließlich in die dafür vorgesehenen lokalen Dateien. Fehler, durch die
+  Geheimnisse offengelegt oder Authentifizierung, TLS-Prüfung oder
+  Firmware-Update-Schutz umgangen werden können, bitte vertraulich melden.
 
 ## Sicherheitslücke vertraulich melden
 

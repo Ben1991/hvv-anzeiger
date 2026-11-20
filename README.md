@@ -1803,6 +1803,23 @@ Geheimnisse veröffentlichen.
 
 ## Release Notes
 
+### Release V3.0.0 – eigenständige ESP32-Unterstützung
+
+- Das Standardprofil `hvv-cyd` ruft Geofox direkt ab und rendert Abfahrten
+  auf dem CYD. Home Assistant kann Status und Abfahrten über ESPHome übernehmen.
+- Fünf ESPHome-Profile decken CYD, externe SPI-Displays und die Datenwege
+  über Geofox, Home Assistant oder das HTTPS-Backend ab.
+- Die CYD-Anzeige übernimmt das Pi-Layout mit Linienlogos, fünf Abfahrtszeilen
+  und Hinweisen zu Ausfällen und veralteten Daten.
+- Das Setup führt durch die lokale Konfiguration, prüft Geofox-Eingaben vor dem
+  Build und unterstützt Updates per USB oder WLAN.
+- Die native HVV-Integration erkennt das Pi-/Container-Backend über mDNS.
+  Der Python-Dienst benötigt jetzt Python 3.13 oder neuer.
+
+[System auswählen und aktualisieren](#hier-anfangen) ·
+[Vorhandenes CYD migrieren](docs/esp32-setup.md#vorhandenes-cyd-vom-pi-backend-umstellen) ·
+[Vollständige Release Notes](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V3.0.0)
+
 ### Release V2.7.0 – robuster Kaltstart und sichere Wiederherstellung
 
 V2.7.0 stärkt den Start nach Stromunterbrechungen und macht Installation,
