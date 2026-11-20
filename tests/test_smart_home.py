@@ -44,6 +44,12 @@ class SmartHomeTest(unittest.TestCase):
         self.resolve = patch("hvv_display.web.resolve_stations", return_value=())
         self.resolve.start()
         self.addCleanup(self.resolve.stop)
+        # These tests cover payload behavior, not the runner's external NTP state.
+        self.time_sync = patch(
+            "hvv_display.web.time_is_synchronized", return_value=True
+        )
+        self.time_sync.start()
+        self.addCleanup(self.time_sync.stop)
         self.clock = patch("hvv_display.web.datetime")
         self.fake_clock = self.clock.start()
         self.fake_clock.now.return_value = self.now
