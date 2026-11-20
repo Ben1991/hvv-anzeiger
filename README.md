@@ -15,12 +15,14 @@ Wähle den Weg, der zu deinem Gerät passt.
 - **[Home Assistant mit Raspberry Pi](#home-assistant-mit-raspberry-pi)** – bindet einen bereits laufenden Pi über die HVV-Integration ein.
 - **[Home Assistant mit ESP32](#home-assistant-mit-esp32)** – bindet ein bereits laufendes CYD über die eingebaute ESPHome-Integration ein.
 
-| System | Einrichtung | Konfiguration | Updates |
+| System | Einrichtung | Konfiguration im laufenden Betrieb | Update |
 |---|---|---|---|
-| Raspberry Pi + ILI | [Pi installieren](#raspberry-pi-mit-ili-display-einrichten) | [Weboberfläche und Haltestellen](#konfigurieren) | [Pi-Anwendung aktualisieren](#anwendung-aktualisieren) |
-| ESP32 + CYD | [CYD einrichten](#esp32-schritt-für-schritt) | [WLAN und Geofox](docs/esp32-setup.md#2-profil-zugangsdaten-und-haltestellen), [Haltestellen und Linien](docs/esp32-stations.md) | [Firmware per USB oder OTA aktualisieren](docs/esp32-setup.md#firmware-aktualisieren) |
-| Backend im Linux-/NAS-Container | [Container einrichten](docs/home-assistant.md#container-auf-linuxnas) | [Konfiguration im Datenverzeichnis](docs/home-assistant.md#container-auf-linuxnas) | [Container aktualisieren](docs/home-assistant.md#python-hintergrunddienst-im-container) |
-| Home Assistant | [Integration auswählen](#home-assistant-optional-einrichten) | [Pi-Integration](#home-assistant-mit-raspberry-pi), [ESPHome-Integration](#home-assistant-mit-esp32) | [Integration aktualisieren](docs/home-assistant.md#updates-für-hintergrunddienst-und-home-assistant) |
+| Raspberry Pi + ILI | [Pi installieren](#raspberry-pi-mit-ili-display-einrichten) | Haltestellen, Linien und Anzeige unter **Einstellungen** im [Pi-Webinterface](#konfigurieren) speichern. | Im ursprünglichen Checkout auf dem Pi [`./update.sh` ausführen](#anwendung-aktualisieren). |
+| ESP32 + CYD | [CYD einrichten](#esp32-schritt-für-schritt) | [Lokales ESPHome-Profil und Secrets bearbeiten](docs/esp32-setup.md#laufendes-cyd-konfigurieren), dann Firmware neu bauen und übertragen. | Projektdateien aktualisieren und [Firmware per WLAN (OTA) oder USB übertragen](docs/esp32-setup.md#firmware-aktualisieren). |
+| Backend im Linux-/NAS-Container | [Container einrichten](docs/home-assistant.md#container-auf-linuxnas) | [Weboberfläche oder `data/config.json` nutzen](docs/home-assistant.md#laufenden-container-konfigurieren). | Auf dem Host [Repository aktualisieren, Image bauen und Container ersetzen](docs/home-assistant.md#python-hintergrunddienst-im-container). |
+| Home Assistant mit Pi-/Container-Backend | [HVV-Integration hinzufügen](docs/home-assistant.md#als-gerät-automatisch-erkennen) | HTTPS-Adresse und Webpasswort in HA einrichten. Haltestellen und Linien im Backend ändern. | [HVV-Integration ersetzen und HA neu starten](docs/home-assistant.md#native-hvv-integration-aktualisieren). |
+| Home Assistant mit REST-Paket | [YAML-Paket einrichten](docs/home-assistant.md#alternative-yaml-paket-und-rest-sensor) | Backend-Adresse und Webzugang in HA unter `/config/secrets.yaml` pflegen. Haltestellen und Linien im Backend ändern. | [Paketdatei abgleichen, HA-Konfiguration prüfen und HA neu starten](docs/home-assistant.md#home-assistant-paket-aktualisieren). |
+| Home Assistant mit ESP32 | [ESPHome-Gerät hinzufügen](#home-assistant-mit-esp32) | Geräteadresse und API-Schlüssel in HA hinterlegen. Haltestellen und Linien im CYD-Profil ändern und flashen. | [ESPHome-Integration mit Home Assistant aktualisieren](docs/home-assistant.md#integrierte-esphome-anbindung-aktualisieren). Die Gerätefirmware separat flashen. |
 
 Für beide Anzeigen brauchst du [Geofox-Zugangsdaten](#geofox-zugang-beantragen).
 Beantrage den Zugang zuerst, falls du ihn noch nicht hast. Home Assistant und

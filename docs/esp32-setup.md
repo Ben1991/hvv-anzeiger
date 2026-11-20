@@ -311,6 +311,20 @@ Warnungen bei veralteten oder abgelaufenen Daten bleiben erhalten.
 
 [Reproduzierbarer visueller Vergleich und Testgrenzen](esp32-display-parity.md).
 
+## Laufendes CYD konfigurieren
+
+1. Sichere `esphome/hvv-cyd.local.yaml` und `esphome/secrets.yaml` privat.
+2. Ändere [Haltestellen, Linien und Richtungen](esp32-stations.md) in
+   `esphome/hvv-cyd.local.yaml` unter `hvv_stations_json`. Dort kannst du auch
+   [Displaymodell und Rotation](#hardware-displayrevision-und-pinbelegung)
+   anpassen. WLAN- und Geofox-Zugangsdaten stehen in `esphome/secrets.yaml`.
+3. Validiere das lokale Profil, baue die Firmware und übertrage sie wie beim
+   [Flashen unter Windows](#3-validieren-bauen-und-übertragen) oder bei der
+   [manuellen Einrichtung](#manuelle-installation-oder-esphome-device-builder).
+   Nutze USB, wenn das CYD für ein WLAN-Update nicht erreichbar ist.
+4. Prüfe am Display und über die [ESPHome-API](#4-funktion-am-gerät-prüfen),
+   ob die gewünschten Abfahrten erscheinen.
+
 ## Firmware aktualisieren
 
 ### ESPHome Device Builder

@@ -146,6 +146,16 @@ HVV_WEB_DISCOVERY_HOSTNAME=hvv.example.net
 Home Assistant muss diesen Namen im lokalen DNS zur Adresse des Containerhosts
 auflösen können. Das Passwort wird nicht über mDNS übertragen.
 
+### Laufenden Container konfigurieren
+
+Öffne die HTTPS-Weboberfläche und speichere Haltestellen, Linien und Richtungen
+unter **Einstellungen**. Dort kannst du auch die Geofox-Zugangsdaten pflegen.
+Für eine manuelle Änderung bearbeite `data/config.json` mit einem Benutzer,
+der Schreibzugriff auf das Datenverzeichnis hat. Starte anschließend im
+Repository den Dienst mit `docker compose restart hvv` neu. Prüfe die
+Abfahrten in der Weboberfläche und bei Bedarf das Protokoll mit
+`docker compose logs --tail=50 hvv`.
+
 ## 2. Home Assistant einrichten
 
 ### Als Gerät automatisch erkennen
