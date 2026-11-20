@@ -262,7 +262,7 @@ diese Werte nicht. Das Profil `hvv-cyd` fragt Geofox direkt ab und hält seine
 Geofox-Zugangsdaten lokal.
 
 Im ESPHome Device Builder kopierst du den kompletten Ordner `esphome/` in den
-Konfigurationsordner, einschließlich `hvv_board.h`, `boards/` und `packages/`.
+Konfigurationsordner, einschließlich `hvv_board.h`, `hvv_geofox.h`, `boards/`, `packages/` und `fonts/`.
 Der Header muss neben den Profil-YAML-Dateien liegen. Geheime Werte aus
 `secrets.example.yaml` in eine eigene `secrets.yaml` übernehmen; vorhandene
 Geheimnisse zusammenführen statt überschreiben. Anschließend Profil prüfen und
@@ -329,14 +329,29 @@ möglich. Den ESP32 in HA unter Einstellungen → Geräte & Dienste → ESPHome
 hinzufügen und den individuellen API-Schlüssel angeben. `board_entity` muss
 der REST-Entität entsprechen. Die HA-Textsensor-Komponente braucht diese
 Registrierung, damit HA das Attribut übermittelt.
-Roboto wird beim Firmwarebau von Google Fonts heruntergeladen; das Gerät
+Die DejaVu-Schriften liegen samt Lizenz im Repository; das Gerät
 benötigt dafür im Betrieb keinen Zugriff.
+
+## Darstellung wie auf dem Pi
+
+Bei 320 × 240 Pixeln nutzt die Firmware das Pi-Layout: Kopfzeile mit lokaler Uhr,
+fünf feste Abfahrtszeilen, dieselben Linienfarben und Logoformen, Stationskürzel
+und rechts Countdown plus absolute Abfahrtszeit. Im Modus `departure_time` wird
+rechts nur die absolute Zeit dargestellt. Eine Verspätung steckt bereits in der
+prognostizierten Abfahrtszeit; es erscheint wie auf dem Pi keine zusätzliche
+`+0 min`-/`+N min`-Zeile. Ausfälle bleiben rot mit `AUS` markiert.
+
+Die Schriften werden aus `fonts/` eingebunden. Diesen Ordner auch bei manuellen
+Updates im Device Builder übernehmen. Nachtabschaltung, Display-Schalter und
+Warnungen bei veralteten oder abgelaufenen Daten bleiben erhalten.
+
+[Reproduzierbarer visueller Vergleich und Testgrenzen](esp32-display-parity.md).
 
 ## Firmware aktualisieren
 
 ### ESPHome Device Builder
 
-Im Device Builder `hvv_board.h`, `boards/` und `packages/` aus dem aktualisierten
+Im Device Builder `hvv_board.h`, `hvv_geofox.h`, `boards/`, `packages/` und `fonts/` aus dem aktualisierten
 Repository übernehmen. Eigene Haupt-YAML, `secrets.yaml`, Gerätename, GPIOs und
 API-Schlüssel erhalten. Versionshinweise auf Änderungen am Beispielprofil prüfen.
 Das Profil validieren und über **Installieren → Drahtlos** neu bauen und übertragen.

@@ -31,8 +31,15 @@ int main(int argc, char **argv) {
   root["departures"][0]["shape"] = original_shape;
   board.draw(display, &font, &font, 0, true);
   assert(contains(display, "Warte auf Systemzeit"));
-  board.tick(0, epoch);
+  board.tick(0, epoch, "23:59");
   board.draw(display, &font, &font, 0, true);
+  assert(contains(display, "23:59"));
+  // Local civil time comes from ESPTime, including midnight and DST changes.
+  board.tick(0, epoch, "00:00");
+  board.tick(0, 0, "invalid");  // A failed time update cannot replace the clock.
+  board.draw(display, &font, &font, 0, true);
+  assert(contains(display, "00:00"));
+  assert(!contains(display, "invalid"));
   assert(contains(display, "sofort"));
   assert(contains(display, "AUS"));
   assert(!board.has_problem(0));
@@ -61,6 +68,7 @@ int main(int argc, char **argv) {
   hvv::Row row;
   row.departure = epoch + 120;
   row.time = "12:02";
+  row.delay = 120;  // departure is already predicted: do not add another 2 min.
   for (const char *unit : {"min", "m", "none"}) {
     hvv::Board b;
     root["minute_unit"] = unit;

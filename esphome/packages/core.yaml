@@ -2,6 +2,33 @@ esphome:
   name: ${name}
   friendly_name: ${friendly_name}
   min_version: 2026.9.1
+  on_boot:
+    priority: 800
+    then:
+      - lambda: |-
+          hvv::board_fonts.regular[10] = id(hvv_small_font);
+          hvv::board_fonts.regular[13] = id(hvv_regular_13);
+          hvv::board_fonts.regular[14] = id(hvv_regular_14);
+          hvv::board_fonts.regular[15] = id(hvv_regular_15);
+          hvv::board_fonts.regular[16] = id(hvv_regular_16);
+          hvv::board_fonts.regular[17] = id(hvv_regular_17);
+          hvv::board_fonts.regular[18] = id(hvv_font);
+          hvv::board_fonts.bold[8] = id(hvv_bold_8);
+          hvv::board_fonts.bold[9] = id(hvv_bold_9);
+          hvv::board_fonts.bold[10] = id(hvv_bold_10);
+          hvv::board_fonts.bold[11] = id(hvv_bold_11);
+          hvv::board_fonts.bold[12] = id(hvv_bold_12);
+          hvv::board_fonts.bold[13] = id(hvv_bold_13);
+          hvv::board_fonts.bold[14] = id(hvv_bold_14);
+          hvv::board_fonts.bold[15] = id(hvv_bold_15);
+          hvv::board_fonts.bold[16] = id(hvv_bold_16);
+          hvv::board_fonts.bold[17] = id(hvv_bold_17);
+          hvv::board_fonts.bold[18] = id(hvv_bold_18);
+          hvv::board_fonts.bold[19] = id(hvv_bold_19);
+          hvv::board_fonts.bold[20] = id(hvv_bold_20);
+          hvv::board_fonts.bold[21] = id(hvv_bold_21);
+          hvv::board_fonts.bold[22] = id(hvv_bold_22);
+          hvv::board_fonts.bold[25] = id(hvv_bold_25);
   includes:
     - hvv_board.h
     - hvv_geofox.h
@@ -32,13 +59,120 @@ debug:
   update_interval: 30s
 
 font:
-  - file: gfonts://Roboto
-    id: hvv_font
-    size: 16
-    glyphs: &hvv_glyphs " !\"%&'()+,-./0123456789:;=?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÖÜäöüß–…"
-  - file: gfonts://Roboto
+  - file: fonts/DejaVuSans.ttf
     id: hvv_small_font
+    size: 10
+    bpp: 4
+    glyphs: &hvv_glyphs " !\"%&'()+,-./0123456789:;=?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÖÜäöüß–…"
+  - file: fonts/DejaVuSans.ttf
+    id: hvv_regular_13
+    size: 13
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans.ttf
+    id: hvv_regular_14
+    size: 14
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans.ttf
+    id: hvv_regular_15
+    size: 15
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans.ttf
+    id: hvv_regular_16
+    size: 16
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans.ttf
+    id: hvv_regular_17
+    size: 17
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans.ttf
+    id: hvv_font
+    size: 18
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_8
+    size: 8
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_9
+    size: 9
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_10
+    size: 10
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_11
+    size: 11
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_12
     size: 12
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_13
+    size: 13
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_14
+    size: 14
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_15
+    size: 15
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_16
+    size: 16
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_17
+    size: 17
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_18
+    size: 18
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_19
+    size: 19
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_20
+    size: 20
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_21
+    size: 21
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_22
+    size: 22
+    bpp: 4
+    glyphs: *hvv_glyphs
+  - file: fonts/DejaVuSans-Bold.ttf
+    id: hvv_bold_25
+    size: 25
+    bpp: 4
     glyphs: *hvv_glyphs
 
 globals:
@@ -100,7 +234,8 @@ interval:
     then:
       - lambda: |-
           const auto now = id(hvv_clock).now();
-          hvv_board.tick(millis(), now.is_valid() ? now.timestamp : 0);
+          hvv_board.tick(millis(), now.is_valid() ? now.timestamp : 0,
+                         now.is_valid() ? now.strftime("%H:%M").c_str() : nullptr);
           const bool active = id(hvv_display_enabled) && !hvv_board.night(millis());
           if (id(hvv_blanked) == !active) return;
           id(hvv_blanked) = !active;
