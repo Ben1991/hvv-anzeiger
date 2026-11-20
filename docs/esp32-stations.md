@@ -6,7 +6,35 @@ Es braucht dafür weder einen Raspberry Pi noch Python-Backend, Weboberfläche
 oder Home Assistant. Änderungen an den Haltestellen werden in der lokalen
 ESPHome-Profilkopie gespeichert und mit einer neuen Firmware übernommen.
 
-## Konfiguration
+## Eine Haltestelle eintragen
+
+Für die erste Einrichtung kannst du die mitgelieferten Haltestellen zum Testen
+verwenden. Für eine eigene Haltestelle brauchst du ihre Geofox-Kennung. Das ist
+eine Nummer mit Präfix wie `Master:82015` für Recknitzstraße in Hamburg.
+Übernimm die bestätigte Kennung aus einer vorhandenen HVV-Anzeiger-Konfiguration
+oder aus den Geofox-Haltestellendaten.
+
+1. Öffne im Explorer den Projektordner und darin den Ordner **esphome**.
+   Kopiere `hvv-cyd.local.yaml` als Sicherung in einen privaten Ordner.
+2. Öffne das Original per Rechtsklick mit **Editor**. Drücke **Strg+F**
+   und suche nach `hvv_stations_json:`.
+3. Ersetze die ganze Zeile durch das folgende Beispiel. Behalte die beiden
+   Leerzeichen am Zeilenanfang bei. Die einfachen Anführungszeichen um die
+   eckigen Klammern gehören mit in die Datei.
+
+```yaml
+  hvv_stations_json: '[{"name":"Recknitzstraße","city":"Hamburg","id":"Master:82015","label":"R","routes":[]}]'
+```
+
+4. Ersetze den Namen, den Ort, die bestätigte Kennung und das Kürzel zwischen
+   den doppelten Anführungszeichen. Mit `"routes":[]` werden alle Linien der
+   Haltestelle berücksichtigt. Speichere mit **Strg+S**.
+5. Übertrage die Änderung per USB mit dem
+   [Befehl aus der Einrichtung](esp32-setup.md#3-validieren-bauen-und-übertragen).
+   Nach dem Neustart sollte das neue Kürzel neben den Abfahrten erscheinen.
+   Bei einem Fehler kannst du die gesicherte Datei zurückkopieren.
+
+## Mehrere Haltestellen oder bestimmte Linien
 
 Das Setup erzeugt `esphome/hvv-cyd.local.yaml`. Diese Datei wird von Git
 ignoriert und bleibt bei Updates erhalten. Darin liegt `hvv_stations_json` als
