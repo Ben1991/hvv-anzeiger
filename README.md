@@ -9,7 +9,7 @@
 
 | Dein nächster Schritt | Abschnitt |
 |---|---|
-| Raspberry Pi als Display und Backend installieren | [Pi-Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Pi-Display anschließen](#display-anschließen) → [Pi installieren](#installieren) |
+| Raspberry Pi als Display und Backend installieren | [Pi-Voraussetzungen](#voraussetzungen-für-raspberry-pi--ili9341) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Pi-Display anschließen](#display-anschließen) → [Pi installieren](#installieren) |
 | eigenständiges ESP32/CYD-System einrichten | [ESP32-Schrittfolge und Setup-Skript](#esp32-schritt-für-schritt) |
 | Pi+ILI und ESP32+CYD unterscheiden | [Plattformen und gemeinsame Funktionen](#plattformen-und-gemeinsame-funktionen) |
 | Home Assistant einrichten | [HA-Anleitung](docs/home-assistant.md) |
@@ -24,7 +24,7 @@
 - [Funktionen](#funktionen)
 - [Praxisbeispiel](#praxisbeispiel)
 - [Vorkonfigurierte Anzeige](#vorkonfigurierte-anzeige)
-- [Voraussetzungen](#voraussetzungen)
+- [Voraussetzungen](#voraussetzungen-für-raspberry-pi--ili9341)
 - [Geofox-Zugang beantragen](#geofox-zugang-beantragen)
 - [Display anschließen](#display-anschließen)
 - [Installieren](#installieren)
@@ -273,8 +273,8 @@ Die Beispielkonfiguration enthält:
 | R | Recknitzstraße | 21 | U Niendorf Nord |
 
 Das Kürzel macht in der gemeinsam sortierten Liste sichtbar, von welcher
-Haltestelle eine Abfahrt stammt. Alle Verbindungen lassen sich in
-`config.json` ersetzen.
+Haltestelle eine Abfahrt stammt. Auf dem Pi lassen sich die Verbindungen in `config.json` ersetzen. Für das
+CYD gilt die [Stationsanleitung](docs/esp32-stations.md).
 
 > **Andere Haltestellen oder Verbindungen gewünscht?** Nach der Installation
 > kannst du sie bequem über die lokale Weboberfläche einrichten und ändern –
@@ -286,7 +286,24 @@ Haltestelle eine Abfahrt stammt. Alle Verbindungen lassen sich in
 > anschließend automatisch. Weitere Hinweise und Beispiele stehen unter
 > [Haltestellen mit Codex anpassen](#haltestellen-mit-codex-anpassen).
 
-## Voraussetzungen
+## ESP32 Schritt für Schritt
+
+Das ESP32+CYD-System braucht ein CYD, 2,4-GHz-WLAN, ESPHome und einen
+[Geofox-Zugang](#geofox-zugang-beantragen). Das Profil `hvv-cyd` fragt Geofox
+direkt ab und betreibt die Anzeige eigenständig. Home Assistant kann die
+verschlüsselte ESPHome-API optional zur Anzeige der Gerätesensoren nutzen.
+
+| Hardware | Bezugsquelle | Profil |
+|---|---|---|
+| CYD mit integriertem Display | [ESP32-2432S028 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-2432S028+ILI9342+2.8+Display&tag=bema19910e-21) | `hvv-cyd.yaml` zielt standardmäßig auf die getestete Dual-USB-Revision mit ILI9342, 2,8 Zoll, 320×240 Pixel im nativen Querformat; andere Revisionen brauchen ggf. einen anderen Controller |
+
+Die [CYD-Setup-Anleitung](docs/esp32-setup.md) führt durch Projekt-Download,
+WLAN und Geofox-Secrets, Stationsauswahl, USB-Flash und OTA. Sie erklärt auch
+die Migration bestehender Profile. Das Setup ist abgeschlossen, wenn sich die
+ESPHome-API verbinden lässt, `Backendstatus` auf `ok` steht und bei passenden
+Verbindungen Abfahrtssensoren befüllt sind.
+
+## Voraussetzungen für Raspberry Pi + ILI9341
 
 ### Hardware-Einkauf
 
@@ -311,115 +328,13 @@ vorgesehene Netzteil erforderlich.
 | Löt-Set, falls nötig | [Löt-Set für Elektronik suchen (Affiliate-Link)](https://www.amazon.de/s?k=Loetset+Loetkolben+Elektronik&tag=bema19910e-21) | einfache Grundausrüstung zum sicheren Verbinden der Leitungen |
 | „Dritte Hand“ / Platinenhalter, falls nötig | [Dritte Hand mit Platinenhalter und Klemmen suchen (Affiliate-Link)](https://www.amazon.de/s?k=Dritte+Hand+Platinenhalter+Klemmen&tag=bema19910e-21) | hält Kabel und Platine beim Löten sicher fest |
 
-#### ESP32, Displays und Zubehör
-
-Wähle **einen** der dokumentierten Aufbauten: ESP32 DevKit mit ILI9341,
-CYD mit integriertem Display oder ESP32-S3 DevKit mit ILI9488.
-Beim CYD ist kein zusätzliches Display nötig. Die Suchlinks beziehen sich
-auf diese Referenzprofile; nicht jedes Suchergebnis passt dazu.
-
-| Komponente / Variante | Amazon.de-Suche | Worauf achten? |
-|---|---|---|
-| ESP32 DevKit | [ESP32-DevKit-Board suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32+DevKit+ESP32-WROOM-32+Entwicklungsboard&tag=bema19910e-21) | klassischer ESP32 für `hvv-display.yaml`; herausgeführte GPIOs müssen zur dokumentierten Pinbelegung passen |
-| ILI9341-SPI-Display | [ILI9341-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=ILI9341+SPI+Display+240x320+3%2C3V&tag=bema19910e-21) | externes Display zum ESP32 DevKit; 240 × 320 Pixel, SPI und 3,3-V-kompatible Logik |
-| CYD mit integriertem Display | [ESP32-2432S028 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-2432S028+ILI9342+2.8+Display&tag=bema19910e-21) | `hvv-cyd.yaml` zielt standardmäßig auf die getestete Dual-USB-Revision mit ILI9342, 2,8 Zoll, 320×240 Pixel im nativen Querformat; andere Revisionen brauchen ggf. einen anderen Controller |
-| ESP32-S3 DevKit | [ESP32-S3-DevKitC-1 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-S3+DevKitC-1+Entwicklungsboard&tag=bema19910e-21) | für `hvv-s3-ili9488.yaml`; GPIOs, USB-Anschluss und konkrete Boardvariante prüfen |
-| ILI9488-SPI-Display | [ILI9488-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=ILI9488+SPI+Display+320x480+3%2C3V&tag=bema19910e-21) | externes Display zum S3-Referenzaufbau; 320 × 480 Pixel und SPI, nicht die ähnlich angebotene parallele Schnittstelle |
-| USB-Netzteil | [5-V-USB-Netzteil mit 2 A suchen (Affiliate-Link)](https://www.amazon.de/s?k=USB+Netzteil+5V+2A&tag=bema19910e-21) | stabile Versorgung und Anschluss passend zum Kabel; Spannungs- und Stromvorgaben von Board und Display beachten |
-| USB-Datenkabel | [USB-Datenkabel für Micro-USB oder USB-C suchen (Affiliate-Link)](https://www.amazon.de/s?k=USB+Datenkabel+Micro+USB+USB+C&tag=bema19910e-21) | Stecker passend zum Board und Rechner; das erste Flashen benötigt Datenübertragung, ein reines Ladekabel reicht nicht |
-| Jumper-Kabel | [2,54-mm-Jumper-Kabel-Set suchen (Affiliate-Link)](https://www.amazon.de/s?k=Jumper+Kabel+Set+2%2C54mm+Buchse+Stecker&tag=bema19910e-21) | für externe Displays; Buchse/Stecker passend zu den Stiftleisten auswählen |
-| Stiftleisten, falls nötig | [2,54-mm-Stiftleisten suchen (Affiliate-Link)](https://www.amazon.de/s?k=Stiftleiste+2%2C54mm+gerade&tag=bema19910e-21) | nur bei unbestückten Boards oder Displaymodulen; gegebenenfalls Lötwerkzeug aus der obigen Liste nötig |
-| Backlight-Treiber, falls nötig | [MOSFET-/LED-Treibermodul mit 3,3-V-Steuerung suchen (Affiliate-Link)](https://www.amazon.de/s?k=MOSFET+LED+Treiber+Modul+3%2C3V+Logic+Level&tag=bema19910e-21) | nur ohne geeigneten BL-Steuereingang am Display; Treiber muss mit 3,3 V schalten und zum LED-Strom passen; nackte Hintergrundbeleuchtung nicht direkt am GPIO betreiben |
-
-Pinbelegung, Versorgung und Backlight-Anschluss stehen in der
-[ESP32-Einrichtungsanleitung](docs/esp32-setup.md).
-Die Referenzfirmwares wurden kompiliert; die konkreten Amazon-Angebote und
-deren Hardware wurden nicht geprüft. Der Python-Hintergrunddienst bleibt
-auch mit einem ESP32-Display erforderlich.
+Für das eigenständige CYD siehe die [separate ESP32-Einrichtung](#esp32-schritt-für-schritt).
 
 > **Hinweis zu Affiliate-Links:** Als Amazon-Partner verdiene ich an
 > qualifizierten Verkäufen. Wenn du über einen entsprechend gekennzeichneten
 > Link einkaufst, kann ich eine Provision erhalten. Für dich entstehen dadurch
 > keine zusätzlichen Kosten.
 
-#### ESP32 Schritt für Schritt
-
-Für das CYD `ESP32-2432S028` mit 2,8-Zoll-Display und 320×240 Pixeln im
-Querformat ist `hvv-cyd` das Standardprofil. Es verwendet die getestete
-Dual-USB-Revision mit ILI9342 und 90°-Drehung im Querformat. Eine
-automatische Controller-Erkennung ist technisch nicht zuverlässig. Die
-Firmware enthält Geofox-Zugang und feste Haltestellenkonfiguration und fragt
-Geofox direkt ab. Ein Pi-Webdienst, CYD-API-Schlüssel oder TLS-Zertifikat vom Pi
-ist dafür nicht erforderlich. Das Setup speichert WLAN- und Geofox-Daten lokal
-in der ignorierten `esphome/secrets.yaml` und erstellt eine lokale Profilkopie.
-
-1. **Git und Python installieren:** Installiere Git für Windows und Python
-   3.12 samt Python Launcher (`py`). Nimm ein USB-Datenkabel; schließe das Board
-   erst vor dem Flashen an. Details stehen in der
-   [vollständigen ESP32-Anleitung](docs/esp32-setup.md#schnellstart-für-windows-cyd-einrichten-und-flashen).
-2. **PowerShell öffnen:** Öffne das Startmenü, tippe `PowerShell` und starte
-   **Windows PowerShell**. Kopiere diese Befehle einzeln hinein und drücke nach
-   jedem die Eingabetaste:
-
-   ```powershell
-   git --version
-   py -3.12 --version
-   ```
-
-   Erwartet werden eine Git-Version und `Python 3.12.x`. Ist ein Befehl
-   unbekannt, installiere das betreffende Programm und öffne PowerShell neu.
-3. **Repository laden:** Führe die Befehle einzeln in PowerShell aus:
-
-   ```powershell
-   git clone https://github.com/Ben1991/hvv-anzeiger.git
-   cd hvv-anzeiger
-   ```
-
-   Die Eingabeaufforderung sollte jetzt mit `hvv-anzeiger>` enden. Wenn der
-   Ordner bereits existiert, klone ihn nicht erneut. Öffne stattdessen den
-   Ordner `hvv-anzeiger` im Explorer, tippe `powershell` in die Adressleiste
-   und drücke die Eingabetaste. Prüfe eigene Änderungen mit `git status --short`.
-4. **Setup starten:** Kopiere den vollständigen Befehl und drücke die
-   Eingabetaste:
-
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
-   ```
-
-   Gib bei der Abfrage WLAN-Name, WLAN-Passwort und Geofox-Zugang ein. Das
-   Passwort bleibt verdeckt. Warte auf „Konfiguration geprüft.“. Zugangsdaten
-   und API-Verschlüsselungsschlüssel werden lokal abgelegt und nicht
-   überschrieben.
-   Bei einem Fehler hilft die
-   [Schritt-für-Schritt-Anleitung](docs/esp32-setup.md#schritt-4-esphome-und-das-cyd-profil-einrichten).
-5. **Board flashen:** Verbinde das CYD mit einem USB-Datenkabel. Bei zwei USB-
-   Anschlüssen nur einen gleichzeitig verwenden. Führe diesen Befehl aus:
-
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
-   ```
-
-   Wähle anschließend den COM-Port des Boards. Wenn keiner erscheint, prüfe
-   Kabel, USB-UART-Treiber und Geräte-Manager. Wenn der Upload nicht beginnt,
-   folge der [Fehlerhilfe zum Flashen](docs/esp32-setup.md#schritt-5-board-verbinden-und-firmware-flashen).
-6. **Anzeige prüfen:** Kontrolliere WLAN, Abfahrtszeiten, Textausrichtung,
-   Farben und Querformat. Bei leerem oder falschfarbigem Display prüfe zuerst
-   die konkrete Displayrevision. Das CYD-Profil nimmt die getestete
-   Dual-USB-Revision mit ILI9342 und nativer 0°-Querformat-Ausrichtung als
-   Standard an; eine automatische Controller-Erkennung ist nicht möglich.
-
-**Home Assistant optional:** Das eingeschaltete CYD sollte in Home Assistant
-unter **Einstellungen → Geräte & Dienste** als ESPHome-Gerät auftauchen. Beim
-Hinzufügen den `api_encryption_key` aus `esphome\secrets.yaml` eingeben. Es ist
-keine separate HA-Firmware und kein Pi-Backend nötig. Die benutzerdefinierte
-Integration in der [HA-Anleitung](docs/home-assistant.md) verbindet stattdessen
-das eigenständige Pi-Backend.
-
-Das Setup-Skript setzt für Firmwarebau einen kurzen ESP-IDF-Pfad `C:\ei`.
-Falls der Ordner nicht angelegt werden darf, übergib einen beschreibbaren
-kurzen lokalen Pfad mit `-EspIdfPrefix`. Linux/macOS, ESPHome Device Builder,
-Pinbelegungen, alle Profile und die Fehlerbehebung stehen in der
-[ESP32-Einrichtungsanleitung](docs/esp32-setup.md).
 ### Unterstütztes Zielsystem
 
 #### Betriebssysteme
