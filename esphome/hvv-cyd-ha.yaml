@@ -2,7 +2,7 @@
 # ILI9342 display.
 substitutions:
   name: hvv-cyd-ha
-  friendly_name: HVV CYD Home Assistant
+  friendly_name: HVV-Anzeiger
   board_entity: sensor.hvv_board
   display_model: ESP32-2432S028-9342
   display_rotation: '90'

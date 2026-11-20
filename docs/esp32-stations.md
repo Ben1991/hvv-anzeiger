@@ -129,8 +129,10 @@ ob die eigenen Haltestellen, Linien, Ziele und Abfahrtszeiten sichtbar sind.
 Das CYD meldet sich mit ESPHome-API-Verschlüsselung selbst im LAN. Home
 Assistant erkennt es über seine integrierte ESPHome-Integration; ein Pi und die
 benutzerdefinierte Pi-Backend-Integration sind dafür nicht erforderlich. Beim
-Hinzufügen wird der Wert `api_encryption_key` aus `esphome/secrets.yaml`
-benötigt. ESPHome stellt Status und Abfahrten als Entitäten bereit.
+Hinzufügen von **HVV-Anzeiger** wird der Wert `api_encryption_key` aus der
+beim Flashen verwendeten `esphome/secrets.yaml` benötigt. ESPHome stellt Status
+und Abfahrten als Entitäten bereit. Die Einrichtung ist in der
+[Home-Assistant-Anleitung](home-assistant.md#esp32cyd-erkennen) beschrieben.
 
 Die Geofox-Zugangsdaten sind Bestandteil der lokal gebauten Firmware. Sie
 werden nicht über ESPHome an Home Assistant übertragen; wer Zugriff auf das

@@ -224,10 +224,13 @@ sensor:
 binary_sensor:
   - platform: status
     name: Verbindung
+
+text_sensor:
   - platform: template
     name: Abfahrtsdaten veraltet
-    device_class: problem
-    lambda: return hvv_board.has_problem(millis());
+    update_interval: 1s
+    lambda: |-
+      return {hvv_board.has_problem(millis()) ? "true" : "false"};
 
 interval:
   - interval: 1s

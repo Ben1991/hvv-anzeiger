@@ -188,13 +188,25 @@ alle 15 Sekunden.
 
 ### ESP32/CYD erkennen
 
-Das CYD meldet sich separat über die ESPHome-Native-API und deren mDNS-Dienst.
-Home Assistant entdeckt das eingeschaltete Gerät über die integrierte
-**ESPHome**-Integration; dafür keine Pi-URL oder Webpasswort eingeben. Beim
-Einrichten wird der lokale Wert `api_encryption_key` aus
-`esphome/secrets.yaml` benötigt. Status und Abfahrten kommen direkt aus der
-ESP32-Firmware. Die Stationen dafür stehen in der
-[CYD-Haltestellenanleitung](esp32-stations.md).
+1. Öffne **Einstellungen → Geräte & Dienste** und wähle beim erkannten
+   ESPHome-Gerät **HVV-Anzeiger** die angebotene Einrichtung. Falls es fehlt,
+   füge **ESPHome** hinzu und gib die lokale IP-Adresse des CYD ein.
+2. Öffne auf dem Rechner, mit dem du das CYD geflasht hast, die lokale Datei
+   `esphome/secrets.yaml`. Kopiere nur den Wert rechts von
+   `api_encryption_key:`, ohne Anführungszeichen.
+3. Füge den Wert im ESPHome-Dialog in das Feld für den
+   **Verschlüsselungsschlüssel** ein und schließe die Einrichtung ab.
+   Home Assistant erkennt das Gerät im lokalen Netz. Der Schlüssel
+   authentifiziert und verschlüsselt die Verbindung.
+
+Unter **HVV-Anzeiger** findest du die Abfahrten und den Sensor
+**Abfahrtsdaten veraltet**. Der Sensor zeigt bei aktuellen Daten `false` und
+bei einem Datenproblem `true`. Nach einem Firmware-Update müssen bestehende
+Automationen auf die neue `sensor.*`-Entität und die Zustände `"true"` bzw.
+`"false"` umgestellt werden. Falls Home Assistant noch einen früheren
+Gerätenamen anzeigt, kannst du das Gerät dort in **HVV-Anzeiger** umbenennen.
+
+Die Stationen dafür stehen in der [CYD-Haltestellenanleitung](esp32-stations.md).
 
 ### Alternative: YAML-Paket und REST-Sensor
 

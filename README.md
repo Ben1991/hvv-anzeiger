@@ -536,12 +536,13 @@ Zertifikate und die alternative Einrichtung per YAML.
 1. Prüfe, ob die [CYD-Anzeige](#esp32-schritt-für-schritt) Abfahrten zeigt.
    Das CYD und Home Assistant müssen einander im Netzwerk erreichen.
 2. Öffne **Einstellungen → Geräte & Dienste** und wähle das erkannte
-   ESPHome-Gerät. Wenn es fehlt, füge **ESPHome** manuell hinzu und gib
-   die lokale IP-Adresse des CYD ein.
-3. Wenn Home Assistant nach dem Verschlüsselungsschlüssel fragt, verwende
-   den Wert `api_encryption_key` aus der lokalen Datei `esphome/secrets.yaml`.
-4. Öffne das Gerät in Home Assistant. **Backendstatus** sollte `ok` anzeigen.
-   Bei passenden Verbindungen enthält **Abfahrt 1** eine Abfahrt.
+   ESPHome-Gerät **HVV-Anzeiger**. Wenn es fehlt, füge **ESPHome** manuell
+   hinzu und gib die lokale IP-Adresse des CYD ein.
+3. Kopiere den Wert rechts von `api_encryption_key:` aus der lokalen
+   `esphome/secrets.yaml`, die du beim Flashen verwendet hast. Füge ihn ohne
+   Anführungszeichen als **Verschlüsselungsschlüssel** in Home Assistant ein.
+4. Öffne **HVV-Anzeiger** in Home Assistant. Bei aktuellen Daten zeigt
+   **Abfahrtsdaten veraltet** den Wert `false` und **Abfahrt 1** eine Abfahrt.
 
 Weitere Hilfe steht unter [CYD in Home Assistant erkennen](docs/esp32-setup.md#cyd-in-home-assistant-erkennen).
 
