@@ -493,6 +493,7 @@ verschlüsselte ESPHome-API optional zur Anzeige der Gerätesensoren nutzen.
 | Hardware | Bezugsquelle | Profil |
 |---|---|---|
 | CYD mit integriertem Display | [ESP32-2432S028 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-2432S028+ILI9342+2.8+Display&tag=bema19910e-21) | `hvv-cyd.yaml` zielt standardmäßig auf die getestete Dual-USB-Revision mit ILI9342, 2,8 Zoll, 320×240 Pixel im nativen Querformat; andere Revisionen brauchen ggf. einen anderen Controller |
+| USB-Netzteil zum Betrieb | [USB-Ladeadapter (Affiliate-Link)](https://link.amazon/B06zFO9fd) | Versorgt die Anzeige über USB mit Strom; das benötigte USB-Kabel ist bereits beim verlinkten ESP32-Referenzangebot enthalten |
 
 1. Beantrage den [Geofox-Zugang](#geofox-zugang-beantragen).
 2. Folge der [CYD-Ersteinrichtung](docs/esp32-setup.md#schnellstart-für-windows-cyd-einrichten-und-flashen).
