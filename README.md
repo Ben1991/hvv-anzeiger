@@ -15,6 +15,13 @@ Wähle den Weg, der zu deinem Gerät passt.
 - **[Home Assistant mit Raspberry Pi](#home-assistant-mit-raspberry-pi)** – bindet einen bereits laufenden Pi über die HVV-Integration ein.
 - **[Home Assistant mit ESP32](#home-assistant-mit-esp32)** – bindet ein bereits laufendes CYD über die eingebaute ESPHome-Integration ein.
 
+| System | Einrichtung | Konfiguration | Updates |
+|---|---|---|---|
+| Raspberry Pi + ILI | [Pi installieren](#raspberry-pi-mit-ili-display-einrichten) | [Weboberfläche und Haltestellen](#konfigurieren) | [Pi-Anwendung aktualisieren](#anwendung-aktualisieren) |
+| ESP32 + CYD | [CYD einrichten](#esp32-schritt-für-schritt) | [WLAN und Geofox](docs/esp32-setup.md#2-profil-zugangsdaten-und-haltestellen), [Haltestellen und Linien](docs/esp32-stations.md) | [Firmware per USB oder OTA aktualisieren](docs/esp32-setup.md#firmware-aktualisieren) |
+| Backend im Linux-/NAS-Container | [Container einrichten](docs/home-assistant.md#container-auf-linuxnas) | [Konfiguration im Datenverzeichnis](docs/home-assistant.md#container-auf-linuxnas) | [Container aktualisieren](docs/home-assistant.md#python-hintergrunddienst-im-container) |
+| Home Assistant | [Integration auswählen](#home-assistant-optional-einrichten) | [Pi-Integration](#home-assistant-mit-raspberry-pi), [ESPHome-Integration](#home-assistant-mit-esp32) | [Integration aktualisieren](docs/home-assistant.md#updates-für-hintergrunddienst-und-home-assistant) |
+
 Für beide Anzeigen brauchst du [Geofox-Zugangsdaten](#geofox-zugang-beantragen).
 Beantrage den Zugang zuerst, falls du ihn noch nicht hast. Home Assistant und
 Codex sind optional.
@@ -311,8 +318,8 @@ Der Installer vergibt den mDNS-Namen `hvv-anzeiger.local`, erzeugt ein lokales
 TLS-Zertifikat und gibt dessen SHA-256-Fingerabdruck aus. Die Weboberfläche ist
 unter `https://hvv-anzeiger.local:8080/` erreichbar. Öffne die Adresse im
 Browser auf einem Gerät im selben Netzwerk. Melde dich als `hvv-anzeiger`
-mit dem individuellen Webpasswort an, das du bei der Installation festgelegt
-hast. Das Webpasswort muss mindestens 12 Zeichen haben. Die beim Setup abgefragten
+mit dem Erstpasswort `hvv-anzeiger` an und lege beim ersten Login ein
+individuelles Webpasswort mit mindestens 12 Zeichen fest. Die beim Setup abgefragten
 Geofox-Zugangsdaten und Beispiel-Haltestellen ermöglichen den ersten Abruf
 direkt nach dem Start. Passe die Haltestellen danach unter Einstellungen an.
 
@@ -467,6 +474,12 @@ privaten temporären Verzeichnissen.
    Eintrag, der zu deinem Standort passt.
 3. Lade die Linien, wähle Linie und Richtung und speichere. Öffne die
    Abfahrtsanzeige und prüfe, ob die gewünschte Verbindung erscheint.
+
+Wenn die Haltestellensuche leer bleibt, prüfe Schreibweise, Ort und den
+Geofox-Status in der Weboberfläche. Wenn die Haltestelle gefunden wird, aber
+keine Abfahrt erscheint, prüfe die gewählte Richtung und ob zur Testzeit
+eine Abfahrt fährt. Bei einem weißen Display folge der
+[Displaydiagnose](#weißes-pi-display-nach-einem-wackelkontakt).
 
 ## ESP32 Schritt für Schritt
 

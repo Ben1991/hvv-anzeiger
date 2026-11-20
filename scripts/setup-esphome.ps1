@@ -88,7 +88,7 @@ if ($BoardProfile -eq 'hvv-cyd') {
         $localProfileText = [regex]::Replace(
             $localProfileText,
             $legacyTransport,
-            '1packages/geofox.yaml')
+            '${1}packages/geofox.yaml')
     }
     if ($localProfileText -notmatch '(?m)^[ \t]*hvv_stations_json:') {
         $sourceProfileText = [System.IO.File]::ReadAllText($profileFile)

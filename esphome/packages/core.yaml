@@ -233,7 +233,7 @@ interval:
   - interval: 1s
     then:
       - lambda: |-
-          const auto now = id(hvv_clock).now();
+          auto now = id(hvv_clock).now();
           hvv_board.tick(millis(), now.is_valid() ? now.timestamp : 0,
                          now.is_valid() ? now.strftime("%H:%M").c_str() : nullptr);
           const bool active = id(hvv_display_enabled) && !hvv_board.night(millis());

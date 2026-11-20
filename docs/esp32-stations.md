@@ -32,7 +32,10 @@ oder aus den Geofox-Haltestellendaten.
 5. Übertrage die Änderung per USB mit dem
    [Befehl aus der Einrichtung](esp32-setup.md#3-validieren-bauen-und-übertragen).
    Nach dem Neustart sollte das neue Kürzel neben den Abfahrten erscheinen.
-   Bei einem Fehler kannst du die gesicherte Datei zurückkopieren.
+   Bei einem YAML-Fehler prüfe die Einrückung und Anführungszeichen. Bei
+   Status `ok` ohne Abfahrten prüfe Stations-ID, Linie und Ziel. Wenn die alte
+   Auswahl weiter angezeigt wird, prüfe, ob du das lokale Profil für das
+   richtige Gerät übertragen hast. Du kannst die Sicherung zurückkopieren.
 
 ## Mehrere Haltestellen oder bestimmte Linien
 
@@ -85,9 +88,14 @@ vor dem Schreiben legt es eine zeitgestempelte Sicherung an:
 py -3 .\scripts\update_esphome_stations.py `
   --profile .\esphome\hvv-cyd.local.yaml `
   --stations-file "$env:TEMP\hvv-stations.json" `
-  --expected-sha256 <SHA256_AUS_DER_VORSCHAU> `
+  --expected-sha256 "SHA256_AUS_DER_VORSCHAU" `
   --write
 ```
+
+Ersetze `SHA256_AUS_DER_VORSCHAU` durch den ausgegebenen Wert. Bei einer
+abweichenden Prüfsumme wiederhole die Vorschau mit dem aktuellen Profil.
+Wenn die JSON-Datei nicht gefunden wird, prüfe den Dateinamen mit
+`Test-Path "$env:TEMP\hvv-stations.json"`.
 
 ## Firmware prüfen und übertragen
 
