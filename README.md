@@ -5,483 +5,48 @@
 [![CI](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml)
 [![Lizenz: GPL-3.0-only](https://img.shields.io/badge/Lizenz-GPL--3.0--only-blue.svg)](LICENSE)
 
+## Hier anfangen
+
+Der HVV-Anzeiger zeigt die nächsten Abfahrten auf einem kleinen Bildschirm.
+Wähle den Weg, der zu deinem Gerät passt.
+
+- **[Raspberry Pi mit separatem Display](#raspberry-pi-mit-ili-display-einrichten)** – vom Einkauf und Anschluss bis zur ersten eigenen Abfahrt.
+- **[ESP32 mit eingebautem CYD-Display](#esp32-schritt-für-schritt)** – vom ersten USB-Anschluss bis zur ersten eigenen Abfahrt.
+- **[Home Assistant mit Raspberry Pi](#home-assistant-mit-raspberry-pi)** – bindet einen bereits laufenden Pi über die HVV-Integration ein.
+- **[Home Assistant mit ESP32](#home-assistant-mit-esp32)** – bindet ein bereits laufendes CYD über die eingebaute ESPHome-Integration ein.
+
+| System | Einrichtung | Konfiguration im laufenden Betrieb | Update |
+|---|---|---|---|
+| Raspberry Pi + ILI | [Pi installieren](#raspberry-pi-mit-ili-display-einrichten) | Haltestellen, Linien und Anzeige unter **Einstellungen** im [Pi-Webinterface](#konfigurieren) speichern. | Im ursprünglichen Checkout auf dem Pi [`./update.sh` ausführen](#anwendung-aktualisieren). |
+| ESP32 + CYD | [CYD einrichten](#esp32-schritt-für-schritt) | [Lokales ESPHome-Profil und Secrets bearbeiten](docs/esp32-setup.md#laufendes-cyd-konfigurieren), dann Firmware neu bauen und übertragen. | Projektdateien aktualisieren und [Firmware per WLAN (OTA) oder USB übertragen](docs/esp32-setup.md#firmware-aktualisieren). |
+| Backend im Linux-/NAS-Container | [Container einrichten](docs/home-assistant.md#container-auf-linuxnas) | [Weboberfläche oder `data/config.json` nutzen](docs/home-assistant.md#laufenden-container-konfigurieren). | Auf dem Host [Repository aktualisieren, Image bauen und Container ersetzen](docs/home-assistant.md#python-hintergrunddienst-im-container). |
+| Home Assistant mit Pi-/Container-Backend | [HVV-Integration hinzufügen](docs/home-assistant.md#als-gerät-automatisch-erkennen) | HTTPS-Adresse und Webpasswort in HA einrichten. Haltestellen und Linien im Backend ändern. | [HVV-Integration ersetzen und HA neu starten](docs/home-assistant.md#native-hvv-integration-aktualisieren). |
+| Home Assistant mit REST-Paket | [YAML-Paket einrichten](docs/home-assistant.md#alternative-yaml-paket-und-rest-sensor) | Backend-Adresse und Webzugang in HA unter `/config/secrets.yaml` pflegen. Haltestellen und Linien im Backend ändern. | [Paketdatei abgleichen, HA-Konfiguration prüfen und HA neu starten](docs/home-assistant.md#home-assistant-paket-aktualisieren). |
+| Home Assistant mit ESP32 | [ESPHome-Gerät hinzufügen](#home-assistant-mit-esp32) | Geräteadresse und API-Schlüssel in HA hinterlegen. Haltestellen und Linien im CYD-Profil ändern und flashen. | [ESPHome-Integration mit Home Assistant aktualisieren](docs/home-assistant.md#integrierte-esphome-anbindung-aktualisieren). Die Gerätefirmware separat flashen. |
+
+Für beide Anzeigen brauchst du [Geofox-Zugangsdaten](#geofox-zugang-beantragen).
+Beantrage den Zugang zuerst, falls du ihn noch nicht hast. Home Assistant und
+Codex sind optional.
+
 ## Inhalt
 
-| Dein nächster Schritt | Abschnitt |
-|---|---|
-| Raspberry Pi als Display und Backend installieren | [Pi-Voraussetzungen](#voraussetzungen) → [Geofox-Zugang](#geofox-zugang-beantragen) → [Pi-Display anschließen](#display-anschließen) → [Pi installieren](#installieren) |
-| eigenständiges ESP32/CYD-System einrichten | [ESP32-Schrittfolge und Setup-Skript](#esp32-schritt-für-schritt) |
-| Pi+ILI und ESP32+CYD unterscheiden | [Plattformen und gemeinsame Funktionen](#plattformen-und-gemeinsame-funktionen) |
-| Home Assistant einrichten | [HA-Anleitung](docs/home-assistant.md) |
-| Haltestellen, Linien oder Darstellung ändern | [Konfigurieren](#konfigurieren) |
-| ESP32-Haltestellen ändern und neu flashen | [CYD-Haltestellen anpassen](docs/esp32-stations.md) |
-| Version aktualisieren oder Dienst steuern | [Betrieb und Updates](#betrieb-und-updates) |
-| Einen Fehler untersuchen | [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose) |
-
-<details>
-<summary>Alle Abschnitte anzeigen</summary>
-
-- [Funktionen](#funktionen)
-- [Praxisbeispiel](#praxisbeispiel)
-- [Vorkonfigurierte Anzeige](#vorkonfigurierte-anzeige)
-- [Voraussetzungen](#voraussetzungen)
-- [Geofox-Zugang beantragen](#geofox-zugang-beantragen)
-- [Display anschließen](#display-anschließen)
-- [Installieren](#installieren)
-- [ESP32 Schritt für Schritt](#esp32-schritt-für-schritt)
-- [Konfigurieren](#konfigurieren)
-- [Betrieb und Updates](#betrieb-und-updates)
-- [Fehlerverhalten und Diagnose](#fehlerverhalten-und-diagnose)
-- [Ressourcen- und Stromverbrauch](#ressourcen--und-stromverbrauch)
-- [Sicherheit und Datenschutz](#sicherheit-und-datenschutz)
-- [Projektentwicklung](#projektentwicklung)
-- [Grenzen](#grenzen)
-- [Release Notes](#release-notes)
-- [Haftungsausschluss](#haftungsausschluss)
-- [Lizenz und Unterstützung](#lizenz-und-unterstützung)
-
-</details>
-
-## Wieso gibt es dieses Projekt?
-
-Ich möchte morgens möglichst schnell sehen, wann ich los muss, um meinen Bus oder meine Bahn zu bekommen - ohne auf mein Handy gucken zu müssen.
-
-## Und wie funktioniert es?
-
-Der HVV-Anzeiger lädt im Normalbetrieb alle 15 Sekunden aktuelle
-Geofox-Prognosen. Er filtert die gewünschten Verbindungen und sortiert sie
-über mehrere Haltestellen hinweg nach der erwarteten Abfahrtszeit.
-
-Das ursprüngliche Setup besteht aus einem Raspberry Pi Zero 2 W oder einem
-kompatiblen Raspberry-Pi-Modell mit 40-Pin-GPIO und einem
-2,2-Zoll-ILI9341-SPI-Display. Es läuft auf Raspberry Pi OS Lite ohne grafische
-Oberfläche. Zusätzlich sind Home Assistant und ESP32-Displays mit ESPHome möglich.
-
-### Welcher Aufbau passt zu dir?
-
-| Du möchtest … | Aufbau | Hier geht es weiter |
-|---|---|---|
-| eine Anzeige direkt am Raspberry Pi | Raspberry Pi mit ILI-Display; Backend und Browseroberfläche laufen gemeinsam auf dem Pi | [Pi-Installation](#installieren) |
-| Abfahrten in Home Assistant vom Pi | Pi-Python-Backend + native HA-Integration oder REST-Paket | [Home-Assistant-Anleitung](docs/home-assistant.md) |
-| ein eigenständiges ESP32-Display | CYD führt Backend und Anzeige in einer schlanken Firmware aus; kein Pi oder HA nötig | [ESP32-Einrichtungsanleitung](docs/esp32-setup.md) |
-| einen Browser als Kiosk- oder Zweitbildschirm | geschützter Displaymodus des Webdienstes | [Weboberfläche und Displaymodus](#lokale-weboberfläche) |
-
-Ein Geofox-Zugang ist bei beiden Varianten erforderlich. Pi+ILI ist ein
-vollständiges System mit Python-Backend, Weboberfläche und lokaler Display-
-Ansteuerung. ESP32+CYD ist ein zweites, unabhängiges System: Die Firmware fragt
-Geofox direkt ab, rendert die Abfahrten und stellt Status und Daten über die
-verschlüsselte ESPHome-API bereit. Es braucht weder Pi noch Python-Webdienst.
-Home Assistant kann beide Systeme optional konsumieren; HA ist keine
-Voraussetzung für die jeweilige Anzeige.
-Die Abschnitte **Voraussetzungen**, **Geofox-Zugang**, **Display anschließen**,
-**Installieren**, **Betrieb und Updates** und **Fehlerverhalten** beschreiben
-die Installation auf dem Raspberry Pi. Die CYD-Firmware und ihr USB-Setup sind
-in [ESP32 mit ESPHome](docs/esp32-setup.md) getrennt dokumentiert.
-
-## Plattformen und gemeinsame Funktionen
-
-Pi+ILI und ESP32+CYD sind zwei eigenständige Systeme. Beide beziehen Geofox-
-Daten, filtern und sortieren Abfahrten und zeigen sie lokal an. Das Pi-System
-nutzt den Python-Dienst und seine Weboberfläche. Das CYD enthält einen
-schlanken ESPHome-Backendteil mit festen Haltestellen in seinem lokalen Profil;
-es ruft Geofox direkt ab und hat keine Weboberfläche. Der Pi-Dienst und ein
-Containerhost sind für diesen ESP32-Betrieb nicht beteiligt.
-
-| Funktion | Pi+ILI | ESP32+CYD | Pi-Weboberfläche |
-|---|---:|---:|---:|
-| Haltestellen, Linien und Ziele | `config.json` | lokales ESPHome-Profil | Pi-Konfiguration editieren |
-| Geofox-Abruf und Sortierung | Python-Backend | ESP32-Firmware | ✓ |
-| Display und Nachtmodus | ILI direkt am Pi | CYD-Firmware | Browseranzeige |
-| Helligkeit und Neustart | Pi-Hardware/systemd | ESPHome-Steuerung/OTA | Dienststeuerung |
-| Weboberfläche und Backups | ✓ | — | ✓ |
-| Optionale Home-Assistant-Anbindung | mDNS + HVV-Integration | ESPHome-API/mDNS | Abfahrten/Status |
-
-Die Ausgaben beider Systeme folgen demselben versionierten Display-Datenmodell;
-Konfiguration und Laufzeit bleiben getrennt. Pi-Änderungen erfolgen über die
-Weboberfläche oder `config.json`. CYD-Haltestellen liegen in
-`esphome/hvv-cyd.local.yaml` und werden erst nach einem neuen Firmware-Flash
-aktiv. Siehe [Haltestellen im ESP32-Profil ändern](docs/esp32-stations.md).
-
-![Beispielhafte Abfahrten ab Jungfernstieg Richtung Hauptbahnhof mit Bus, U-Bahn und S-Bahn](docs/hvv-anzeiger-preview.png)
-
-Das Preview zeigt beispielhafte Abfahrten ab Jungfernstieg in Richtung
-Hauptbahnhof. Bus, U-Bahn und S-Bahn werden dabei mit ihren unterschiedlichen
-Linienfarben und -formen dargestellt; die angezeigten Zeiten sind illustrativ.
-
-## Funktionen
-
-### Anzeige
-
-- bis zu fünf Abfahrten auf 320 × 240 Pixeln im Querformat
-- Linie, Fahrtziel, absolute Uhrzeit und verbleibende Minuten
-- gemeinsame chronologische Sortierung über mehrere Haltestellen
-- frei konfigurierbare Haltestellen, Linien, Ziele und sichtbare Kürzel
-- Bus-, U-Bahn-, S-Bahn-, AKN-, Regional- und Fährverbindungen mit passender
-  Linienkennzeichnung
-- wahlweise Countdown oder absolute Abfahrtszeit sowie optional ausgeblendete
-  Haltestellenkürzel
-- Geofox-Echtzeitprognosen einschließlich Verspätungen und Ausfällen
-
-### Daten und Fehlerverhalten
-
-- Aktualisierung im Normalbetrieb alle 15 Sekunden
-- sichtbare Hinweise bei fehlendem WLAN, veralteten Daten oder noch nicht
-  synchronisierter Systemzeit
-- letzter erfolgreicher Datenstand bleibt bei vorübergehenden Fehlern sichtbar
-- begrenzte Wiederholungsversuche mit wachsendem Abstand bei API-Fehlern
-- gemeinsamer, dateibasierter Geofox-Anfragetakt für Display- und Webdienst;
-  Antworten mit `Retry-After` werden prozessübergreifend berücksichtigt
-- optionaler Nachtmodus mit schwarzem Bild und pausierten Geofox-Abfragen
-
-### Weboberfläche, Konfiguration und Diagnose
-
-- geschütztes HTTPS-Dashboard mit Hardwarestatus und kontrollierter
-  Neustartaktion sowie ein reiner, geschützter Displaymodus für Kiosk- und
-  Zweitbildschirme
-- Haltestellen- und Linienauswahl mit Geofox-Vorschlägen, Richtungs- und
-  Zielstationsfiltern sowie editierbarer Konfiguration
-- Konfigurationen sicher exportieren, importieren und aus privaten Backups
-  wiederherstellen; Importe werden vor dem Übernehmen geprüft und bestätigt
-- Gesundheits- und Diagnoseansicht, JSON-Health-API sowie lokale CLI- und
-  systemd-Monitoring-Beispiele
-
-### Raspberry-Pi-Betrieb
-
-- automatischer Start nach Neustart oder Stromausfall
-- Prozessüberwachung und automatischer Neustart durch systemd
-- vorsorglicher ILI9341-Controller-Reset alle 60 Sekunden mit vollständigem Neuzeichnen nach möglichen Kontaktfehlern
-- wöchentliche Begrenzung der Systemprotokolle
-- Diagnosewerkzeug und PNG-Vorschau für Betrieb ohne angeschlossenes Display
-
-### ESP32-Anzeige und optionale Home-Assistant-Integration
-
-Das Standardprofil `hvv-cyd` ist ein eigenständiges ESP32-Backend mit Display.
-Es fragt Geofox direkt ab; Home Assistant und Pi sind nicht erforderlich. Über
-ESPHome-mDNS wird das eingeschaltete CYD in Home Assistant als ESPHome-Gerät
-entdeckt. Die Entities liefern Abfahrten und Gerätestatus. Die optionale
-benutzerdefinierte HVV-Integration ist dagegen für den Pi-Python-Dienst gedacht.
-Die Pi-Anzeige bleibt unabhängig davon.
-
-Einrichtung und Zuständigkeiten sind getrennt dokumentiert:
-[Home Assistant](docs/home-assistant.md) und
-[ESP32 mit ESPHome](docs/esp32-setup.md). Der technische Überblick steht in
-[Home Assistant und ESP32: Überblick](docs/home-assistant-esphome.md).
-
-#### Home Assistant: Schritt für Schritt
-
-Dieser Abschnitt richtet Home Assistant als Client des Pi-Python-Backends ein.
-Das Standard-CYD zeigt Abfahrten ohne HA an und wird separat über die integrierte
-ESPHome-Integration erkannt. Für die Dateiablage wird im
-Beispiel Home Assistant OS verwendet.
-Die offizielle HA-Anleitung zu [Dateizugriff und `configuration.yaml`](https://www.home-assistant.io/docs/configuration/)
-beschreibt weitere Installationsarten.
-
-1. **Konfigurationsordner finden:** In Home Assistant zu
-   **Einstellungen → System → Reparaturen** gehen. Oben rechts das Menü mit den
-   drei Punkten öffnen, **Systeminformationen** wählen und den Eintrag
-   **Konfigurationsverzeichnis** ansehen. Bei Home Assistant OS ist das
-   normalerweise `/config`.
-2. **Datei-Editor öffnen:** In der Seitenleiste die App **File editor** öffnen.
-   Falls sie fehlt: **Einstellungen → Apps → App Store**, dort **File editor**
-   installieren und starten. Im Editor liegt die Datei `configuration.yaml`
-   direkt im Ordner `/config`. Bei Home Assistant Container ist `/config` der
-   Ordner, den du beim Containerstart eingebunden hast; Apps wie File editor
-   stehen dort nicht zur Verfügung.
-3. **Pakete aktivieren:** `configuration.yaml` öffnen und unter dem obersten
-   Schlüssel `homeassistant:` diese Zeile ergänzen:
-
-   ```yaml
-   homeassistant:
-     packages: !include_dir_named packages
-   ```
-
-   Gibt es schon einen Abschnitt `homeassistant:`, die Zeile dort einrücken und
-   **keinen zweiten** gleichnamigen Abschnitt anlegen.
-4. **Paketdatei kopieren:** Im Konfigurationsordner den Ordner `packages`
-   anlegen. Die Datei [`home-assistant/hvv.yaml`](home-assistant/hvv.yaml) aus
-   diesem Repository dort hinein kopieren und als `/config/packages/hvv.yaml`
-   speichern.
-5. **Zugangsdaten eintragen:** `/config/secrets.yaml` im selben Editor öffnen
-   (falls sie noch nicht existiert, im Ordner `/config` neu anlegen). Die
-   Beispielwerte aus [`home-assistant/secrets.example.yaml`](home-assistant/secrets.example.yaml)
-   übernehmen und anpassen:
-
-   ```yaml
-   hvv_smart_home_url: https://<Hostname>:8080/api/smart-home
-   hvv_health_url: https://<Hostname>:8080/api/diagnostics
-   hvv_web_password: DEIN_INDIVIDUELLES_WEBPASSWORT
-   ```
-
-   `<Hostname>` ist der Name, über den dein HVV-Webdienst erreichbar ist. Das
-   Passwort ist das bei dessen Einrichtung gesetzte Webpasswort. HTTPS und die
-   Zertifikatsprüfung bleiben eingeschaltet; Home Assistant muss dem Zertifikat
-   vertrauen. Zugangsdaten nicht in `configuration.yaml` oder `hvv.yaml`
-   eintragen und diese Dateien nicht öffentlich teilen.
-6. **Prüfen und neu starten:** Dateien speichern, dann in Home Assistant
-   **Einstellungen → Tools → YAML** öffnen und **Konfiguration prüfen** wählen.
-   Nur bei erfolgreicher Prüfung über das Drei-Punkte-Menü unter **Einstellungen**
-   **Home Assistant neu starten**.
-7. **Sensor kontrollieren:** Nach dem Neustart unter
-   **Einstellungen → Geräte & Dienste → Entitäten** nach `HVV Board` suchen.
-   Die Entität `sensor.hvv_board` sollte als Zustand `ok` anzeigen; mögliche
-   Zustände sind außerdem `stale`, `expired`, `unavailable` und `night`.
-
-Das Dashboard ist optional. Die zugehörige Karte steht in
-[`home-assistant/dashboard.yaml`](home-assistant/dashboard.yaml). Weitere
-Hinweise zur TLS-Vertrauenskette, Fehlersuche und zum Hintergrunddienst stehen
-in der [Home-Assistant-Anleitung](docs/home-assistant.md).
-
-### Welche Abfahrtszeit wird angezeigt?
-
-Die Anzeige verwendet nicht einfach die geplante Abfahrtszeit, sondern die
-aktuelle Geofox-Prognose:
-
-```text
-erwartete Abfahrtszeit = Planabfahrt + gemeldete Verspätung
-```
-
-Die große Restzeit und die kleine absolute Uhrzeit basieren auf derselben
-erwarteten Abfahrtszeit. Liefert Geofox keine Verspätung, wird die Planzeit
-verwendet. Gemeldete Ausfälle erscheinen als `AUS`.
-
-Eine noch bevorstehende Abfahrt bleibt eine Prognose und kann sich bis zur
-Abfahrt ändern. Sie ist nicht mit einer nachträglich gemessenen tatsächlichen
-Abfahrt gleichzusetzen.
-
-## Praxisbeispiel
-
-Die fertige Anzeige im Einsatz auf einem Raspberry Pi mit 2,2-Zoll-Display:
-
-![Praxisbeispiel der fertigen HVV-Abfahrtsanzeige](docs/practice-example.png)
-
-Die Hülle für den Raspberry Pi und das Display ist 3D-gedruckt und kann bei
-[3DprintsByBen auf Etsy](https://3dprintsbybenstudio.etsy.com) bestellt werden.
-Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
-
-> Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
-> offizielles Produkt von hvv, HOCHBAHN oder Geofox.
-
-## Vorkonfigurierte Anzeige
-
-Die Beispielkonfiguration enthält:
-
-| Kürzel | Haltestelle | Linie | Ziel |
-|---|---|---:|---|
-| W | Weistritzstraße | 186 | S Othmarschen |
-| W | Weistritzstraße | 184 | S Halstenbek |
-| W | Weistritzstraße | 384 | Elbgaustraße |
-| R | Recknitzstraße | 21 | U Niendorf Nord |
-
-Das Kürzel macht in der gemeinsam sortierten Liste sichtbar, von welcher
-Haltestelle eine Abfahrt stammt. Alle Verbindungen lassen sich in
-`config.json` ersetzen.
-
-> **Andere Haltestellen oder Verbindungen gewünscht?** Nach der Installation
-> kannst du sie bequem über die lokale Weboberfläche einrichten und ändern –
-> das ist der einfache Weg für normale Nutzer. Alternativ kannst du das
-> Repository in Codex öffnen und den mitgelieferten Skill
-> `$adjust-hvv-stations` nutzen. Ein möglicher Auftrag lautet:
-> `Nutze $adjust-hvv-stations und zeige Linie 5 Richtung Hauptbahnhof ab
-> Rathausmarkt an.` Der Skill passt die Konfiguration an und prüft sie
-> anschließend automatisch. Weitere Hinweise und Beispiele stehen unter
-> [Haltestellen mit Codex anpassen](#haltestellen-mit-codex-anpassen).
-
-## Voraussetzungen
-
-### Hardware-Einkauf
-
-#### Raspberry Pi und Zubehör
-
-Die folgenden Amazon.de-Suchlinks führen zu passenden Produktkategorien für
-das Referenzsetup mit Raspberry Pi Zero 2 W. Vor dem Kauf die technischen
-Angaben des konkreten Angebots prüfen; insbesondere Controller, Auflösung,
-SPI-Anschluss, 3,3-V-Logik und Netzteilleistung müssen zum unten dokumentierten
-Aufbau passen. Für ein anderes Raspberry-Pi-Modell ist das jeweils dafür
-vorgesehene Netzteil erforderlich.
-
-| Komponente | Amazon.de-Suche | Worauf achten? |
-|---|---|---|
-| Raspberry Pi Zero 2 W | [Raspberry Pi Zero 2 W suchen (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W&tag=bema19910e-21) | Modell `Zero 2 W`; eine bereits montierte GPIO-Stiftleiste erleichtert den Aufbau |
-| 2,2-Zoll-TFT | [ILI9341-SPI-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=2%2C2+Zoll+ILI9341+SPI+Display+240x320&tag=bema19910e-21) | ILI9341, SPI, 240 × 320 Pixel und 3,3-V-kompatible Logik |
-| microSD-Karte | [32-GB-High-Endurance-microSD suchen (Affiliate-Link)](https://www.amazon.de/s?k=microSD+32GB+High+Endurance&tag=bema19910e-21) | mindestens 16 GB; High-Endurance-Modelle sind für dauerhaften Betrieb sinnvoll |
-| Netzteil | [5-V-/2-A-Micro-USB-Netzteil suchen (Affiliate-Link)](https://www.amazon.de/s?k=5V+2A+Micro+USB+Netzteil+Raspberry+Pi+Zero+2+W&tag=bema19910e-21) | stabilisierte 5 V, mindestens 2 A und Micro-USB-Stecker |
-| Jumper-Kabel | [Buchse-Buchse-Jumper-Kabel suchen (Affiliate-Link)](https://www.amazon.de/s?k=Jumper+Kabel+Buchse+Buchse+2%2C54mm&tag=bema19910e-21) | 2,54-mm-Raster; Steckertyp passend zu den montierten Stiftleisten wählen |
-| GPIO-Stiftleiste, falls nötig | [2×20-GPIO-Stiftleiste suchen (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W+GPIO+Stiftleiste+2x20&tag=bema19910e-21) | nur erforderlich, wenn der Raspberry Pi ohne montierte Stiftleiste geliefert wird |
-| SD-/microSD-Kartenleser, falls nötig | [SD-/microSD-Kartenleser suchen (Affiliate-Link)](https://www.amazon.de/s?k=SD-Kartenleser+USB+microSD&tag=bema19910e-21) | nur erforderlich, wenn dein Rechner keinen passenden Leser zum Flashen der Speicherkarte hat |
-| Löt-Set, falls nötig | [Löt-Set für Elektronik suchen (Affiliate-Link)](https://www.amazon.de/s?k=Loetset+Loetkolben+Elektronik&tag=bema19910e-21) | einfache Grundausrüstung zum sicheren Verbinden der Leitungen |
-| „Dritte Hand“ / Platinenhalter, falls nötig | [Dritte Hand mit Platinenhalter und Klemmen suchen (Affiliate-Link)](https://www.amazon.de/s?k=Dritte+Hand+Platinenhalter+Klemmen&tag=bema19910e-21) | hält Kabel und Platine beim Löten sicher fest |
-
-#### ESP32, Displays und Zubehör
-
-Wähle **einen** der dokumentierten Aufbauten: ESP32 DevKit mit ILI9341,
-CYD mit integriertem Display oder ESP32-S3 DevKit mit ILI9488.
-Beim CYD ist kein zusätzliches Display nötig. Die Suchlinks beziehen sich
-auf diese Referenzprofile; nicht jedes Suchergebnis passt dazu.
-
-| Komponente / Variante | Amazon.de-Suche | Worauf achten? |
-|---|---|---|
-| ESP32 DevKit | [ESP32-DevKit-Board suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32+DevKit+ESP32-WROOM-32+Entwicklungsboard&tag=bema19910e-21) | klassischer ESP32 für `hvv-display.yaml`; herausgeführte GPIOs müssen zur dokumentierten Pinbelegung passen |
-| ILI9341-SPI-Display | [ILI9341-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=ILI9341+SPI+Display+240x320+3%2C3V&tag=bema19910e-21) | externes Display zum ESP32 DevKit; 240 × 320 Pixel, SPI und 3,3-V-kompatible Logik |
-| CYD mit integriertem Display | [ESP32-2432S028 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-2432S028+ILI9342+2.8+Display&tag=bema19910e-21) | `hvv-cyd.yaml` zielt standardmäßig auf die getestete Dual-USB-Revision mit ILI9342, 2,8 Zoll, 320×240 Pixel im nativen Querformat; andere Revisionen brauchen ggf. einen anderen Controller |
-| ESP32-S3 DevKit | [ESP32-S3-DevKitC-1 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-S3+DevKitC-1+Entwicklungsboard&tag=bema19910e-21) | für `hvv-s3-ili9488.yaml`; GPIOs, USB-Anschluss und konkrete Boardvariante prüfen |
-| ILI9488-SPI-Display | [ILI9488-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=ILI9488+SPI+Display+320x480+3%2C3V&tag=bema19910e-21) | externes Display zum S3-Referenzaufbau; 320 × 480 Pixel und SPI, nicht die ähnlich angebotene parallele Schnittstelle |
-| USB-Netzteil | [5-V-USB-Netzteil mit 2 A suchen (Affiliate-Link)](https://www.amazon.de/s?k=USB+Netzteil+5V+2A&tag=bema19910e-21) | stabile Versorgung und Anschluss passend zum Kabel; Spannungs- und Stromvorgaben von Board und Display beachten |
-| USB-Datenkabel | [USB-Datenkabel für Micro-USB oder USB-C suchen (Affiliate-Link)](https://www.amazon.de/s?k=USB+Datenkabel+Micro+USB+USB+C&tag=bema19910e-21) | Stecker passend zum Board und Rechner; das erste Flashen benötigt Datenübertragung, ein reines Ladekabel reicht nicht |
-| Jumper-Kabel | [2,54-mm-Jumper-Kabel-Set suchen (Affiliate-Link)](https://www.amazon.de/s?k=Jumper+Kabel+Set+2%2C54mm+Buchse+Stecker&tag=bema19910e-21) | für externe Displays; Buchse/Stecker passend zu den Stiftleisten auswählen |
-| Stiftleisten, falls nötig | [2,54-mm-Stiftleisten suchen (Affiliate-Link)](https://www.amazon.de/s?k=Stiftleiste+2%2C54mm+gerade&tag=bema19910e-21) | nur bei unbestückten Boards oder Displaymodulen; gegebenenfalls Lötwerkzeug aus der obigen Liste nötig |
-| Backlight-Treiber, falls nötig | [MOSFET-/LED-Treibermodul mit 3,3-V-Steuerung suchen (Affiliate-Link)](https://www.amazon.de/s?k=MOSFET+LED+Treiber+Modul+3%2C3V+Logic+Level&tag=bema19910e-21) | nur ohne geeigneten BL-Steuereingang am Display; Treiber muss mit 3,3 V schalten und zum LED-Strom passen; nackte Hintergrundbeleuchtung nicht direkt am GPIO betreiben |
-
-Pinbelegung, Versorgung und Backlight-Anschluss stehen in der
-[ESP32-Einrichtungsanleitung](docs/esp32-setup.md).
-Die Referenzfirmwares wurden kompiliert; die konkreten Amazon-Angebote und
-deren Hardware wurden nicht geprüft. Der Python-Hintergrunddienst bleibt
-auch mit einem ESP32-Display erforderlich.
-
-> **Hinweis zu Affiliate-Links:** Als Amazon-Partner verdiene ich an
-> qualifizierten Verkäufen. Wenn du über einen entsprechend gekennzeichneten
-> Link einkaufst, kann ich eine Provision erhalten. Für dich entstehen dadurch
-> keine zusätzlichen Kosten.
-
-#### ESP32 Schritt für Schritt
-
-Für das CYD `ESP32-2432S028` mit 2,8-Zoll-Display und 320×240 Pixeln im
-Querformat ist `hvv-cyd` das Standardprofil. Es verwendet die getestete
-Dual-USB-Revision mit ILI9342 und 90°-Drehung im Querformat. Eine
-automatische Controller-Erkennung ist technisch nicht zuverlässig. Die
-Firmware enthält Geofox-Zugang und feste Haltestellenkonfiguration und fragt
-Geofox direkt ab. Ein Pi-Webdienst, CYD-API-Schlüssel oder TLS-Zertifikat vom Pi
-ist dafür nicht erforderlich. Das Setup speichert WLAN- und Geofox-Daten lokal
-in der ignorierten `esphome/secrets.yaml` und erstellt eine lokale Profilkopie.
-
-1. **Git und Python installieren:** Installiere Git für Windows und Python
-   3.12 samt Python Launcher (`py`). Nimm ein USB-Datenkabel; schließe das Board
-   erst vor dem Flashen an. Details stehen in der
-   [vollständigen ESP32-Anleitung](docs/esp32-setup.md#schnellstart-für-windows-cyd-einrichten-und-flashen).
-2. **PowerShell öffnen:** Öffne das Startmenü, tippe `PowerShell` und starte
-   **Windows PowerShell**. Kopiere diese Befehle einzeln hinein und drücke nach
-   jedem die Eingabetaste:
-
-   ```powershell
-   git --version
-   py -3.12 --version
-   ```
-
-   Erwartet werden eine Git-Version und `Python 3.12.x`. Ist ein Befehl
-   unbekannt, installiere das betreffende Programm und öffne PowerShell neu.
-3. **Repository laden:** Führe die Befehle einzeln in PowerShell aus:
-
-   ```powershell
-   git clone https://github.com/Ben1991/hvv-anzeiger.git
-   cd hvv-anzeiger
-   ```
-
-   Die Eingabeaufforderung sollte jetzt mit `hvv-anzeiger>` enden. Wenn der
-   Ordner bereits existiert, klone ihn nicht erneut. Öffne stattdessen den
-   Ordner `hvv-anzeiger` im Explorer, tippe `powershell` in die Adressleiste
-   und drücke die Eingabetaste. Prüfe eigene Änderungen mit `git status --short`.
-4. **Setup starten:** Kopiere den vollständigen Befehl und drücke die
-   Eingabetaste:
-
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
-   ```
-
-   Gib bei der Abfrage WLAN-Name, WLAN-Passwort und Geofox-Zugang ein. Das
-   Passwort bleibt verdeckt. Warte auf „Konfiguration geprüft.“. Zugangsdaten
-   und API-Verschlüsselungsschlüssel werden lokal abgelegt und nicht
-   überschrieben.
-   Bei einem Fehler hilft die
-   [Schritt-für-Schritt-Anleitung](docs/esp32-setup.md#schritt-4-esphome-und-das-cyd-profil-einrichten).
-5. **Board flashen:** Verbinde das CYD mit einem USB-Datenkabel. Bei zwei USB-
-   Anschlüssen nur einen gleichzeitig verwenden. Führe diesen Befehl aus:
-
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
-   ```
-
-   Wähle anschließend den COM-Port des Boards. Wenn keiner erscheint, prüfe
-   Kabel, USB-UART-Treiber und Geräte-Manager. Wenn der Upload nicht beginnt,
-   folge der [Fehlerhilfe zum Flashen](docs/esp32-setup.md#schritt-5-board-verbinden-und-firmware-flashen).
-6. **Anzeige prüfen:** Kontrolliere WLAN, Abfahrtszeiten, Textausrichtung,
-   Farben und Querformat. Bei leerem oder falschfarbigem Display prüfe zuerst
-   die konkrete Displayrevision. Das CYD-Profil nimmt die getestete
-   Dual-USB-Revision mit ILI9342 und nativer 0°-Querformat-Ausrichtung als
-   Standard an; eine automatische Controller-Erkennung ist nicht möglich.
-
-**Home Assistant optional:** Das eingeschaltete CYD sollte in Home Assistant
-unter **Einstellungen → Geräte & Dienste** als ESPHome-Gerät auftauchen. Beim
-Hinzufügen den `api_encryption_key` aus `esphome\secrets.yaml` eingeben. Es ist
-keine separate HA-Firmware und kein Pi-Backend nötig. Die benutzerdefinierte
-Integration in der [HA-Anleitung](docs/home-assistant.md) verbindet stattdessen
-das eigenständige Pi-Backend.
-
-Das Setup-Skript setzt für Firmwarebau einen kurzen ESP-IDF-Pfad `C:\ei`.
-Falls der Ordner nicht angelegt werden darf, übergib einen beschreibbaren
-kurzen lokalen Pfad mit `-EspIdfPrefix`. Linux/macOS, ESPHome Device Builder,
-Pinbelegungen, alle Profile und die Fehlerbehebung stehen in der
-[ESP32-Einrichtungsanleitung](docs/esp32-setup.md).
-### Unterstütztes Zielsystem
-
-#### Betriebssysteme
-
-Raspberry Pi OS Lite ist das empfohlene Betriebssystem. Es benötigt keine
-grafische Oberfläche und passt damit besonders gut zum dauerhaft und
-headless betriebenen Anzeiger. Der Installer verwendet nur Werkzeuge, die in
-Raspberry Pi OS vorhanden sind: `apt`, `raspi-config` und `systemd`.
-Er kommt außerdem ohne ein festes Arbeitsverzeichnis aus und ist deshalb
-nicht auf ein Lite-Image beschränkt.
-
-| Betriebssystem | Status | Hinweis |
-|---|---|---|
-| Raspberry Pi OS Lite, 64 Bit, Trixie | empfohlen | aktuelles schlankes Zielsystem für Raspberry Pi Zero 2 W und die unten aufgeführten 64-Bit-Modelle |
-| Raspberry Pi OS Lite, 32 Bit, Trixie | unterstützt | sinnvoll, wenn ein kleinerer Speicherbedarf wichtiger ist; auf den unten aufgeführten Modellen muss `uname -m` den Wert `armv7l` liefern |
-| Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm | nicht unterstützt | die mitgelieferte Python-Version ist älter als 3.13; der Installer richtet keinen zusätzlichen Interpreter ein |
-| Raspberry Pi OS mit Desktop oder Full, Trixie | unterstützt | technisch derselbe Installationsweg; Desktop und Zusatzprogramme werden für die Anzeige nicht benötigt |
-| Raspberry Pi OS Bullseye oder älter | nicht unterstützt | die mitgelieferte Python-Version erfüllt die Mindestanforderung Python 3.13 nicht |
-| Ubuntu, allgemeines Debian und andere Distributionen | nicht unterstützt | der Installer setzt die Raspberry-Pi-spezifischen Werkzeuge, Gruppen und SPI-Konfiguration voraus |
-
-Raspberry Pi stellt
-[Raspberry Pi OS Lite in 64- und 32-Bit-Ausgaben](https://www.raspberrypi.com/software/operating-systems/)
-bereit. Die
-[offizielle Betriebssystemdokumentation](https://www.raspberrypi.com/documentation/computers/os.html)
-erklärt die Unterschiede zwischen Lite, Desktop und Full. Keine
-Desktop-Oberfläche zu installieren spart Speicherplatz und Hintergrundlast;
-die Displayausgabe selbst funktioniert direkt über SPI.
-
-#### Raspberry-Pi-Modelle
-
-| Modell | Status | Hinweis |
-|---|---|---|
-| [Raspberry Pi Zero 2 W (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W&tag=bema19910e-21) | empfohlen und hardwaregetestet | Referenzsetup; 64-Bit Raspberry Pi OS Lite empfohlen |
-| Raspberry Pi 3A+, 3B und 3B+ | kompatibel by design | 40-Pin-GPIO, SPI0, WLAN und unterstützte ARM-Architektur; nicht im Projekt hardwaregetestet |
-| Raspberry Pi 4B und Raspberry Pi 400 | kompatibel by design | 40-Pin-GPIO, SPI0, WLAN und unterstützte ARM-Architektur; eigenes geeignetes Netzteil erforderlich und nicht im Projekt hardwaregetestet |
-| Raspberry Pi 2 | nicht als Komplettsetup unterstützt | kein integriertes WLAN und daher zusätzliche Hardware sowie Konfiguration erforderlich |
-| Raspberry Pi Zero, Zero W und Raspberry Pi 1 | nicht unterstützt | ARMv6 liegt außerhalb der für die Hardwaretreiber festgelegten Architekturen `armv7l` und `aarch64` |
-| Raspberry Pi 5, 500, 500+ und Compute Module 5 | nicht unterstützt | der aktuelle GPIO-Treiberpfad des Projekts ist nicht für die RP1-Hardware freigegeben |
-| Compute Modules und Raspberry Pi Pico | nicht unterstützt | Compute Modules benötigen ein trägerspezifisches GPIO-Setup; Pico-Modelle führen kein Raspberry Pi OS aus |
-
-„Kompatibel by design“ bedeutet: Softwarearchitektur, 40-Pin-Belegung und
-SPI-Anbindung passen zum Projekt, es existiert aber kein Hardwaretest dieses
-Repositories auf dem jeweiligen Modell. Fehlerberichte und bestätigte
-Installationen sind als
-[GitHub-Issue](https://github.com/Ben1991/hvv-anzeiger/issues) willkommen.
-
-#### Weitere Voraussetzungen
-
-- Python 3.13 oder neuer
-- Der Pi-Installer nutzt die GPIO-API aus Raspberry Pi OS (`python3-rpi-lgpio`).
-- [microSD-Karte (Affiliate-Link)](https://www.amazon.de/s?k=microSD+32GB+High+Endurance&tag=bema19910e-21)
-- [zuverlässiges 5-V-Netzteil mit mindestens 2 A (Affiliate-Link)](https://www.amazon.de/s?k=5V+2A+Micro+USB+Netzteil+Raspberry+Pi+Zero+2+W&tag=bema19910e-21)
-- WLAN mit Internetzugang
-- [2,2-Zoll-TFT mit ILI9341-Controller und 240 × 320 Pixeln (Affiliate-Link)](https://www.amazon.de/s?k=2%2C2+Zoll+ILI9341+SPI+Display+240x320&tag=bema19910e-21)
-- [passende Jumper-Kabel (Affiliate-Link)](https://www.amazon.de/s?k=Jumper+Kabel+Buchse+Buchse+2%2C54mm&tag=bema19910e-21)
-- gültige Geofox-GTI-Zugangsdaten
-- Terminal- oder SSH-Zugang zum Raspberry Pi
-
-Pinbelegung, Spannungsversorgung, Hintergrundbeleuchtung und Farbreihenfolge
-müssen zum konkreten Display-Modul passen.
-
-Die ursprüngliche Installation wurde auf Raspberry Pi OS Bookworm 64 Bit geprüft. Die aktuelle Version benötigt Python 3.13 oder neuer und unterstützt daher nur Trixie.
+- **Das Projekt kennenlernen.** [Worum es geht](#wieso-gibt-es-dieses-projekt),
+  [Plattformen im Vergleich](#plattformen-und-gemeinsame-funktionen),
+  [Funktionen](#funktionen), [Praxisbeispiel](#praxisbeispiel) und
+  [mitgelieferte Beispielhaltestellen](#vorkonfigurierte-anzeige).
+- **Eine Anzeige einrichten.** [Geofox-Zugang](#geofox-zugang-beantragen),
+  [Pi mit ILI-Display](#raspberry-pi-mit-ili-display-einrichten),
+  [ESP32 mit CYD](#esp32-schritt-für-schritt) und
+  [optionaler Anschluss an Home Assistant](#home-assistant-optional-einrichten).
+- **Eine laufende Anzeige betreiben.** [Pi konfigurieren](#konfigurieren),
+  [Pi aktualisieren](#betrieb-und-updates), [Pi-Fehler beheben](#fehlerverhalten-und-diagnose),
+  [CYD-Haltestellen ändern](docs/esp32-stations.md),
+  [CYD aktualisieren](docs/esp32-setup.md#firmware-aktualisieren) und
+  [CYD-Fehler beheben](docs/esp32-setup.md#4-funktion-am-gerät-prüfen).
+- **Projektinformationen.** [Stromverbrauch](#ressourcen--und-stromverbrauch),
+  [Datenschutz](#sicherheit-und-datenschutz), [Mitmachen](#projektentwicklung),
+  [Grenzen](#grenzen), [Änderungen](#release-notes) und
+  [Lizenz und Unterstützung](#lizenz-und-unterstützung).
 
 ## Geofox-Zugang beantragen
 
@@ -554,10 +119,120 @@ und Nutzungsbedingungen auf der verlinkten hvv-Seite.
   gelöscht werden können.
 
 Geofox-Zugangsdaten gehören niemals in `config.json`, einen Commit, ein
-GitHub-Issue oder einen Screenshot. Der Installer speichert sie mit restriktiven
-Dateirechten unter `/etc/hvv-anzeiger.env`.
+GitHub-Issue oder einen Screenshot. Auf dem Pi speichert der Installer sie
+unter `/etc/hvv-anzeiger.env`. Beim CYD liegen sie im Projektordner unter
+`esphome/secrets.yaml`.
 
-## Display anschließen
+## Raspberry Pi mit ILI-Display einrichten
+
+1. Beantrage den [Geofox-Zugang](#geofox-zugang-beantragen).
+2. Prüfe die [Teileliste](#voraussetzungen-für-raspberry-pi--ili9341) und
+   [schließe das Display an](#display-anschließen).
+3. Folge der [Installation](#installieren). Dort bereitest du die Speicherkarte
+   vor und richtest die Anzeige und das Webpasswort ein.
+4. Starte den Pi neu und prüfe die [erste Inbetriebnahme](#erster-neustart-und-prüfung).
+5. Öffne die [Haltestellenauswahl](#eigene-haltestellen-am-pi-anzeigen) im Browser.
+   Speichere eine Verbindung und prüfe, ob sie auf dem Display erscheint.
+
+Wenn das Display läuft, findest du unter [Betrieb und Updates](#betrieb-und-updates)
+die Wartungsschritte. Die [Pi-Fehlerhilfe](#fehlerverhalten-und-diagnose) und
+[Home Assistant mit Raspberry Pi](#home-assistant-mit-raspberry-pi) sind separate
+Einstiege für später.
+
+### Voraussetzungen für Raspberry Pi + ILI9341
+
+#### Hardware-Einkauf
+
+##### Raspberry Pi und Zubehör
+
+Die folgenden Amazon.de-Suchlinks führen zu passenden Produktkategorien für
+das Referenzsetup mit Raspberry Pi Zero 2 W. Vor dem Kauf die technischen
+Angaben des konkreten Angebots prüfen; insbesondere Controller, Auflösung,
+SPI-Anschluss, 3,3-V-Logik und Netzteilleistung müssen zum unten dokumentierten
+Aufbau passen. Für ein anderes Raspberry-Pi-Modell ist das jeweils dafür
+vorgesehene Netzteil erforderlich.
+
+| Komponente | Amazon.de-Suche | Worauf achten? |
+|---|---|---|
+| Raspberry Pi Zero 2 W | [Raspberry Pi Zero 2 W suchen (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W&tag=bema19910e-21) | Modell `Zero 2 W`; eine bereits montierte GPIO-Stiftleiste erleichtert den Aufbau |
+| 2,2-Zoll-TFT | [ILI9341-SPI-Display suchen (Affiliate-Link)](https://www.amazon.de/s?k=2%2C2+Zoll+ILI9341+SPI+Display+240x320&tag=bema19910e-21) | ILI9341, SPI, 240 × 320 Pixel und 3,3-V-kompatible Logik |
+| microSD-Karte | [32-GB-High-Endurance-microSD suchen (Affiliate-Link)](https://www.amazon.de/s?k=microSD+32GB+High+Endurance&tag=bema19910e-21) | mindestens 16 GB; High-Endurance-Modelle sind für dauerhaften Betrieb sinnvoll |
+| Netzteil | [5-V-/2-A-Micro-USB-Netzteil suchen (Affiliate-Link)](https://www.amazon.de/s?k=5V+2A+Micro+USB+Netzteil+Raspberry+Pi+Zero+2+W&tag=bema19910e-21) | stabilisierte 5 V, mindestens 2 A und Micro-USB-Stecker |
+| Jumper-Kabel | [Buchse-Buchse-Jumper-Kabel suchen (Affiliate-Link)](https://www.amazon.de/s?k=Jumper+Kabel+Buchse+Buchse+2%2C54mm&tag=bema19910e-21) | 2,54-mm-Raster; Steckertyp passend zu den montierten Stiftleisten wählen |
+| GPIO-Stiftleiste, falls nötig | [2×20-GPIO-Stiftleiste suchen (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W+GPIO+Stiftleiste+2x20&tag=bema19910e-21) | nur erforderlich, wenn der Raspberry Pi ohne montierte Stiftleiste geliefert wird |
+| SD-/microSD-Kartenleser, falls nötig | [SD-/microSD-Kartenleser suchen (Affiliate-Link)](https://www.amazon.de/s?k=SD-Kartenleser+USB+microSD&tag=bema19910e-21) | nur erforderlich, wenn dein Rechner keinen passenden Leser zum Flashen der Speicherkarte hat |
+| Löt-Set, falls nötig | [Löt-Set für Elektronik suchen (Affiliate-Link)](https://www.amazon.de/s?k=Loetset+Loetkolben+Elektronik&tag=bema19910e-21) | einfache Grundausrüstung zum sicheren Verbinden der Leitungen |
+| „Dritte Hand“ / Platinenhalter, falls nötig | [Dritte Hand mit Platinenhalter und Klemmen suchen (Affiliate-Link)](https://www.amazon.de/s?k=Dritte+Hand+Platinenhalter+Klemmen&tag=bema19910e-21) | hält Kabel und Platine beim Löten sicher fest |
+
+> **Hinweis zu Affiliate-Links:** Als Amazon-Partner verdiene ich an
+> qualifizierten Verkäufen. Wenn du über einen entsprechend gekennzeichneten
+> Link einkaufst, kann ich eine Provision erhalten. Für dich entstehen dadurch
+> keine zusätzlichen Kosten.
+
+#### Unterstütztes Zielsystem
+
+##### Betriebssysteme
+
+Raspberry Pi OS Lite ist das empfohlene Betriebssystem. Es benötigt keine
+grafische Oberfläche und passt damit besonders gut zum dauerhaft und
+headless betriebenen Anzeiger. Der Installer verwendet nur Werkzeuge, die in
+Raspberry Pi OS vorhanden sind: `apt`, `raspi-config` und `systemd`.
+Er kommt außerdem ohne ein festes Arbeitsverzeichnis aus und ist deshalb
+nicht auf ein Lite-Image beschränkt.
+
+| Betriebssystem | Status | Hinweis |
+|---|---|---|
+| Raspberry Pi OS Lite, 64 Bit, Trixie | empfohlen | aktuelles schlankes Zielsystem für Raspberry Pi Zero 2 W und die unten aufgeführten 64-Bit-Modelle |
+| Raspberry Pi OS Lite, 32 Bit, Trixie | unterstützt | sinnvoll, wenn ein kleinerer Speicherbedarf wichtiger ist; auf den unten aufgeführten Modellen muss `uname -m` den Wert `armv7l` liefern |
+| Raspberry Pi OS Legacy Lite, 64 oder 32 Bit, Bookworm | nicht unterstützt | die mitgelieferte Python-Version ist älter als 3.13; der Installer richtet keinen zusätzlichen Interpreter ein |
+| Raspberry Pi OS mit Desktop oder Full, Trixie | unterstützt | technisch derselbe Installationsweg; Desktop und Zusatzprogramme werden für die Anzeige nicht benötigt |
+| Raspberry Pi OS Bullseye oder älter | nicht unterstützt | die mitgelieferte Python-Version erfüllt die Mindestanforderung Python 3.13 nicht |
+| Ubuntu, allgemeines Debian und andere Distributionen | nicht unterstützt | der Installer setzt die Raspberry-Pi-spezifischen Werkzeuge, Gruppen und SPI-Konfiguration voraus |
+
+Raspberry Pi stellt
+[Raspberry Pi OS Lite in 64- und 32-Bit-Ausgaben](https://www.raspberrypi.com/software/operating-systems/)
+bereit. Die
+[offizielle Betriebssystemdokumentation](https://www.raspberrypi.com/documentation/computers/os.html)
+erklärt die Unterschiede zwischen Lite, Desktop und Full. Keine
+Desktop-Oberfläche zu installieren spart Speicherplatz und Hintergrundlast;
+die Displayausgabe selbst funktioniert direkt über SPI.
+
+##### Raspberry-Pi-Modelle
+
+| Modell | Status | Hinweis |
+|---|---|---|
+| [Raspberry Pi Zero 2 W (Affiliate-Link)](https://www.amazon.de/s?k=Raspberry+Pi+Zero+2+W&tag=bema19910e-21) | empfohlen und hardwaregetestet | Referenzsetup; 64-Bit Raspberry Pi OS Lite empfohlen |
+| Raspberry Pi 3A+, 3B und 3B+ | kompatibel by design | 40-Pin-GPIO, SPI0, WLAN und unterstützte ARM-Architektur; nicht im Projekt hardwaregetestet |
+| Raspberry Pi 4B und Raspberry Pi 400 | kompatibel by design | 40-Pin-GPIO, SPI0, WLAN und unterstützte ARM-Architektur; eigenes geeignetes Netzteil erforderlich und nicht im Projekt hardwaregetestet |
+| Raspberry Pi 2 | nicht als Komplettsetup unterstützt | kein integriertes WLAN und daher zusätzliche Hardware sowie Konfiguration erforderlich |
+| Raspberry Pi Zero, Zero W und Raspberry Pi 1 | nicht unterstützt | ARMv6 liegt außerhalb der für die Hardwaretreiber festgelegten Architekturen `armv7l` und `aarch64` |
+| Raspberry Pi 5, 500, 500+ und Compute Module 5 | nicht unterstützt | der aktuelle GPIO-Treiberpfad des Projekts ist nicht für die RP1-Hardware freigegeben |
+| Compute Modules und Raspberry Pi Pico | nicht unterstützt | Compute Modules benötigen ein trägerspezifisches GPIO-Setup; Pico-Modelle führen kein Raspberry Pi OS aus |
+
+„Kompatibel by design“ bedeutet: Softwarearchitektur, 40-Pin-Belegung und
+SPI-Anbindung passen zum Projekt, es existiert aber kein Hardwaretest dieses
+Repositories auf dem jeweiligen Modell. Fehlerberichte und bestätigte
+Installationen sind als
+[GitHub-Issue](https://github.com/Ben1991/hvv-anzeiger/issues) willkommen.
+
+##### Weitere Voraussetzungen
+
+- Python 3.13 oder neuer
+- Der Pi-Installer nutzt die GPIO-API aus Raspberry Pi OS (`python3-rpi-lgpio`).
+- [microSD-Karte (Affiliate-Link)](https://www.amazon.de/s?k=microSD+32GB+High+Endurance&tag=bema19910e-21)
+- [zuverlässiges 5-V-Netzteil mit mindestens 2 A (Affiliate-Link)](https://www.amazon.de/s?k=5V+2A+Micro+USB+Netzteil+Raspberry+Pi+Zero+2+W&tag=bema19910e-21)
+- WLAN mit Internetzugang
+- [2,2-Zoll-TFT mit ILI9341-Controller und 240 × 320 Pixeln (Affiliate-Link)](https://www.amazon.de/s?k=2%2C2+Zoll+ILI9341+SPI+Display+240x320&tag=bema19910e-21)
+- [passende Jumper-Kabel (Affiliate-Link)](https://www.amazon.de/s?k=Jumper+Kabel+Buchse+Buchse+2%2C54mm&tag=bema19910e-21)
+- gültige Geofox-GTI-Zugangsdaten
+- Terminal- oder SSH-Zugang zum Raspberry Pi
+
+Pinbelegung, Spannungsversorgung, Hintergrundbeleuchtung und Farbreihenfolge
+müssen zum konkreten Display-Modul passen.
+
+Die ursprüngliche Installation wurde auf Raspberry Pi OS Bookworm 64 Bit geprüft. Die aktuelle Version benötigt Python 3.13 oder neuer und unterstützt daher nur Trixie.
+
+### Display anschließen
 
 Falls du noch keine Löt-Ausrüstung hast, sind ein [einfaches Löt-Set
 (Affiliate-Link)](https://www.amazon.de/s?k=Loetset+Loetkolben+Elektronik&tag=bema19910e-21)
@@ -602,9 +277,19 @@ Vor dem Verdrahten:
    erforderlichen Vorwiderstand oder Treiber enthält.
 5. Hintergrundbeleuchtung nicht ungeprüft direkt aus einem GPIO-Pin versorgen.
 
-## Installieren
+### Installieren
 
-### Schnellinstallation
+#### Schnellinstallation
+
+1. Installiere auf deinem Computer den [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
+2. Wähle im Imager dein Pi-Modell, **Raspberry Pi OS Lite (64 Bit)** für das
+   empfohlene Modell und die microSD-Karte aus.
+   Beim Schreiben wird die ausgewählte Karte gelöscht. Sichere vorher die darauf
+   gespeicherten Dateien. Richte beim Schreiben Benutzername und WLAN ein.
+3. Stecke die Karte in den ausgeschalteten Pi. Starte ihn und melde dich an. Bei Raspberry Pi OS Lite kannst du die
+   Befehle direkt nach der Anmeldung eingeben. Falls du eine grafische
+   Oberfläche installiert hast, öffne **Terminal**. Kopiere die folgenden Befehle zeilenweise hinein und
+   drücke nach jeder Zeile die Eingabetaste. Warte jeweils auf das Ende des Befehls.
 
 Zum Flashen beziehungsweise Einrichten der Raspberry-Pi-OS-microSD-Karte
 brauchst du einen passenden [SD-/microSD-Kartenleser, falls dein Rechner noch
@@ -633,9 +318,10 @@ das Passwort ab. Das Passwort bleibt während der Eingabe unsichtbar.
 
 Der Installer vergibt den mDNS-Namen `hvv-anzeiger.local`, erzeugt ein lokales
 TLS-Zertifikat und gibt dessen SHA-256-Fingerabdruck aus. Die Weboberfläche ist
-unter `https://hvv-anzeiger.local:8080/` erreichbar. Beim ersten Login ist das
-Passwort `hvv-anzeiger`; die Oberfläche erzwingt sofort einen Wechsel auf ein
-eigenes Passwort mit mindestens 12 Zeichen. Die beim Setup abgefragten
+unter `https://hvv-anzeiger.local:8080/` erreichbar. Öffne die Adresse im
+Browser auf einem Gerät im selben Netzwerk. Melde dich als `hvv-anzeiger`
+mit dem Erstpasswort `hvv-anzeiger` an und lege beim ersten Login ein
+individuelles Webpasswort mit mindestens 12 Zeichen fest. Die beim Setup abgefragten
 Geofox-Zugangsdaten und Beispiel-Haltestellen ermöglichen den ersten Abruf
 direkt nach dem Start. Passe die Haltestellen danach unter Einstellungen an.
 
@@ -653,8 +339,8 @@ direkt nach dem Start. Passe die Haltestellen danach unter Einstellungen an.
 Der Installer startet den Backend-Dienst und die Weboberfläche automatisch und
 aktiviert beide für den Start nach jedem Neustart des Raspberry Pi.
 Er erzeugt zusätzlich einen zufälligen CYD-Schlüssel. Nach dem ersten Weblogin
-und Passwortwechsel findest du ihn unter Einstellungen. Das CYD verwendet
-diesen schreibgeschränkten Schlüssel; das Webpasswort bleibt davon unabhängig.
+und Passwortwechsel findest du ihn unter Einstellungen. Diesen Schlüssel braucht nur ein ESP32-Profil, das den Pi-Webdienst abfragt.
+Das eigenständige CYD-Profil `hvv-cyd` verwendet seinen Geofox-Zugang.
 
 Falls die Weboberfläche nicht automatisch laufen soll:
 
@@ -668,7 +354,7 @@ Später lässt sie sich wieder aktivieren:
 sudo systemctl enable --now hvv-anzeiger-web
 ```
 
-### Erster Neustart und Prüfung
+#### Erster Neustart und Prüfung
 
 Nach der ersten Installation:
 
@@ -700,16 +386,11 @@ systemctl status hvv-anzeiger --no-pager
 sudo systemctl enable --now hvv-anzeiger
 ```
 
-### Weboberfläche: Verbindung abgelehnt
+#### Weboberfläche: Verbindung abgelehnt
 
-Wenn du ein ESP32/CYD verwendest, beachte: Das Display selbst stellt keine
-Weboberfläche auf Port 8080 bereit. Dieser Abschnitt und die folgenden
-`systemctl`-Befehle betreffen den Python-Hintergrunddienst auf dem Raspberry Pi
-oder Containerhost. Für die Browseroberfläche verwende dessen HTTPS-Adresse
-`https://<backend-host>:8080/` – nicht die IP-Adresse des ESP32. Das CYD fragt
-denselben Dienst direkt unter `https://<backend-host>:8080/api/esphome` ab.
-Die Firmware-Adresse wird bei der ESP32-Einrichtung konfiguriert; siehe
-[ESP32-Einrichtungsanleitung](docs/esp32-setup.md).
+Dieser Abschnitt gilt für die Weboberfläche des Raspberry Pi oder Containers.
+Die Hilfe zur eigenständigen CYD-Anzeige steht in der
+[CYD-Anleitung](docs/esp32-setup.md#4-funktion-am-gerät-prüfen).
 
 Wenn `https://<raspberry-pi-ip>:8080` mit „Verbindung abgelehnt“ antwortet,
 prüfe zuerst die aktuelle Adresse des Raspberry Pi:
@@ -787,6 +468,220 @@ root-privat; Installationsvorschauen entstehen außerhalb des Datenbereichs in
 privaten temporären Verzeichnissen.
 
 </details>
+
+### Eigene Haltestellen am Pi anzeigen
+
+1. Öffne die Weboberfläche des Pi und wähle **Einstellungen**.
+2. Suche die Haltestelle nach Name und Ort. Wähle bei mehreren Treffern den
+   Eintrag, der zu deinem Standort passt.
+3. Lade die Linien, wähle Linie und Richtung und speichere. Öffne die
+   Abfahrtsanzeige und prüfe, ob die gewünschte Verbindung erscheint.
+
+Wenn die Haltestellensuche leer bleibt, prüfe Schreibweise, Ort und den
+Geofox-Status in der Weboberfläche. Wenn die Haltestelle gefunden wird, aber
+keine Abfahrt erscheint, prüfe die gewählte Richtung und ob zur Testzeit
+eine Abfahrt fährt. Bei einem weißen Display folge der
+[Displaydiagnose](#weißes-pi-display-nach-einem-wackelkontakt).
+
+## ESP32 Schritt für Schritt
+
+Das ESP32+CYD-System braucht ein CYD, 2,4-GHz-WLAN, ESPHome und einen
+[Geofox-Zugang](#geofox-zugang-beantragen). Das Profil `hvv-cyd` fragt Geofox
+direkt ab und betreibt die Anzeige eigenständig. Home Assistant kann die
+verschlüsselte ESPHome-API optional zur Anzeige der Gerätesensoren nutzen.
+
+| Hardware | Bezugsquelle | Profil |
+|---|---|---|
+| CYD mit integriertem Display | [ESP32-2432S028 suchen (Affiliate-Link)](https://www.amazon.de/s?k=ESP32-2432S028+ILI9342+2.8+Display&tag=bema19910e-21) | `hvv-cyd.yaml` zielt standardmäßig auf die getestete Dual-USB-Revision mit ILI9342, 2,8 Zoll, 320×240 Pixel im nativen Querformat; andere Revisionen brauchen ggf. einen anderen Controller |
+
+1. Beantrage den [Geofox-Zugang](#geofox-zugang-beantragen).
+2. Folge der [CYD-Ersteinrichtung](docs/esp32-setup.md#schnellstart-für-windows-cyd-einrichten-und-flashen).
+   Dort lädst du das Projekt, richtest WLAN und Geofox ein und überträgst die
+   Gerätesoftware per USB. Für Linux, macOS und den ESPHome Device Builder
+   gibt es die [manuelle Einrichtung](docs/esp32-setup.md#manuelle-installation-oder-esphome-device-builder).
+3. Prüfe auf dem Display die Uhrzeit und die Beispielabfahrten. Bei Problemen
+   hilft der [Funktionscheck](docs/esp32-setup.md#4-funktion-am-gerät-prüfen).
+4. Trage [eine eigene Haltestelle](docs/esp32-stations.md#eine-haltestelle-eintragen)
+   ein, übertrage die Änderung und prüfe, ob die gewünschte Verbindung erscheint.
+
+Für ein vorhandenes Gerät gibt es die [Migration älterer CYD-Profile](docs/esp32-setup.md#vorhandenes-cyd-vom-pi-backend-umstellen).
+Wenn die Anzeige läuft, kannst du [später drahtlos aktualisieren](docs/esp32-setup.md#firmware-aktualisieren)
+oder [das CYD in Home Assistant einbinden](#home-assistant-mit-esp32).
+
+## Home Assistant optional einrichten
+
+Home Assistant kann Abfahrten und Gerätestatus einer bereits eingerichteten
+Anzeige übernehmen. Wähle den Abschnitt für deine Anzeige.
+
+<a id="home-assistant-schritt-für-schritt"></a>
+
+### Home Assistant mit Raspberry Pi
+
+1. Prüfe, ob die [Pi-Anzeige](#raspberry-pi-mit-ili-display-einrichten)
+   Abfahrten zeigt und du dich an ihrer Weboberfläche anmelden kannst.
+2. Installiere einmal die [HVV-Integration für Home Assistant](docs/home-assistant.md#als-gerät-automatisch-erkennen)
+   und starte Home Assistant neu.
+3. Öffne **Einstellungen → Geräte & Dienste**. Wähle den erkannten HVV-Anzeiger
+   oder füge **HVV-Anzeiger** manuell hinzu. Gib die HTTPS-Adresse des Pi
+   und das Webpasswort ein. Home Assistant muss dem Zertifikat des Pi vertrauen.
+4. Öffne die Entität **Abfahrtsanzeige**. Der Zustand sollte bei erfolgreichem
+   Abruf `ok` sein. Die Abfahrten stehen in den Attributen der Entität.
+
+Die [Pi-Anleitung für Home Assistant](docs/home-assistant.md) beschreibt
+Zertifikate und die alternative Einrichtung per YAML.
+
+### Home Assistant mit ESP32
+
+1. Prüfe, ob die [CYD-Anzeige](#esp32-schritt-für-schritt) Abfahrten zeigt.
+   Das CYD und Home Assistant müssen einander im Netzwerk erreichen.
+2. Öffne **Einstellungen → Geräte & Dienste** und wähle das erkannte
+   ESPHome-Gerät. Wenn es fehlt, füge **ESPHome** manuell hinzu und gib
+   die lokale IP-Adresse des CYD ein.
+3. Wenn Home Assistant nach dem Verschlüsselungsschlüssel fragt, verwende
+   den Wert `api_encryption_key` aus der lokalen Datei `esphome/secrets.yaml`.
+4. Öffne das Gerät in Home Assistant. **Backendstatus** sollte `ok` anzeigen.
+   Bei passenden Verbindungen enthält **Abfahrt 1** eine Abfahrt.
+
+Weitere Hilfe steht unter [CYD in Home Assistant erkennen](docs/esp32-setup.md#cyd-in-home-assistant-erkennen).
+
+## Wieso gibt es dieses Projekt?
+
+Ich möchte morgens möglichst schnell sehen, wann ich los muss, um meinen Bus oder meine Bahn zu bekommen - ohne auf mein Handy gucken zu müssen.
+
+## Und wie funktioniert es?
+
+Der HVV-Anzeiger lädt im Normalbetrieb alle 15 Sekunden aktuelle
+Geofox-Prognosen. Er filtert die gewünschten Verbindungen und sortiert sie
+über mehrere Haltestellen hinweg nach der erwarteten Abfahrtszeit.
+
+Das ursprüngliche Setup besteht aus einem Raspberry Pi Zero 2 W oder einem
+kompatiblen Raspberry-Pi-Modell mit 40-Pin-GPIO und einem
+2,2-Zoll-ILI9341-SPI-Display. Es läuft auf Raspberry Pi OS Lite ohne grafische
+Oberfläche. Zusätzlich sind Home Assistant und ESP32-Displays mit ESPHome möglich.
+
+## Plattformen und gemeinsame Funktionen
+
+Pi+ILI und ESP32+CYD sind zwei eigenständige Systeme. Beide beziehen Geofox-
+Daten, filtern und sortieren Abfahrten und zeigen sie lokal an. Das Pi-System
+nutzt den Python-Dienst und seine Weboberfläche. Das CYD enthält einen
+schlanken ESPHome-Backendteil mit festen Haltestellen in seinem lokalen Profil;
+es ruft Geofox direkt ab und hat keine Weboberfläche. Der Pi-Dienst und ein
+Containerhost sind für diesen ESP32-Betrieb nicht beteiligt.
+
+| Funktion | Pi+ILI | ESP32+CYD | Pi-Weboberfläche |
+|---|---:|---:|---:|
+| Haltestellen, Linien und Ziele | `config.json` | lokales ESPHome-Profil | Pi-Konfiguration editieren |
+| Geofox-Abruf und Sortierung | Python-Backend | ESP32-Firmware | ✓ |
+| Display und Nachtmodus | ILI direkt am Pi | CYD-Firmware | Browseranzeige |
+| Helligkeit und Neustart | Pi-Hardware/systemd | ESPHome-Steuerung/OTA | Dienststeuerung |
+| Weboberfläche und Backups | ✓ | — | ✓ |
+| Optionale Home-Assistant-Anbindung | mDNS + HVV-Integration | ESPHome-API/mDNS | Abfahrten/Status |
+
+Die Ausgaben beider Systeme folgen demselben versionierten Display-Datenmodell;
+Konfiguration und Laufzeit bleiben getrennt. Pi-Änderungen erfolgen über die
+Weboberfläche oder `config.json`. CYD-Haltestellen liegen in
+`esphome/hvv-cyd.local.yaml` und werden erst nach einem neuen Firmware-Flash
+aktiv. Siehe [Haltestellen im ESP32-Profil ändern](docs/esp32-stations.md).
+
+![Beispielhafte Abfahrten ab Jungfernstieg Richtung Hauptbahnhof mit Bus, U-Bahn und S-Bahn](docs/hvv-anzeiger-preview.png)
+
+Das Preview zeigt beispielhafte Abfahrten ab Jungfernstieg in Richtung
+Hauptbahnhof. Bus, U-Bahn und S-Bahn werden dabei mit ihren unterschiedlichen
+Linienfarben und -formen dargestellt; die angezeigten Zeiten sind illustrativ.
+
+## Funktionen
+
+### Anzeige
+
+- bis zu fünf Abfahrten auf 320 × 240 Pixeln im Querformat
+- Linie, Fahrtziel, absolute Uhrzeit und verbleibende Minuten
+- gemeinsame chronologische Sortierung über mehrere Haltestellen
+- frei konfigurierbare Haltestellen, Linien, Ziele und sichtbare Kürzel
+- Bus-, U-Bahn-, S-Bahn-, AKN-, Regional- und Fährverbindungen mit passender
+  Linienkennzeichnung
+- wahlweise Countdown oder absolute Abfahrtszeit sowie optional ausgeblendete
+  Haltestellenkürzel
+- Geofox-Echtzeitprognosen einschließlich Verspätungen und Ausfällen
+
+### Daten und Fehlerverhalten
+
+- Aktualisierung im Normalbetrieb alle 15 Sekunden
+- sichtbare Hinweise bei fehlendem WLAN, veralteten Daten oder noch nicht
+  synchronisierter Systemzeit
+- letzter erfolgreicher Datenstand bleibt bei vorübergehenden Fehlern sichtbar
+- begrenzte Wiederholungsversuche mit wachsendem Abstand bei API-Fehlern
+- gemeinsamer, dateibasierter Geofox-Anfragetakt für Display- und Webdienst;
+  Antworten mit `Retry-After` werden prozessübergreifend berücksichtigt
+- optionaler Nachtmodus mit schwarzem Bild und pausierten Geofox-Abfragen
+
+### Weboberfläche, Konfiguration und Diagnose am Pi
+
+- geschütztes HTTPS-Dashboard mit Hardwarestatus und kontrollierter
+  Neustartaktion sowie ein reiner, geschützter Displaymodus für Kiosk- und
+  Zweitbildschirme
+- Haltestellen- und Linienauswahl mit Geofox-Vorschlägen, Richtungs- und
+  Zielstationsfiltern sowie editierbarer Konfiguration
+- Konfigurationen sicher exportieren, importieren und aus privaten Backups
+  wiederherstellen; Importe werden vor dem Übernehmen geprüft und bestätigt
+- Gesundheits- und Diagnoseansicht, JSON-Health-API sowie lokale CLI- und
+  systemd-Monitoring-Beispiele
+
+### Raspberry-Pi-Betrieb
+
+- automatischer Start nach Neustart oder Stromausfall
+- Prozessüberwachung und automatischer Neustart durch systemd
+- vorsorglicher ILI9341-Controller-Reset alle 60 Sekunden mit vollständigem Neuzeichnen nach möglichen Kontaktfehlern
+- wöchentliche Begrenzung der Systemprotokolle
+- Diagnosewerkzeug und PNG-Vorschau für Betrieb ohne angeschlossenes Display
+
+### Welche Abfahrtszeit wird angezeigt?
+
+Die Anzeige verwendet nicht einfach die geplante Abfahrtszeit, sondern die
+aktuelle Geofox-Prognose:
+
+```text
+erwartete Abfahrtszeit = Planabfahrt + gemeldete Verspätung
+```
+
+Die große Restzeit und die kleine absolute Uhrzeit basieren auf derselben
+erwarteten Abfahrtszeit. Liefert Geofox keine Verspätung, wird die Planzeit
+verwendet. Gemeldete Ausfälle erscheinen als `AUS`.
+
+Eine noch bevorstehende Abfahrt bleibt eine Prognose und kann sich bis zur
+Abfahrt ändern. Sie ist nicht mit einer nachträglich gemessenen tatsächlichen
+Abfahrt gleichzusetzen.
+
+## Praxisbeispiel
+
+Die fertige Anzeige im Einsatz auf einem Raspberry Pi mit 2,2-Zoll-Display:
+
+![Praxisbeispiel der fertigen HVV-Abfahrtsanzeige](docs/practice-example.png)
+
+Die Hülle für den Raspberry Pi und das Display ist 3D-gedruckt und kann bei
+[3DprintsByBen auf Etsy](https://3dprintsbybenstudio.etsy.com) bestellt werden.
+Alternativ ist eine Bestellung per Nachricht an den Repository-Owner möglich.
+
+> Dieses Repository ist ein unabhängiges Open-Source-Projekt. Es ist kein
+> offizielles Produkt von hvv, HOCHBAHN oder Geofox.
+
+## Vorkonfigurierte Anzeige
+
+Die Beispielkonfiguration enthält:
+
+| Kürzel | Haltestelle | Linie | Ziel |
+|---|---|---:|---|
+| W | Weistritzstraße | 186 | S Othmarschen |
+| W | Weistritzstraße | 184 | S Halstenbek |
+| W | Weistritzstraße | 384 | Elbgaustraße |
+| R | Recknitzstraße | 21 | U Niendorf Nord |
+
+Das Kürzel macht in der gemeinsam sortierten Liste sichtbar, von welcher
+Haltestelle eine Abfahrt stammt. Auf dem Pi lassen sich die Verbindungen in `config.json` ersetzen. Für das
+CYD gilt die [Stationsanleitung](docs/esp32-stations.md).
+
+**Andere Haltestellen gewünscht?** Öffne auf dem Pi die Weboberfläche und
+wähle **Einstellungen → Haltestellen**. Beim CYD folgst du der
+[Anleitung für eigene Haltestellen](docs/esp32-stations.md).
 
 ## Konfigurieren
 
@@ -1285,6 +1180,8 @@ abgeschaltet.
 
 ### Haltestellen und Verbindungen
 
+Die Bedienung im Browser steht unter [Eigene Haltestellen am Pi anzeigen](#eigene-haltestellen-am-pi-anzeigen).
+
 <details>
 <summary>Felder, Standardwerte und Beispiele anzeigen</summary>
 
@@ -1334,6 +1231,9 @@ ebenfalls berücksichtigt.
 
 ### Haltestellen mit Codex anpassen
 
+<details>
+<summary>Optionale Anleitung für Codex anzeigen</summary>
+
 Das Repository enthält den Skill `$adjust-hvv-stations`. Beispiel:
 
 ```text
@@ -1346,6 +1246,8 @@ die vollständige Konfiguration und legt bei Änderungen an einer Installation
 eine Sicherung an. Unbekannte Geofox-IDs werden nicht geraten, sondern beim
 nächsten Programmstart aufgelöst. Zugangsdaten werden weder gelesen noch in die
 Konfiguration übernommen.
+
+</details>
 
 ### Andere WLAN-Schnittstelle
 
@@ -1997,7 +1899,7 @@ ESP32-Displays anzeigen. Die Paketversion ist `0.4.0`.
 **Update:** Eine bestehende Raspberry-Pi-Installation lässt sich wie bisher
 mit `./update.sh` aktualisieren. Für Home Assistant und ESP32 gelten die neuen
 [HA-Anleitung](docs/home-assistant.md) und der [ESP32-Anleitung](docs/esp32-setup.md); der
-[HA-Schnellstart](#home-assistant-schritt-für-schritt) steht direkt in diesem
+[HA-Schnellstart für den Pi](#home-assistant-mit-raspberry-pi) steht direkt in diesem
 README.
 
 [Änderungen seit V2.3.0](https://github.com/Ben1991/hvv-anzeiger/compare/V2.3.0...V2.4.0) ·

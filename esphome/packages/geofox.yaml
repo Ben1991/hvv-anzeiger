@@ -106,7 +106,12 @@ interval:
                 on_response:
                   then:
                     - lambda: |-
-                        if (response->status_code != 200 || body.size() > 32768) {
+                        if (response->status_code != 200) {
+                          ESP_LOGW("hvv.geofox", "Geofox HTTP %d", response->status_code);
+                          id(hvv_backend_state) = "unavailable";
+                          return;
+                        }
+                        if (body.size() > 32768) {
                           id(hvv_backend_state) = "unavailable";
                           return;
                         }

@@ -6,10 +6,15 @@ param(
     [string]$VenvPath = '.venv-esphome',
     [switch]$Build,
     [switch]$Flash,
+    [string]$Device,
     [string]$EspIdfPrefix = 'C:\ei'
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($Device -and -not $Flash) {
+    throw '-Device wird zusammen mit -Flash verwendet.'
+}
 
 if ($Build -and $Flash) {
     throw 'Bitte -Build oder -Flash wählen. -Flash baut die Firmware selbst.'
@@ -73,7 +78,8 @@ if (-not (Test-Path -LiteralPath $localProfile -PathType Leaf)) {
 if ($BoardProfile -eq 'hvv-cyd') {
     $localProfileText = [System.IO.File]::ReadAllText($localProfile)
     $migrationNeeded = $false
-    if ($localProfileText -match 'transport:\s*!include\s+packages/(?:home-assistant|https)\.yaml') {
+    $legacyTransport = '(?m)^([ \t]+transport:[ \t]*!include[ \t]+)packages/(?:home-assistant|https)\.yaml(?=[ \t]*(?:#|$|\r))'
+    if ($localProfileText -match $legacyTransport) {
         $migrationNeeded = $true
         $localProfileText = [regex]::Replace(
             $localProfileText,
@@ -81,8 +87,8 @@ if ($BoardProfile -eq 'hvv-cyd') {
             '')
         $localProfileText = [regex]::Replace(
             $localProfileText,
-            '(?m)^[ \t]*transport:[ \t]*!include[ \t]+packages/(?:home-assistant|https)\.yaml[ \t]*\r?$',
-            '  transport: !include packages/geofox.yaml')
+            $legacyTransport,
+            '${1}packages/geofox.yaml')
     }
     if ($localProfileText -notmatch '(?m)^[ \t]*hvv_stations_json:') {
         $sourceProfileText = [System.IO.File]::ReadAllText($profileFile)
@@ -259,7 +265,10 @@ if ($geofoxBackendProfile) {
                 $secureGeofoxPassword.Dispose()
             }
         }
-        $cppLiteral = ConvertTo-Json -InputObject $secretValue -Compress
+        if ([string]::IsNullOrWhiteSpace($secretValue) -or $secretValue -match '[\x00-\x1f\x7f]') {
+            throw 'Geofox-Zugangsdaten müssen nichtleer sein und dürfen keine Steuerzeichen enthalten.'
+        }
+        $cppLiteral = '"' + $secretValue.Replace('\', '\\').Replace('"', '\"') + '"'
         $yamlValue = "'" + $cppLiteral.Replace("'", "''") + "'"
         $replacement = "${secretName}: $yamlValue"
         $pattern = '(?m)^' + [regex]::Escape($secretName) + ':.*$'
@@ -301,12 +310,34 @@ if ($Build -or $Flash) {
 $relativeLocalProfile = "esphome\$BoardProfile.local.yaml"
 Push-Location $repoRoot
 try {
+    if ($geofoxBackendProfile) {
+        & $venvPython scripts/check_cyd_secrets.py $relativeLocalProfile --esphome config
+        if ($LASTEXITCODE -ne 0) { throw 'Die CYD-Konfiguration ist ungültig.' }
+        if ($Build -or $Flash) {
+            Write-Host 'ESPHome baut jetzt die CYD-Firmware.'
+            & $venvPython scripts/check_cyd_secrets.py $relativeLocalProfile --esphome compile
+            if ($LASTEXITCODE -ne 0) { throw 'Der CYD-Firmwarebau ist fehlgeschlagen.' }
+        }
+        if ($Flash) {
+            $uploadArgs = @('upload', $relativeLocalProfile)
+            if ($Device) { $uploadArgs += @('--device', $Device) }
+            & $venvPython -m esphome @uploadArgs
+            if ($LASTEXITCODE -ne 0) { throw 'Der Firmware-Upload ist fehlgeschlagen.' }
+        }
+        if (-not $Build -and -not $Flash) {
+            Write-Host 'Konfiguration geprüft. Für Firmwarebau -Build, für Bau und Upload -Flash verwenden.'
+        }
+        return
+    }
+
     & $venvPython -m esphome config $relativeLocalProfile
     if ($LASTEXITCODE -ne 0) { throw 'Die ESPHome-Konfiguration ist ungültig.' }
 
     if ($Flash) {
         Write-Host 'ESPHome baut jetzt die Firmware und fragt anschließend nach dem USB-Port.'
-        & $venvPython -m esphome run $relativeLocalProfile
+        $runArgs = @('run', $relativeLocalProfile)
+        if ($Device) { $runArgs += @('--device', $Device) }
+        & $venvPython -m esphome @runArgs
         if ($LASTEXITCODE -ne 0) { throw 'Firmwarebau oder USB-Flashen ist fehlgeschlagen.' }
     } elseif ($Build) {
         & $venvPython -m esphome compile $relativeLocalProfile

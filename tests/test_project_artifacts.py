@@ -52,17 +52,18 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertEqual(
             headings,
             [
+                "## Hier anfangen",
                 "## Inhalt",
+                "## Geofox-Zugang beantragen",
+                "## Raspberry Pi mit ILI-Display einrichten",
+                "## ESP32 Schritt für Schritt",
+                "## Home Assistant optional einrichten",
                 "## Wieso gibt es dieses Projekt?",
                 "## Und wie funktioniert es?",
                 "## Plattformen und gemeinsame Funktionen",
                 "## Funktionen",
                 "## Praxisbeispiel",
                 "## Vorkonfigurierte Anzeige",
-                "## Voraussetzungen",
-                "## Geofox-Zugang beantragen",
-                "## Display anschließen",
-                "## Installieren",
                 "## Konfigurieren",
                 "## Betrieb und Updates",
                 "## Fehlerverhalten und Diagnose",
@@ -396,8 +397,9 @@ class ProjectArtifactTest(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
         self.assertIn("ESP32 Schritt für Schritt", readme)
-        self.assertIn("scripts\\setup-esphome.ps1 -Profile hvv-cyd", readme)
-        self.assertIn("scripts\\setup-esphome.ps1 -Profile hvv-cyd -Flash", readme)
+        guide = (ROOT / "docs" / "esp32-setup.md").read_text(encoding="utf-8")
+        self.assertIn("scripts\\setup-esphome.ps1 -Profile hvv-cyd", guide)
+        self.assertIn("scripts\\setup-esphome.ps1 -Profile hvv-cyd -Flash", guide)
         self.assertIn("docs/esp32-setup.md", readme)
 
     def test_esp32_guides_give_beginner_steps_and_recovery_actions(self) -> None:
@@ -405,16 +407,16 @@ class ProjectArtifactTest(unittest.TestCase):
         guide = (ROOT / "docs" / "esp32-setup.md").read_text(encoding="utf-8")
 
         for instruction in (
-            "PowerShell öffnen",
+            "Windows PowerShell",
             "git --version",
             "py -3.12 --version",
             "git clone https://github.com/Ben1991/hvv-anzeiger.git",
-            "Schritt 4: ESPHome und das CYD-Profil einrichten",
-            "Es braucht weder Pi noch Python-Webdienst.",
+            "2. Profil, Zugangsdaten und Haltestellen",
+            "Das Profil `hvv-cyd` fragt Geofox",
             "Geofox-Zugangsdaten",
             "Wenn kein COM-Port angeboten wird",
-            "Wenn keine Abfahrten erscheinen",
-            "Wenn der Bildschirm leer bleibt oder Farben falsch sind",
+            "Status `ok`, aber keine Abfahrt",
+            "Bildschirm bleibt leer oder Farben sind falsch",
         ):
             with self.subTest(instruction=instruction):
                 self.assertIn(instruction, readme + guide)
@@ -444,7 +446,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("$localProfileText, '(?m)^substitutions:", script)
         self.assertIn(
             "$secretText, '(?m)^backend_authorization:.*$', "
-            '\"backend_authorization: $backendAuthorization\")',
+            '"backend_authorization: $backendAuthorization")',
             script,
         )
         self.assertIn("packages/(?:home-assistant|https)\\.yaml", script)
@@ -452,9 +454,15 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("$secretText -notmatch '(?m)^backend_url:'", script)
         self.assertIn("$secretText -notmatch '(?m)^backend_authorization:'", script)
         self.assertIn("backendUri.AbsolutePath.TrimEnd('/') -ne '/api/esphome'", script)
-        self.assertIn("-m esphome run", script)
+        self.assertIn("'${1}packages/geofox.yaml'", script)
+        self.assertIn(
+            "check_cyd_secrets.py $relativeLocalProfile --esphome compile", script
+        )
+        self.assertIn("-m esphome @uploadArgs", script)
         self.assertIn("cp esphome/hvv-cyd.yaml esphome/hvv-cyd.local.yaml", guide)
-        self.assertIn("esphome config esphome/hvv-cyd.local.yaml", guide)
+        self.assertIn(
+            "check_cyd_secrets.py esphome/hvv-cyd.local.yaml --esphome config", guide
+        )
         self.assertNotIn("esphome/hvv-display.local.yaml", guide)
         self.assertIn(
             "powershell -NoProfile -ExecutionPolicy Bypass -File "
@@ -472,7 +480,7 @@ class ProjectArtifactTest(unittest.TestCase):
         self.assertIn("ESP32/CYD", home_assistant)
         self.assertIn("Windows: CYD einrichten und flashen", esp32)
         self.assertIn("Firmware aktualisieren", esp32)
-        self.assertIn("noch Home Assistant", esp32)
+        self.assertIn("Codex und Home Assistant sind optional.", esp32)
         self.assertIn("hvv-cyd-ha", esp32)
 
 

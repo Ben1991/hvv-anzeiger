@@ -28,28 +28,17 @@ cd ~/hvv-anzeiger
 
 Danach den vorhandenen HTTPS-Webdienst nutzen. Die Details zu Prüfung,
 Datenerhalt und Rollback stehen unter [Pi-Updates](../README.md#anwendung-aktualisieren).
-Die Backend-Ersteinrichtung erzeugt einen separaten zufälligen CYD-Schlüssel
-und startet mit `hvv-anzeiger` als vorläufigem Webpasswort. Beim ersten Login
-muss ein eigenes Webpasswort gesetzt werden. Das CYD nutzt ausschließlich den
-Geräteschlüssel. Keine zusätzliche Geofox-Anmeldung oder Datenkopie erforderlich.
+Melde dich bei einer frischen Installation zuerst als `hvv-anzeiger` mit
+dem Erstpasswort `hvv-anzeiger` am Pi-Webdienst an und ändere es. Verwende
+das neue Passwort für Home Assistant.
+Der Pi liefert die Abfahrten mit dem bereits eingerichteten Geofox-Zugang.
 Home Assistant muss den Zertifikatsnamen auflösen und der ausstellenden CA vertrauen.
 Das gilt auch für eine selbst betriebene Zertifizierungsstelle.
 Für HA OS ist ein Zertifikat einer bereits vertrauten CA für eine eigene Domain
 mit lokaler DNS-Auflösung der unkomplizierteste Weg. Ein vorhandenes selbst
 signiertes Pi-Zertifikat wird vom REST-Sensor nicht automatisch akzeptiert.
 
-Wenn ausschließlich ESP32-Displays verwendet werden, kann der Pi-Anzeigedienst
-nach erfolgreicher Webeinrichtung deaktiviert werden:
-
-```sh
-sudo systemctl disable --now hvv-anzeiger
-```
-
-`hvv-anzeiger-web` muss weiterlaufen. Die Pi-Diagnose meldet den abgeschalteten
-Hardware-Anzeigedienst dann als nicht verfügbar; für den ESP32-Betrieb stattdessen
-den Zustand von `sensor.hvv_board` beziehungsweise `/api/smart-home` prüfen.
-Ein späteres Pi-Update aktiviert den Anzeigedienst wieder; bei reinem ESP32-Betrieb
-anschließend erneut deaktivieren.
+Bei einem eigenständigen CYD folge dem [ESP32-Weg in der README](../README.md#home-assistant-mit-esp32).
 
 ### Container auf Linux/NAS
 
@@ -128,8 +117,13 @@ docker compose logs --tail=50
 
 Der Dienst verweigert einen LAN-Start ohne Passwort-Hash, TLS und separaten
 CYD-Schlüssel.
-Kein privilegierter Container, GPIO oder SPI erforderlich. HTTPS-Weboberfläche
-unter `https://<Zertifikats-Hostname>:8080/` prüfen.
+Kein privilegierter Container, GPIO oder SPI erforderlich. Öffne die HTTPS-Weboberfläche unter `https://<Zertifikats-Hostname>:8080/`.
+Melde dich mit Benutzername und Erstpasswort `hvv-anzeiger` an und setze ein
+eigenes Passwort. Konfiguriere anschließend Haltestellen und Linien in der
+Weboberfläche. Falls der Container nicht startet, prüfe mit `docker compose ps`
+und `docker compose logs --tail=50` den Status. Bei `Permission denied`
+prüfe Eigentümer und Rechte von `data/`. Ist Port 8080 belegt, kläre den
+Konflikt auf dem Host. Bei TLS-Fehlern prüfe Zertifikatsname und Vertrauenskette.
 Dies ist ein eigenständiger Backend-Container, kein Supervisor-Add-on.
 Auf Home Assistant OS den bestehenden Pi oder einen separaten Containerhost nutzen.
 Der Systemneustart-Knopf der Pi-Weboberfläche startet keinen Containerhost neu;
@@ -152,6 +146,16 @@ HVV_WEB_DISCOVERY_HOSTNAME=hvv.example.net
 Home Assistant muss diesen Namen im lokalen DNS zur Adresse des Containerhosts
 auflösen können. Das Passwort wird nicht über mDNS übertragen.
 
+### Laufenden Container konfigurieren
+
+Öffne die HTTPS-Weboberfläche und speichere Haltestellen, Linien und Richtungen
+unter **Einstellungen**. Dort kannst du auch die Geofox-Zugangsdaten pflegen.
+Für eine manuelle Änderung bearbeite `data/config.json` mit einem Benutzer,
+der Schreibzugriff auf das Datenverzeichnis hat. Starte anschließend im
+Repository den Dienst mit `docker compose restart hvv` neu. Prüfe die
+Abfahrten in der Weboberfläche und bei Bedarf das Protokoll mit
+`docker compose logs --tail=50 hvv`.
+
 ## 2. Home Assistant einrichten
 
 ### Als Gerät automatisch erkennen
@@ -171,6 +175,11 @@ bleibt eingeschaltet. Ein `.local`-mDNS-Name passt meist nicht zu einem
 lokale DNS-Auflösung verwenden. Alternativ kann die bisherige manuelle
 YAML-REST-Variante weiter verwendet werden. Nicht beide Varianten gleichzeitig
 einrichten, da sonst Abfahrtsentitäten doppelt erscheinen.
+
+Fehlt die automatische Erkennung, füge **HVV-Anzeiger** manuell hinzu.
+Fehlt der Eintrag in der Integrationsliste, prüfe den Kopierpfad und die HA-Logs
+nach dem Neustart. Bei HTTP 401 prüfe das aktuelle Webpasswort. Bei einem
+Zertifikatsfehler prüfe Hostname und CA-Vertrauen in Home Assistant.
 
 Die Integration legt ein Pi-Backend-Gerät mit `sensor.hvv_anzeiger_abfahrtsanzeige` an.
 Der Zustand ist `ok`, `stale`, `expired`, `unavailable` oder `night`; Abfahrten
@@ -205,7 +214,10 @@ Für die Displaydiagnose zusätzlich `hvv_health_url` auf
 `https://<Hostname>:8080/api/diagnostics` setzen; auch bei einem Update beide
 URL-Secrets und das vorhandene Webpasswort übernehmen.
 TLS-Prüfung eingeschaltet lassen; bei eigener CA deren Vertrauenskette auf dem
-HA-System einrichten. Konfiguration prüfen und HA neu starten.
+HA-System einrichten. Konfiguration prüfen und HA neu starten. Bei einem YAML-Fehler prüfe die
+Einrückung und die Namen in `secrets.yaml`. Ist der Sensor nach dem Neustart
+`unavailable`, prüfe die HA-Logs, Erreichbarkeit, Webpasswort und Zertifikat
+des Backends.
 
 Erwartete Entität: `sensor.hvv_board`, Zustand `ok`, `stale`, `expired`,
 `unavailable` oder `night`. Bei Namenskollision den tatsächlich vergebenen
@@ -243,9 +255,9 @@ Geofox-Abfragen durch mehrere Displays desselben Webdienstes.
 
 ## Updates für Hintergrunddienst und Home Assistant
 
-Die Reihenfolge für HA: Hintergrunddienst aktualisieren, Paketdatei übernehmen,
-HA-Konfiguration prüfen und Home Assistant neu starten. `secrets.yaml`, die
-REST-Entität und eigene Entity-Namen erhalten.
+Aktualisiere beim Pi-/Container-Aufbau zuerst das Backend und prüfe, ob die
+HTTPS-API antwortet. Danach aktualisierst du die verwendete HA-Anbindung.
+Bei einem eigenständigen CYD aktualisierst du die Firmware per ESPHome.
 
 ### Python-Hintergrunddienst auf dem Pi
 
@@ -264,6 +276,7 @@ Im ursprünglichen Repository auf dem Containerhost:
 
 ```sh
 git status --short
+git switch main
 git pull --ff-only origin main
 docker compose build
 docker compose up -d
@@ -279,6 +292,15 @@ HTTPS-Weboberfläche und `sensor.hvv_board` beziehungsweise `/api/smart-home` pr
 Ein Image-Buildfehler lässt den bisherigen Container weiterlaufen; ein
 automatischer Rollback nach einem fehlgeschlagenen Containerstart ist nicht eingerichtet.
 
+### Native HVV-Integration aktualisieren
+
+Sichere `/config/custom_components/hvv_anzeiger` und kopiere den aktuellen
+Ordner `custom_components/hvv_anzeiger` vollständig aus dem Repository nach
+`/config/custom_components/`. Starte Home Assistant neu und prüfe die
+Entität **Abfahrtsanzeige**. Bei einem Ladefehler prüfe die HA-Logs und ob
+`manifest.json` direkt im Integrationsordner liegt. Bleibt die Integration
+fehlerhaft, spiele den gesicherten Ordner zurück und starte HA erneut.
+
 ### Home-Assistant-Paket aktualisieren
 
 Neue Versionen von `home-assistant/hvv.yaml` mit der eigenen Paketdatei vergleichen,
@@ -286,5 +308,11 @@ eigene Entity-Namen und Einstellungen beibehalten und nur die benötigte Paketda
 übernehmen. HA-Konfiguration prüfen und Home Assistant neu starten. Die
 `secrets.yaml` nicht durch die Beispieldatei ersetzen.
 
-Das ESPHome-Gerät selbst wird separat aktualisiert. Vorgehen und Prüfung stehen
-unter [ESP32-Firmware aktualisieren](esp32-setup.md#firmware-aktualisieren).
+### Integrierte ESPHome-Anbindung aktualisieren
+
+Die ESPHome-Integration wird über das reguläre Home-Assistant-Update gepflegt.
+Aktualisiere die Gerätesoftware über die
+[ESP32-Updateanleitung](esp32-setup.md#firmware-aktualisieren). Prüfe anschließend
+**Backendstatus** und die Abfahrtssensoren in Home Assistant. Ist das Gerät
+nicht erreichbar, prüfe zuerst IP und API-Verbindung wie bei der
+[Einrichtung](esp32-setup.md#cyd-in-home-assistant-erkennen).

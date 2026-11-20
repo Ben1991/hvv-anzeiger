@@ -21,6 +21,7 @@ esphome/secrets.yaml
 esphome/backend-ca.pem
 esphome/*.local.yaml
 esphome/*.local.yaml.pre-direct-backend.bak
+esphome/*.local.yaml.pre-esp32-geofox-backend.bak
 home-assistant/secrets.yaml
 data/
 .ruff_cache/
