@@ -2,7 +2,7 @@
 # requests Geofox directly; no Pi backend, web interface, or Home Assistant is required.
 substitutions:
   name: hvv-cyd
-  friendly_name: HVV CYD
+  friendly_name: HVV-Anzeiger
   display_model: ESP32-2432S028-9342
   display_rotation: '90'
   display_color_order: rgb

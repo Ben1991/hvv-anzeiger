@@ -150,9 +150,12 @@ Auf Linux oder macOS lautet der Befehl in der aktivierten Umgebung
 Das Profil `hvv-cyd` veröffentlicht die ESPHome-Native-API mit Verschlüsselung
 und mDNS. Home Assistant entdeckt das eingeschaltete CYD unter
 **Einstellungen → Geräte & Dienste** und bietet die integrierte ESPHome-
-Integration an. Beim Einrichten wird `api_encryption_key` aus der lokalen
-`esphome/secrets.yaml` benötigt. Es ist kein Pi-Backend, keine zusätzliche
-benutzerdefinierte HVV-Integration und kein Wechsel zu `hvv-cyd-ha` nötig.
+Integration für **HVV-Anzeiger** an. Kopiere den Wert rechts von
+`api_encryption_key:` aus der lokalen `esphome/secrets.yaml`, die beim Flashen
+verwendet wurde. Füge ihn ohne Anführungszeichen als **Verschlüsselungsschlüssel**
+ein. Die Schritte stehen in der
+[Home-Assistant-Anleitung](home-assistant.md#esp32cyd-erkennen). Das Profil
+`hvv-cyd` genügt für die direkte Verbindung zwischen Home Assistant und CYD.
 
 Fehlt die automatische Erkennung, prüfe im Router, ob das CYD verbunden ist,
 und gib seine IP-Adresse in der ESPHome-Integration ein. Prüfe bei einem
