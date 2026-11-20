@@ -5,6 +5,24 @@
 [![CI](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ben1991/hvv-anzeiger/actions/workflows/ci.yml)
 [![Lizenz: GPL-3.0-only](https://img.shields.io/badge/Lizenz-GPL--3.0--only-blue.svg)](LICENSE)
 
+## Hier anfangen
+
+Mit dem HVV-Anzeiger siehst du die nächsten Abfahrten auf einem kleinen
+Bildschirm. Wähle den Weg, der zu deinem Gerät passt:
+
+- **Du hast einen Raspberry Pi und ein separates ILI9341-Display.**
+  Prüfe die [Teileliste](#voraussetzungen-für-raspberry-pi--ili9341), schließe
+  das [Display](#display-anschließen) an und folge der
+  [Pi-Installation](#installieren). Deine Haltestellen wählst du anschließend
+  im Browser unter **Einstellungen** aus.
+- **Du hast ein 2,8-Zoll-CYD mit eingebautem Bildschirm.**
+  Folge der [CYD-Anleitung](docs/esp32-setup.md). Sie zeigt dir, wie du das
+  Gerät per USB einrichtest und die ersten Abfahrten überprüfst.
+
+Für beide Wege brauchst du einen [Geofox-Zugang](#geofox-zugang-beantragen)
+für die HVV-Fahrplandaten. Beantrage ihn zuerst, wenn du noch keinen hast.
+Codex und Home Assistant sind optional.
+
 ## Inhalt
 
 | Dein nächster Schritt | Abschnitt |
@@ -276,15 +294,9 @@ Das Kürzel macht in der gemeinsam sortierten Liste sichtbar, von welcher
 Haltestelle eine Abfahrt stammt. Auf dem Pi lassen sich die Verbindungen in `config.json` ersetzen. Für das
 CYD gilt die [Stationsanleitung](docs/esp32-stations.md).
 
-> **Andere Haltestellen oder Verbindungen gewünscht?** Nach der Installation
-> kannst du sie bequem über die lokale Weboberfläche einrichten und ändern –
-> das ist der einfache Weg für normale Nutzer. Alternativ kannst du das
-> Repository in Codex öffnen und den mitgelieferten Skill
-> `$adjust-hvv-stations` nutzen. Ein möglicher Auftrag lautet:
-> `Nutze $adjust-hvv-stations und zeige Linie 5 Richtung Hauptbahnhof ab
-> Rathausmarkt an.` Der Skill passt die Konfiguration an und prüft sie
-> anschließend automatisch. Weitere Hinweise und Beispiele stehen unter
-> [Haltestellen mit Codex anpassen](#haltestellen-mit-codex-anpassen).
+**Andere Haltestellen gewünscht?** Öffne auf dem Pi die Weboberfläche und
+wähle **Einstellungen → Haltestellen**. Beim CYD folgst du der
+[Anleitung für eigene Haltestellen](docs/esp32-stations.md).
 
 ## ESP32 Schritt für Schritt
 
@@ -521,6 +533,14 @@ Vor dem Verdrahten:
 
 ### Schnellinstallation
 
+1. Installiere auf deinem Computer den [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
+2. Wähle im Imager dein Pi-Modell, Raspberry Pi OS und die microSD-Karte aus.
+   Beim Schreiben wird die ausgewählte Karte gelöscht. Sichere vorher die darauf
+   gespeicherten Dateien. Richte beim Schreiben Benutzername und WLAN ein.
+3. Stecke die Karte in den ausgeschalteten Pi. Starte ihn, melde dich an und
+   öffne **Terminal**. Kopiere die folgenden Befehle zeilenweise hinein und
+   drücke nach jeder Zeile die Eingabetaste. Warte jeweils auf das Ende des Befehls.
+
 Zum Flashen beziehungsweise Einrichten der Raspberry-Pi-OS-microSD-Karte
 brauchst du einen passenden [SD-/microSD-Kartenleser, falls dein Rechner noch
 keinen hat (Affiliate-Link)](https://www.amazon.de/s?k=SD-Kartenleser+USB+microSD&tag=bema19910e-21).
@@ -548,9 +568,10 @@ das Passwort ab. Das Passwort bleibt während der Eingabe unsichtbar.
 
 Der Installer vergibt den mDNS-Namen `hvv-anzeiger.local`, erzeugt ein lokales
 TLS-Zertifikat und gibt dessen SHA-256-Fingerabdruck aus. Die Weboberfläche ist
-unter `https://hvv-anzeiger.local:8080/` erreichbar. Beim ersten Login ist das
-Passwort `hvv-anzeiger`; die Oberfläche erzwingt sofort einen Wechsel auf ein
-eigenes Passwort mit mindestens 12 Zeichen. Die beim Setup abgefragten
+unter `https://hvv-anzeiger.local:8080/` erreichbar. Öffne die Adresse im
+Browser auf einem Gerät im selben Netzwerk. Melde dich als `hvv-anzeiger`
+mit dem individuellen Webpasswort an, das du bei der Installation festgelegt
+hast. Das Webpasswort muss mindestens 12 Zeichen haben. Die beim Setup abgefragten
 Geofox-Zugangsdaten und Beispiel-Haltestellen ermöglichen den ersten Abruf
 direkt nach dem Start. Passe die Haltestellen danach unter Einstellungen an.
 
@@ -617,14 +638,9 @@ sudo systemctl enable --now hvv-anzeiger
 
 ### Weboberfläche: Verbindung abgelehnt
 
-Wenn du ein ESP32/CYD verwendest, beachte: Das Display selbst stellt keine
-Weboberfläche auf Port 8080 bereit. Dieser Abschnitt und die folgenden
-`systemctl`-Befehle betreffen den Python-Hintergrunddienst auf dem Raspberry Pi
-oder Containerhost. Für die Browseroberfläche verwende dessen HTTPS-Adresse
-`https://<backend-host>:8080/` – nicht die IP-Adresse des ESP32. Das CYD fragt
-denselben Dienst direkt unter `https://<backend-host>:8080/api/esphome` ab.
-Die Firmware-Adresse wird bei der ESP32-Einrichtung konfiguriert; siehe
-[ESP32-Einrichtungsanleitung](docs/esp32-setup.md).
+Dieser Abschnitt gilt für die Weboberfläche des Raspberry Pi oder Containers.
+Die Hilfe zur eigenständigen CYD-Anzeige steht in der
+[CYD-Anleitung](docs/esp32-setup.md#4-funktion-am-gerät-prüfen).
 
 Wenn `https://<raspberry-pi-ip>:8080` mit „Verbindung abgelehnt“ antwortet,
 prüfe zuerst die aktuelle Adresse des Raspberry Pi:
@@ -1200,6 +1216,12 @@ abgeschaltet.
 
 ### Haltestellen und Verbindungen
 
+1. Öffne die Weboberfläche des Pi und wähle **Einstellungen**.
+2. Suche die Haltestelle nach Name und Ort. Wähle bei mehreren Treffern den
+   Eintrag, der zu deinem Standort passt.
+3. Lade die Linien, wähle Linie und Richtung und speichere. Öffne die
+   Abfahrtsanzeige und prüfe, ob die gewünschte Verbindung erscheint.
+
 <details>
 <summary>Felder, Standardwerte und Beispiele anzeigen</summary>
 
@@ -1249,6 +1271,9 @@ ebenfalls berücksichtigt.
 
 ### Haltestellen mit Codex anpassen
 
+<details>
+<summary>Optionale Anleitung für Codex anzeigen</summary>
+
 Das Repository enthält den Skill `$adjust-hvv-stations`. Beispiel:
 
 ```text
@@ -1261,6 +1286,8 @@ die vollständige Konfiguration und legt bei Änderungen an einer Installation
 eine Sicherung an. Unbekannte Geofox-IDs werden nicht geraten, sondern beim
 nächsten Programmstart aufgelöst. Zugangsdaten werden weder gelesen noch in die
 Konfiguration übernommen.
+
+</details>
 
 ### Andere WLAN-Schnittstelle
 
