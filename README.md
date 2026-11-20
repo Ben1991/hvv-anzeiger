@@ -1803,6 +1803,13 @@ Geheimnisse veröffentlichen.
 
 ## Release Notes
 
+### Release V3.0.1 – Buslinienkennzeichen im CYD
+
+- Die Buslinienkennzeichen auf dem CYD verwenden jetzt dieselbe rote Farbe und
+  die spitze Form wie die Pi-Anzeige.
+
+[Vollständige Release Notes](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V3.0.1)
+
 ### Release V3.0.0 – eigenständige ESP32-Unterstützung
 
 - Das Standardprofil `hvv-cyd` ruft Geofox direkt ab und rendert Abfahrten

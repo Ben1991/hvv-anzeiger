@@ -14,11 +14,12 @@
 | `V2.5.0` (veröffentlicht am 14. November 2026) | Ja |
 | `V2.6.0` (veröffentlicht am 14. November 2026) | Ja |
 | `V2.7.0` (veröffentlicht am 17. November 2026) | Ja |
+| `V3.0.1` (veröffentlicht am 20. November 2026) | Ja |
 | `V3.0.0` | Ja |
 | `main` (Entwicklungsstand) | Ja, sofern nicht anders angegeben |
 
 Die aktuelle Veröffentlichung ist
-[`V3.0.0`](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V3.0.0).
+[`V3.0.1`](https://github.com/Ben1991/hvv-anzeiger/releases/tag/V3.0.1).
 V1 bleibt als nicht mehr unterstützte Veröffentlichung dokumentiert.
 Sicherheitskorrekturen werden für die in der Tabelle unterstützten Versionen und
 den aktuellen Stand von `main` bereitgestellt, soweit die jeweilige Korrektur auf
