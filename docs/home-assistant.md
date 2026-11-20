@@ -28,28 +28,15 @@ cd ~/hvv-anzeiger
 
 Danach den vorhandenen HTTPS-Webdienst nutzen. Die Details zu Prüfung,
 Datenerhalt und Rollback stehen unter [Pi-Updates](../README.md#anwendung-aktualisieren).
-Die Backend-Ersteinrichtung erzeugt einen separaten zufälligen CYD-Schlüssel
-und startet mit `hvv-anzeiger` als vorläufigem Webpasswort. Beim ersten Login
-muss ein eigenes Webpasswort gesetzt werden. Das CYD nutzt ausschließlich den
-Geräteschlüssel. Keine zusätzliche Geofox-Anmeldung oder Datenkopie erforderlich.
+Verwende das individuelle Webpasswort, das du beim Pi-Setup festgelegt hast.
+Der Pi liefert die Abfahrten mit dem bereits eingerichteten Geofox-Zugang.
 Home Assistant muss den Zertifikatsnamen auflösen und der ausstellenden CA vertrauen.
 Das gilt auch für eine selbst betriebene Zertifizierungsstelle.
 Für HA OS ist ein Zertifikat einer bereits vertrauten CA für eine eigene Domain
 mit lokaler DNS-Auflösung der unkomplizierteste Weg. Ein vorhandenes selbst
 signiertes Pi-Zertifikat wird vom REST-Sensor nicht automatisch akzeptiert.
 
-Wenn ausschließlich ESP32-Displays verwendet werden, kann der Pi-Anzeigedienst
-nach erfolgreicher Webeinrichtung deaktiviert werden:
-
-```sh
-sudo systemctl disable --now hvv-anzeiger
-```
-
-`hvv-anzeiger-web` muss weiterlaufen. Die Pi-Diagnose meldet den abgeschalteten
-Hardware-Anzeigedienst dann als nicht verfügbar; für den ESP32-Betrieb stattdessen
-den Zustand von `sensor.hvv_board` beziehungsweise `/api/smart-home` prüfen.
-Ein späteres Pi-Update aktiviert den Anzeigedienst wieder; bei reinem ESP32-Betrieb
-anschließend erneut deaktivieren.
+Bei einem eigenständigen CYD folge dem [ESP32-Weg in der README](../README.md#home-assistant-mit-esp32).
 
 ### Container auf Linux/NAS
 
