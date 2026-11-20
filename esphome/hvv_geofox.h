@@ -194,9 +194,9 @@ inline bool make_display_snapshot(const std::string &response_body,
     row["departure_epoch"] = candidate.departure_epoch;
     row["cancelled"] = candidate.cancelled;
     row["delay_seconds"] = candidate.delay_seconds;
-    row["background"] = 0x005A9C;
+    row["background"] = 0xD52B2F;
     row["foreground"] = 0xFFFFFF;
-    row["shape"] = "rectangle";
+    row["shape"] = "pointed";
   }
   std::string encoded;
   serializeJson(output_doc, encoded);
