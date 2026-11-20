@@ -22,165 +22,110 @@ Eine automatische Erkennung des Controllers ist bei diesen Boards nicht
 zuverlässig. Für andere Displayrevisionen siehe
 [Displayrevision und Pinbelegung](#hardware-displayrevision-und-pinbelegung).
 
-### Schritt 1: Git und Python installieren
+### 1. Voraussetzungen und Projektdateien
 
-1. Installiere [Git für Windows](https://git-scm.com/download/win) mit den
-   vorgeschlagenen Standardoptionen.
-2. Installiere [Python 3.12](https://www.python.org/downloads/windows/). Wähle
-   dort eine Version **3.12.x** und achte darauf, dass der **Python Launcher
-   (`py`)** mitinstalliert wird. Eine neuere Hauptversion reicht für dieses
-   Setup nicht aus.
-3. Verbinde das ESP32-Board noch nicht mit dem Computer.
+Du brauchst einen [Geofox-Zugang](../README.md#geofox-zugang-beantragen),
+2,4-GHz-WLAN, ein CYD und ein USB-Datenkabel. Installiere Git und Python 3.12.
+Unter Windows muss der Python Launcher anschließend auf `py -3.12 --version` antworten.
 
-### Schritt 2: PowerShell öffnen und Installation prüfen
-
-1. Öffne das Windows-Startmenü.
-2. Tippe `PowerShell` und öffne **Windows PowerShell**. Administratorrechte
-   sind für diese Anleitung nicht nötig.
-3. Kopiere die folgenden zwei Befehle einzeln in das Fenster und drücke nach
-   jedem Befehl die Eingabetaste:
-
-   ```powershell
-   git --version
-   py -3.12 --version
-   ```
-
-   **Erfolg:** Der erste Befehl zeigt eine Git-Version, der zweite `Python 3.12.x`.
-
-   **Wenn ein Befehl als unbekannt gemeldet wird:** Installiere das betreffende
-   Programm erneut, achte bei Python auf den Python Launcher und öffne danach
-   ein neues PowerShell-Fenster. Prüfe dort dieselben Befehle nochmals.
-
-### Schritt 3: Repository herunterladen
-
-Kopiere jede Zeile einzeln in PowerShell und drücke jeweils die Eingabetaste:
-
-```powershell
+```sh
 git clone https://github.com/Ben1991/hvv-anzeiger.git
 cd hvv-anzeiger
 ```
 
-**Erfolg:** Die Eingabeaufforderung endet jetzt mit `hvv-anzeiger>`.
+Bei einem vorhandenen Checkout sichere lokale Änderungen und aktualisiere ihn
+mit `git pull --ff-only origin main`. Für eine vorhandene CYD-Konfiguration
+folge zuerst der [Migration](#vorhandenes-cyd-vom-pi-backend-umstellen).
 
-**Wenn `destination path ... already exists` erscheint:** Das Repository liegt
-bereits auf dem Computer. Öffne im Explorer den Ordner `hvv-anzeiger`, klicke
-oben in die Adressleiste, tippe `powershell` und drücke die Eingabetaste. Führe
-im geöffneten Fenster zuerst `git status --short` aus. Eigene Änderungen
-sichern, bevor du Updates mit `git pull --ff-only origin main` übernimmst.
+### 2. Profil, Zugangsdaten und Haltestellen
 
-### Schritt 4: ESPHome und das CYD-Profil einrichten
-
-Kopiere den Befehl in dasselbe PowerShell-Fenster und drücke die Eingabetaste:
+Unter Windows übernimmt das Skript ESPHome-Installation und erste Konfigurationsprüfung.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
 ```
 
-Für `hvv-cyd` brauchst du einen gültigen Geofox-Zugang. Das Setup-Skript fragt
-den Geofox-Benutzernamen und das Passwort ab und legt sie lokal in der ignorierten
-`esphome/secrets.yaml` ab. Es baut keine Pi-URL ein und verlangt weder ein
-Pi-Zertifikat noch einen CYD-Geräteschlüssel.
+Das Skript legt bei Bedarf `esphome/hvv-cyd.local.yaml` und die daneben
+liegende, von Git ignorierte `esphome/secrets.yaml` an. Es fragt beim ersten
+Lauf WLAN und Geofox ab und erzeugt den API-Schlüssel. Passwörter werden verdeckt
+eingegeben. Danach `hvv_stations_json` im lokalen Profil anhand der
+[Stationsanleitung](esp32-stations.md) anpassen. Bei Bedarf dort auch das
+[Displaymodell](#hardware-displayrevision-und-pinbelegung) wählen.
+Linux, macOS und Device Builder folgen der
+[manuellen Einrichtung](#manuelle-installation-oder-esphome-device-builder).
 
-Wenn `esphome/secrets.yaml` noch nicht vorhanden ist, fragt das Skript beim
-ersten Lauf nach WLAN-Name und WLAN-Passwort:
+Die Felder `geofox_user_cpp` und `geofox_password_cpp` enthalten jeweils ein
+C++-Stringliteral mit doppelten Anführungszeichen. YAML hält das Literal in
+einfachen Anführungszeichen. Beispiel mit erfundenen Werten:
 
-1. Gib den Namen deines WLANs ein und drücke die Eingabetaste.
-2. Gib das WLAN-Passwort ein. Während der Eingabe zeigt PowerShell keine Zeichen
-   an. Drücke danach die Eingabetaste.
-3. Gib deinen Geofox-Benutzernamen ein.
-4. Gib dein Geofox-Passwort ein. Währenddessen zeigt PowerShell keine Zeichen.
-5. Warte, bis ESPHome die Konfiguration geprüft hat.
-
-Das Skript richtet Python 3.12, eine getrennte Python-Umgebung und ESPHome ein.
-Es erstellt `esphome/secrets.yaml` mit einem zufälligen ESPHome-API-Schlüssel
-und `esphome/hvv-cyd.local.yaml` als lokale Profilkopie. Vorhandene lokale
-Display- und Pin-Einstellungen überschreibt es nicht. Ältere Pi-Backend-Secrets
-werden nicht gelöscht, aber vom Profil `hvv-cyd` nicht verwendet. Alle lokalen
-Zugangsdaten bleiben von Git ausgeschlossen.
-
-**Erfolg:** Am Ende erscheint die Meldung „Konfiguration geprüft.“ ohne Fehlermeldung.
-
-**Wenn `Python 3.12 wurde nicht gefunden` erscheint:** Prüfe in einem neuen
-PowerShell-Fenster `py -3.12 --version`. Installiere Python 3.12 samt Python
-Launcher, falls der Befehl fehlschlägt.
-
-**Wenn eine vorhandene Umgebung nicht Python 3.12 verwendet:** Wiederhole den
-Befehl aus dem Repository-Ordner mit einem neuen Umgebungsnamen:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -VenvPath .venv-esphome-312
+```yaml
+geofox_user_cpp: '"demo-user"'
+geofox_password_cpp: '"demo-passwort"'
 ```
 
-**Wenn pip/ESPHome nicht heruntergeladen werden kann:** Prüfe die
-Internetverbindung und einen möglichen Proxy. Starte danach denselben
-Setup-Befehl erneut; vorhandene lokale Profile und Geheimnisse bleiben erhalten.
+Im Literal werden Backslash und doppeltes Anführungszeichen als `\\` und `\"`
+geschrieben. Ein einfaches Anführungszeichen wird für YAML verdoppelt.
+Gib dem Windows-Skript die ursprünglichen Werte ohne zusätzliche Anführungszeichen.
+Für eine erneute Abfrage setze das betreffende Feld lokal auf `'""'`.
+Die Prüfung erkennt fehlende und falsch formatierte Werte vor dem Build.
+Ob die Zugangsdaten beim Anbieter gültig sind, zeigt der Funktionscheck am Gerät.
 
-**Wenn Geofox-Zugangsdaten abgelehnt werden:** Prüfe Benutzername und Passwort
-lokal in `esphome/secrets.yaml` und starte das Setup-Skript erneut. Zugangsdaten
-nicht in Issues, Chats oder Screenshots kopieren.
+### 3. Validieren, bauen und übertragen
 
-**Wenn die Konfiguration wegen Platzhaltern fehlschlägt:** Öffne die Datei mit
-`notepad .\esphome\secrets.yaml`. Ersetze nur die noch vorhandenen Werte
-`REPLACE_WITH_...` durch deine Daten, speichere die Datei und führe den
-Setup-Befehl erneut aus. Für einen noch fehlenden `api_encryption_key` erzeuge
-einen neuen Schlüssel mit diesem Befehl:
+Alle Befehle im Projektordner ausführen. Unter Windows:
 
 ```powershell
-py -3.12 -c "import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Build
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
 ```
 
-Kopiere die ausgegebene Zeile in `secrets.yaml`. Poste WLAN-Passwort und
-API-Schlüssel niemals in Issues, Chats oder Screenshots.
+`-Flash` validiert und baut ebenfalls. Für den ersten Flash das Board per
+USB-Datenkabel anschließen und den COM-Port wählen. Bei zwei Buchsen jeweils
+nur eine verwenden. Für OTA `-Flash -Device hvv-cyd.local` angeben.
+Der Name vor `.local` entspricht der Substitution `name`. Wenn mDNS
+scheitert, stattdessen die lokale IP aus dem Router verwenden. Bei nicht
+erreichbarem OTA oder fehlender OTA-Unterstützung wieder USB verwenden.
+Bei fehlendem USB-Port Kabel, Treiber und andere serielle Programme prüfen.
 
-### Schritt 5: Board verbinden und Firmware flashen
+### 4. Funktion am Gerät prüfen
 
-1. Nimm ein USB-Datenkabel. Ein Ladekabel ohne Datenleitungen funktioniert nicht.
-2. Verbinde das CYD mit dem Computer. Hat dein Board zwei USB-Anschlüsse,
-   verwende nur einen davon gleichzeitig.
-3. Kopiere den Flash-Befehl in PowerShell und drücke die Eingabetaste:
+Mit aktivierter ESPHome-Umgebung im Projektordner:
 
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
-   ```
+```sh
+esphome logs esphome/hvv-cyd.local.yaml --device hvv-cyd.local
+```
 
-4. Warte auf den Firmwarebau. Wähle anschließend in ESPHome den COM-Port aus,
-   der zum angeschlossenen Board gehört.
+Unter Windows lässt sich `esphome` durch `..venv-esphomeScriptspython.exe -m esphome`
+ersetzen. IP oder einen seriellen Port kannst du ebenfalls als `--device` angeben.
+Der Netzwerkbefehl verbindet sich über die verschlüsselte ESPHome-API.
+Prüfe nach der Uhrzeitsynchronisierung auf dem Display und in den Logs, dass
+`Backendstatus` auf `ok` wechselt und `Abfahrt 1` bei passenden Verbindungen
+befüllt ist. Die übrigen Sensoren können bei weniger als fünf Treffern leer sein.
+Mit Strg+C beendest du die Loganzeige.
 
-**Erfolg:** ESPHome meldet den abgeschlossenen Upload. Das Board startet danach
-mit der neuen Firmware.
+| Symptom | Prüfung |
+|---|---|
+| Geofox meldet HTTP 401 | Geofox-Benutzername und Passwort lokal prüfen, korrigieren und erneut bauen und übertragen. |
+| Geofox meldet HTTP 400 | Stations-IDs und Konfiguration prüfen. Auch falsch übernommene Zugangsdaten oder ein fehlerhafter HMAC-Header können je nach Geofox-Antwort mit 400 auffallen. |
+| Uhrzeit fehlt | WLAN, DNS und SNTP prüfen. Die Firmware startet Geofox-Abfragen erst mit gültiger Uhrzeit. |
+| Status `ok`, aber keine Abfahrt | Stations-ID, Linien- und Richtungsfilter nach der Stationsanleitung prüfen. |
+| Keine API- oder OTA-Verbindung | Gerätenamen, IP und WLAN prüfen. Bei Bedarf USB-Logs verwenden. Für API-Verbindungen muss der lokale Schlüssel zur installierten Firmware passen. |
 
-**Wenn kein COM-Port angeboten wird:** Prüfe, ob das Board eingeschaltet ist,
-verwende ein anderes Datenkabel und kontrolliere im Windows-Geräte-Manager, ob
-bei der seriellen USB-Schnittstelle des Boards ein Treiberfehler angezeigt wird.
-Schließe serielle Monitore
-oder andere Programme, die den COM-Port verwenden, und wiederhole den Flash.
+### Vorhandenes CYD vom Pi-Backend umstellen
 
-**Wenn der Upload am Board nicht startet:** Halte `BOOT` gedrückt, drücke kurz
-`RESET`, lasse `RESET` los und danach `BOOT`. Starte anschließend den Flash-Befehl
-erneut. Die genaue Tastenfolge kann je nach Platinenrevision abweichen.
-
-### Schritt 6: Anzeige prüfen
-
-Prüfe am eingeschalteten Board, ob Abfahrten, Textausrichtung, Farben und
-Querformat stimmen. Das CYD fragt Geofox ungefähr alle 15 Sekunden direkt ab.
-
-**Wenn keine Abfahrten erscheinen:** Prüfe 2,4-GHz-WLAN, Zeit-Synchronisierung,
-Geofox-Zugangsdaten und das Feld `hvv_stations_json` in
-`esphome/hvv-cyd.local.yaml`. Jede Haltestelle muss eine gültige Geofox-ID
-enthalten. Für Stationsänderungen den Ablauf unter
-[Haltestellen ändern](esp32-stations.md) verwenden. Danach neu bauen und flashen.
-
-**Wenn der Bildschirm leer bleibt oder Farben falsch sind:** Trenne das Board
-vom USB, prüfe die tatsächliche Displayrevision und passe `display_model`,
-`display_color_order` oder `display_rotation` in
-`esphome/hvv-cyd.local.yaml` an. Produktname und Aufdruck allein identifizieren
-den Displaycontroller nicht immer eindeutig. Verwende nur den Controller, der
-für deine konkrete Platinenrevision angegeben ist: `ESP32-2432S028-7789`
-(ST7789V) oder `ESP32-2432S028-9342` (ILI9342). Hinweise stehen unter
-[Displayrevision und Pinbelegung](#hardware-displayrevision-und-pinbelegung).
-
-**Nur bauen, noch nicht flashen:** In Schritt 5 `-Flash` durch `-Build` ersetzen.
-Das Setup und die Konfigurationsprüfung aus Schritt 4 flashen keine Firmware.
+1. Lokale Haupt-YAML und `secrets.yaml` privat sichern. Bei Bedarf auch
+   das alte Backend-Zertifikat für eine Rückkehr zum alten Profil sichern.
+2. Gerätenamen, WLAN, API-Schlüssel und alle Display-/Pin-Overrides übernehmen.
+   Das Windows-Skript migriert das mitgelieferte alte lokale Profil und legt
+   eine `.pre-esp32-geofox-backend.bak` daneben ab. In einem eigenen Profil
+   unter `packages:` den Transport `packages/https.yaml` durch `packages/geofox.yaml`
+   ersetzen und eine eventuelle `board_entity`-Substitution des alten Transports
+   entfernen. Das Hardwarepaket und eigene Hardware-Einstellungen beibehalten.
+3. Die Geofox-Felder ergänzen und die bisherigen Stationen und Filter aus dem
+   Pi-Setup nach `hvv_stations_json` übertragen. Übernommene Beispielstationen
+   vor dem Flashen ersetzen. Anschließend validieren, per OTA oder USB
+   übertragen und den Funktionscheck durchführen.
 
 ### CYD in Home Assistant erkennen
 
@@ -232,26 +177,28 @@ Ordner an und übergib ihn mit `-EspIdfPrefix 'C:\Users\<Name>\ei'`.
 ESPHome **2026.9.1 oder neuer** verwenden. Unter Linux/macOS lässt sich die
 Umgebung so erstellen:
 
-```sh
-python3.12 -m venv .venv-esphome
-. .venv-esphome/bin/activate
-python -m pip install esphome==2026.9.1
-cp esphome/secrets.example.yaml esphome/secrets.yaml
-cp esphome/hvv-cyd.yaml esphome/hvv-cyd.local.yaml
-```
-
-Unter Windows ohne Setup-Skript kannst du `py -3.12 -m venv .venv-esphome`,
-`.venv-esphome\Scripts\Activate.ps1` und `python -m pip install esphome==2026.9.1`
-verwenden. Kopiere die Beispielgeheimnisse nur, wenn `secrets.yaml` noch nicht
-existiert. Erzeuge für `api_encryption_key` einen individuellen 32-Byte-
-Base64-Schlüssel und trage ihn in `secrets.yaml` ein. Mit Python kannst du ihn
-erzeugen:
+Erstelle bei Bedarf eine Umgebung mit `python3.12 -m venv .venv-esphome`,
+aktiviere sie mit `. .venv-esphome/bin/activate` und installiere
+`python -m pip install esphome==2026.9.1`. Eine vorhandene kompatible
+ESPHome-Umgebung kannst du direkt verwenden.
 
 ```sh
-python -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())'
+test -e esphome/secrets.yaml || cp esphome/secrets.example.yaml esphome/secrets.yaml
+test -e esphome/hvv-cyd.local.yaml || cp esphome/hvv-cyd.yaml esphome/hvv-cyd.local.yaml
 ```
 
-Die Ausgabe ist vertraulich; nicht in öffentliche Logs oder Issues kopieren.
+Ergänze WLAN, einen individuellen 32-Byte-Base64-API-Schlüssel aus deinem
+Passwortmanager und die beiden Geofox-Literale in `esphome/secrets.yaml`.
+Setze die Stationen im lokalen Profil und führe aus:
+
+```sh
+python scripts/check_cyd_secrets.py esphome/hvv-cyd.local.yaml --esphome config
+python scripts/check_cyd_secrets.py esphome/hvv-cyd.local.yaml --esphome compile
+esphome upload esphome/hvv-cyd.local.yaml
+```
+
+Für OTA an den letzten Befehl `--device hvv-cyd.local` oder die Geräte-IP
+anhängen. Prüfe nach dem Upload die API und die Abfahrten wie oben.
 
 Für `hvv-direct` `backend_url` auf
 `https://hvv-anzeiger.local:8080/api/esphome` setzen und den zufälligen
@@ -265,12 +212,11 @@ Im ESPHome Device Builder kopierst du den kompletten Ordner `esphome/` in den
 Konfigurationsordner, einschließlich `hvv_board.h`, `hvv_geofox.h`, `boards/`, `packages/` und `fonts/`.
 Der Header muss neben den Profil-YAML-Dateien liegen. Geheime Werte aus
 `secrets.example.yaml` in eine eigene `secrets.yaml` übernehmen; vorhandene
-Geheimnisse zusammenführen statt überschreiben. Anschließend Profil prüfen und
-über den Builder per USB installieren.
+Geheimnisse zusammenführen statt überschreiben. Das Format der Zugangsdaten vorab mit `python scripts/check_cyd_secrets.py <Pfad-zur-Profil-YAML>` aus einer ESPHome-Umgebung prüfen. Anschließend über den Builder per USB installieren.
 
 ## Hardware, Displayrevision und Pinbelegung
 
-Das CYD-Profil verwendet ILI9342 und 320×240 Pixel im Querformat (0° Rotation).
+Das CYD-Profil verwendet ILI9342 und 320×240 Pixel im Querformat (90° Rotation).
 Der resistive Touchscreen wird nicht verwendet; die Abfahrtsanzeige läuft als
 reine Anzeige. SPI-Pins und Hintergrundbeleuchtung sind im Hardwareprofil gesetzt.
 
@@ -313,22 +259,6 @@ QSPI oder andere Treiber ein eigenes `boards/`-Profil mit denselben IDs
 sind für das vorhandene Layout sinnvoll; für kleinere/runde Displays ist ein
 eigenes Layout nötig.
 
-```sh
-esphome config esphome/hvv-cyd.local.yaml
-esphome compile esphome/hvv-cyd.local.yaml
-esphome run esphome/hvv-cyd.local.yaml
-```
-
-Unter Windows einen kurzen **physischen** Werkzeugpfad vor dem ersten Build
-setzen, etwa `$env:ESPHOME_ESP_IDF_PREFIX = 'C:\ei'` in PowerShell.
-Lange Cachepfade können beim ESP-IDF-Compiler zu fehlenden Headern führen;
-eine Verknüpfung auf einen langen Pfad hilft nicht, da ESPHome sie auflöst.
-
-Das erste Flashen per USB durchführen, danach sind verschlüsselte OTA-Updates
-möglich. Den ESP32 in HA unter Einstellungen → Geräte & Dienste → ESPHome
-hinzufügen und den individuellen API-Schlüssel angeben. `board_entity` muss
-der REST-Entität entsprechen. Die HA-Textsensor-Komponente braucht diese
-Registrierung, damit HA das Attribut übermittelt.
 Die DejaVu-Schriften liegen samt Lizenz im Repository; das Gerät
 benötigt dafür im Betrieb keinen Zugriff.
 
@@ -362,38 +292,12 @@ den Builder aktualisieren. Bei nicht erreichbarem Gerät per USB flashen.
 
 Im Repository zuerst eigene Änderungen prüfen und dann `main` per Fast-Forward
 aktualisieren. Lokale `*.local.yaml`-Profile und `secrets.yaml` bleiben erhalten.
-Unter Windows übernimmt das Setup-Skript Prüfung, Build und USB-Flash:
-
-```powershell
-git status --short
-git pull --ff-only origin main
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-esphome.ps1 -Profile hvv-cyd -Flash
-```
-
-Unter Linux/macOS mit dem eigenen `*.local.yaml` und den separat gesicherten Geheimnissen:
-
-```sh
-git status --short
-git pull --ff-only origin main
-. .venv-esphome/bin/activate
-python -m pip install esphome==2026.9.1
-esphome config esphome/hvv-cyd.local.yaml
-esphome compile esphome/hvv-cyd.local.yaml
-esphome upload esphome/hvv-cyd.local.yaml --device hvv-cyd.local
-esphome logs esphome/hvv-cyd.local.yaml --device hvv-cyd.local
-```
-
-Dateiname und `--device` an das gewählte Profil sowie den eigenen Gerätenamen
-anpassen; eine IP-Adresse ist ebenfalls möglich. Unter Windows wie bei der
-Ersteinrichtung per PowerShell aktivieren. Die ESPHome-Version hier ist die
-für diesen Stand geprüfte Version; bei späteren Projektversionen deren
-Versionsvorgabe beachten. `secrets.yaml` niemals aus der Beispieldatei neu kopieren.
-Für einen USB-Upload stattdessen den angebotenen seriellen Anschluss wählen.
-Logausgabe mit Strg+C beenden; der ESP32 läuft weiter.
+Danach erneut [validieren, bauen und übertragen](#3-validieren-bauen-und-übertragen).
+Für OTA den bestehenden Gerätenamen oder die lokale IP verwenden.
 
 ### Nach jedem Update prüfen
 
-1. HA-Status `ok` oder bei aktivem Nachtfenster `night`, keine Authentifizierungsfehler.
+1. ESPHome-API verbunden, `Backendstatus` ist `ok` und bei passenden Verbindungen sind Abfahrtssensoren befüllt.
 2. Auf dem Display die eigenen Linien, Ziele und Labels sowie aktuelle Abfahrtszeiten.
 3. Helligkeit, Anzeigeschalter und Rückkehr aus dem Nachtmodus.
 4. Bei Verbindungsausfall Warnung und Ablauf alter Daten; nach Wiederverbindung
