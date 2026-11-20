@@ -330,8 +330,8 @@ direkt nach dem Start. Passe die Haltestellen danach unter Einstellungen an.
 Der Installer startet den Backend-Dienst und die Weboberfläche automatisch und
 aktiviert beide für den Start nach jedem Neustart des Raspberry Pi.
 Er erzeugt zusätzlich einen zufälligen CYD-Schlüssel. Nach dem ersten Weblogin
-und Passwortwechsel findest du ihn unter Einstellungen. Das CYD verwendet
-diesen schreibgeschränkten Schlüssel; das Webpasswort bleibt davon unabhängig.
+und Passwortwechsel findest du ihn unter Einstellungen. Diesen Schlüssel braucht nur ein ESP32-Profil, das den Pi-Webdienst abfragt.
+Das eigenständige CYD-Profil `hvv-cyd` verwendet seinen Geofox-Zugang.
 
 Falls die Weboberfläche nicht automatisch laufen soll:
 
@@ -1884,7 +1884,7 @@ ESP32-Displays anzeigen. Die Paketversion ist `0.4.0`.
 **Update:** Eine bestehende Raspberry-Pi-Installation lässt sich wie bisher
 mit `./update.sh` aktualisieren. Für Home Assistant und ESP32 gelten die neuen
 [HA-Anleitung](docs/home-assistant.md) und der [ESP32-Anleitung](docs/esp32-setup.md); der
-[HA-Schnellstart](#home-assistant-schritt-für-schritt) steht direkt in diesem
+[HA-Schnellstart für den Pi](#home-assistant-mit-raspberry-pi) steht direkt in diesem
 README.
 
 [Änderungen seit V2.3.0](https://github.com/Ben1991/hvv-anzeiger/compare/V2.3.0...V2.4.0) ·
