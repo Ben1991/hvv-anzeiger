@@ -12,6 +12,79 @@
 
 namespace hvv {
 
+struct LineStyle {
+  const char *shape;
+  uint32_t background;
+  uint32_t foreground = 0xffffff;
+};
+
+inline std::string normalize_line_style_input(const char *value) {
+  std::string result;
+  for (unsigned char c : std::string(value)) {
+    if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
+    if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c >= 0x80)
+      result += static_cast<char>(c);
+  }
+  return result;
+}
+
+inline const char *geofox_line_product(JsonObjectConst line) {
+  JsonVariantConst type = line["type"];
+  if (type.isNull() || type == "" ||
+      (type.is<JsonObjectConst>() && type.size() == 0))
+    type = line["vehicleType"];
+  if (!type.is<JsonObjectConst>()) return type | "";
+  for (const char *key : {"simpleType", "vehicleType", "shortInfo"}) {
+    const char *code = type[key] | "";
+    if (*code) return code;
+  }
+  return "";
+}
+
+inline LineStyle get_line_style(const char *name, const char *product) {
+  // Match the palette and precedence in hvv_display/render.py. Product
+  // checks use the Geofox codes accepted by the Pi's departure parser.
+  const auto line = normalize_line_style_input(name);
+  const auto mode = normalize_line_style_input(product);
+  constexpr LineStyle neutral{"rounded", 0x59636e};
+  constexpr LineStyle u1{"rectangle", 0x1d75b8};
+  constexpr LineStyle bus{"pointed", 0xd52b2f};
+  if (line.empty()) return neutral;
+  if (line == "U1") return u1;
+  if (line == "U2") return {"rectangle", 0xd52b2f};
+  if (line == "U3") return {"rectangle", 0xf4c20d, 0x090b0d};
+  if (line == "U4") return {"rectangle", 0x00a6d6};
+  if (line == "S2") return {"circle", 0xc2188b};
+  if (line == "S3") return {"circle", 0x7b3f98};
+  if (line == "S5") return {"circle", 0x154273};
+  if (line == "S7") return {"circle", 0xe87511};
+
+  const auto digits_end = [&line](size_t start) {
+    while (start < line.size() && line[start] >= '0' && line[start] <= '9')
+      ++start;
+    return start;
+  };
+  const auto numbered = [&](char prefix) {
+    return line.front() == prefix && line.size() > 1 && digits_end(1) == line.size();
+  };
+  if (numbered('U') || mode == "UBAHN") return u1;
+  if (numbered('S') || mode == "SBAHN") return {"circle", 0x168447};
+  if (numbered('A') || mode == "AKN") return {"circle", 0xe87511};
+  if ((line.compare(0, 2, "RE") == 0 || line.compare(0, 2, "RB") == 0) &&
+      digits_end(2) == line.size())
+    return {"rectangle", 0x59636e};
+  if (mode == "FAEHRE") return {"pointed", 0x007c91};
+  if (mode == "XPRESSBUS" || numbered('X')) return {"pointed", 0x006a9b};
+  if (mode == "NACHTBUS" || numbered('N')) return {"pointed", 0x473b8f};
+  const size_t start = line.front() == 'M' ? 1 : 0;
+  const size_t end = digits_end(start);
+  const bool bus_number = end > start && end - start <= 4 &&
+      (end == line.size() ||
+       (end + 1 == line.size() && line[end] >= 'A' && line[end] <= 'Z'));
+  if (mode == "BUS" || mode == "METROBUS" || bus_number) return bus;
+  return neutral;
+}
+
 struct DepartureCandidate {
   std::string line;
   std::string destination;
@@ -20,6 +93,7 @@ struct DepartureCandidate {
   int64_t departure_epoch;
   bool cancelled;
   int delay_seconds;
+  LineStyle style;
 };
 
 inline std::string departure_text(size_t index, uint32_t now) {
@@ -177,7 +251,8 @@ inline bool make_display_snapshot(const std::string &response_body,
     char clock[6];
     strftime(clock, sizeof(clock), "%H:%M", &local_departure);
     candidates.push_back({line, destination, label, clock, departure_epoch,
-                          item["cancelled"] | false, delay});
+                          item["cancelled"] | false, delay,
+                          get_line_style(line.c_str(), geofox_line_product(line_data))});
   }
   std::stable_sort(candidates.begin(), candidates.end(),
                    [](const DepartureCandidate &left,
@@ -194,9 +269,9 @@ inline bool make_display_snapshot(const std::string &response_body,
     row["departure_epoch"] = candidate.departure_epoch;
     row["cancelled"] = candidate.cancelled;
     row["delay_seconds"] = candidate.delay_seconds;
-    row["background"] = 0xD52B2F;
-    row["foreground"] = 0xFFFFFF;
-    row["shape"] = "pointed";
+    row["background"] = candidate.style.background;
+    row["foreground"] = candidate.style.foreground;
+    row["shape"] = candidate.style.shape;
   }
   std::string encoded;
   serializeJson(output_doc, encoded);
