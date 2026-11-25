@@ -35,6 +35,51 @@ int main() {
   }
   assert(parsed["generated_at"].as<int64_t>() == response_epoch);
 
+  const struct {
+    const char *name;
+    const char *type_json;
+    const char *shape;
+    uint32_t background;
+    uint32_t foreground = 0xffffff;
+  } styles[] = {
+      {"U1", "null", "rectangle", 0x1d75b8},
+      {"U2", "null", "rectangle", 0xd52b2f},
+      {"u-3", R"("BUS")", "rectangle", 0xf4c20d, 0x090b0d},
+      {"U4", "null", "rectangle", 0x00a6d6},
+      {"U99", "null", "rectangle", 0x1d75b8},
+      {"S1", "null", "circle", 0x168447},
+      {"S2", "null", "circle", 0xc2188b},
+      {"S3", "null", "circle", 0x7b3f98},
+      {"S5", "null", "circle", 0x154273},
+      {"S7", "null", "circle", 0xe87511},
+      {"A2", "null", "circle", 0xe87511},
+      {"RE 1", "null", "rectangle", 0x59636e},
+      {"RB81", "null", "rectangle", 0x59636e},
+      {"X35", "null", "pointed", 0x006a9b},
+      {"N6", "null", "pointed", 0x473b8f},
+      {"62", R"({"simpleType":"FAEHRE","vehicleType":"BUS"})", "pointed", 0x007c91},
+      {"72", R"({"simpleType":"","shortInfo":"Nacht-Bus"})", "pointed", 0x473b8f},
+      {"M 5a", "null", "pointed", 0xd52b2f},
+      {"186", "null", "pointed", 0xd52b2f},
+      {"A", R"("AKN")", "circle", 0xe87511},
+      {"Express", R"("XPRESSBUS")", "pointed", 0x006a9b},
+      {"L1", "null", "rounded", 0x59636e},
+  };
+  for (const auto &style : styles) {
+    const std::string styled_response =
+        std::string(R"({"returnCode":"OK","departures":[{"line":{"name":")") + style.name +
+        R"(","direction":"Destination","type":)" + style.type_json +
+        R"(},"timeOffset":1}]})";
+    assert(hvv::make_display_snapshot(styled_response, stations, request_epoch,
+                                      response_epoch, snapshot));
+    assert(!deserializeJson(parsed, snapshot));
+    JsonObject row = parsed["departures"][0].as<JsonObject>();
+    assert(row["line"] == style.name);
+    assert(row["shape"] == style.shape);
+    assert(row["background"] == style.background);
+    assert(row["foreground"] == style.foreground);
+  }
+
   const std::string multi_stations = R"json([
     {"name":"Weistritzstraße","id":"Master:82039","label":"W","routes":[
       {"line":"186","destination":"S Othmarschen"}]},
@@ -42,7 +87,7 @@ int main() {
       {"line":"21","destination":"U Niendorf Nord"}]}
   ])json";
   const std::string stationless_response = R"json({"returnCode":"OK","departures":[
-    {"line":{"name":"186","direction":"S Othmarschen"},"timeOffset":5},
+    {"line":{"name":"186","direction":"S Othmarschen","vehicleType":"FAEHRE"},"timeOffset":5},
     {"line":{"name":"21","direction":"U Niendorf Nord"},"timeOffset":3},
     {"line":{"name":"22","direction":"U Kellinghusenstraße"},"timeOffset":1}
   ]})json";
@@ -54,6 +99,7 @@ int main() {
   assert(matched_rows[0]["line"].as<std::string>() == "21");
   assert(matched_rows[0]["station"].as<std::string>() == "R");
   assert(matched_rows[1]["line"].as<std::string>() == "186");
+  assert(matched_rows[1]["background"] == 0x007c91);
   assert(matched_rows[1]["station"].as<std::string>() == "W");
   assert(hvv_board.accept(parsed.as<JsonObject>(), 1000));
   assert(!hvv::departure_text(0, 1000).empty());
